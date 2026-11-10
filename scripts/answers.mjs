@@ -1,0 +1,2 @@
+// Server seed and explicitly unranked local practice only. Never trusted for online grading.
+export const answers={stone:['Палеолит'],bronze:['Геометриялық өрнекті қыш ыдыс'],saka:['Жетісу'],hun:['шаньюй','шань юй'],turk:[['Тас дәуірі','Қола дәуірі','Түрік қағанаты']],turgesh:['Сұлық','Сұлу'],karluk:[['Алтайдың батысы','Жетісу']],karakhan:['Боғра','Богра'],horde:[['Сайын хан','Шаньюй','Сүзеген']],kazakh:['Жәнібек','Жанибек','Жәнібек хан']};

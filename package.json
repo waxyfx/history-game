@@ -1,0 +1,22 @@
+{
+  "name": "tarikh-lost-chronicle",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 127.0.0.1",
+    "build": "node scripts/compress-engine.mjs && node scripts/content-build.mjs && vite build && node scripts/source-bundle.mjs",
+    "test": "node --test tests/*.test.mjs",
+    "preview": "vite preview --host 127.0.0.1",
+    "engine": "python scripts/build-engine.py"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "2.57.4",
+    "qrcode": "1.5.4"
+  },
+  "devDependencies": {
+    "@electric-sql/pglite": "^0.3.14",
+    "vite": "6.4.1"
+  }
+}
+
