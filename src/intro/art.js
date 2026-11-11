@@ -578,3 +578,51 @@ export function makeStoneTool(parent) {
  path(T, 'M-70,10 C-74,-30 -40,-56 6,-58 C50,-60 76,-30 74,6 C72,34 30,46 -10,44 C-46,42 -68,34 -70,10 Z', 'url(#tj-ht)', 0, {opacity: .2});
  return T;
 }
+
+// ─────────────────────────── COMIC HELPERS (camera, panels, effects) ───────────────────────────
+// Camera: keys = [[t, x, y, zoom, rot]] → look at (x,y) with eased interpolation.
+export function camAt(keys, t) {
+ if (t <= keys[0][0]) return keys[0].slice(1);
+ for (let i = 1; i < keys.length; i++) if (t <= keys[i][0]) {
+  const a = keys[i - 1], b = keys[i], k = ease((t - a[0]) / (b[0] - a[0]));
+  return [1, 2, 3, 4].map(j => lerp(a[j] ?? 0, b[j] ?? 0, k));
+ }
+ return keys.at(-1).slice(1);
+}
+export const motion = {shake: 1};
+export function applyCam(el, [x, y, z, r = 0], shake = 0, t = 0) {
+ shake *= motion.shake;
+ const sx = shake ? (Math.sin(t * 53) + Math.sin(t * 31)) * shake : 0, sy = shake ? (Math.cos(t * 47) + Math.sin(t * 37)) * shake : 0;
+ el.setAttribute('transform', `translate(${(800 + sx).toFixed(1)} ${(450 + sy).toFixed(1)}) rotate(${r.toFixed(2)}) scale(${z.toFixed(4)}) translate(${(-x).toFixed(1)} ${(-y).toFixed(1)})`);
+}
+// Comic panel: clipped content group + ink border. reveal(k) slides/fades the panel in.
+export function panel(parent, pts, bg) {
+ const id = nextId('tj-p'), cp = h('clipPath', {id}, parent);
+ const poly = pts.map(p => p.join(',')).join(' ');
+ h('polygon', {points: poly}, cp);
+ const wrap = g(parent), inner = g(wrap, {'clip-path': `url(#${id})`});
+ if (bg) h('rect', {x: -200, y: -200, width: 2000, height: 1300, fill: bg}, inner);
+ const content = g(inner);
+ h('polygon', {points: poly, fill: 'none', stroke: INK, 'stroke-width': 7, 'stroke-linejoin': 'round'}, wrap);
+ const cx = pts.reduce((s, p) => s + p[0], 0) / pts.length, cy = pts.reduce((s, p) => s + p[1], 0) / pts.length;
+ return {wrap, content, reveal(k) {k = easeOut(k); wrap.setAttribute('opacity', k.toFixed(2)); wrap.setAttribute('transform', `translate(${cx} ${cy}) scale(${(.92 + .08 * k).toFixed(3)}) translate(${-cx} ${-cy})`);}};
+}
+export function page(parent, color = '#ece0c4') {
+ h('rect', {x: -400, y: -300, width: 2400, height: 1500, fill: color}, parent);
+ h('rect', {x: -400, y: -300, width: 2400, height: 1500, fill: 'url(#tj-ht)', opacity: .06}, parent);
+}
+// Sparks burst (ink-outlined streaks with gravity).
+export function sparks(parent, x, y, n = 18, seed = 1, color = '#ffe28a') {
+ const r = rand(seed), sp = Array.from({length: n}, () => ({a: r() * Math.PI * 2, v: 300 + r() * 500, l: 10 + r() * 22}));
+ const el = path(parent, '', 'none', 4, {stroke: color});
+ return t => {
+  if (t < 0 || t > 1.4) {el.setAttribute('d', ''); return;}
+  let d = ''; for (const s of sp) {const px = x + Math.cos(s.a) * s.v * t, py = y + Math.sin(s.a) * s.v * t + 600 * t * t; const vx = Math.cos(s.a), vy = Math.sin(s.a) + 1.2 * t; d += `M${px.toFixed(1)},${py.toFixed(1)} l${(-vx * s.l).toFixed(1)},${(-vy * s.l).toFixed(1)}`;}
+  el.setAttribute('d', d); el.setAttribute('opacity', (1 - t / 1.4).toFixed(2));
+ };
+}
+export const walk = (ph, amt = 1) => ({hipF: Math.sin(ph) * 22 * amt, hipB: -Math.sin(ph) * 22 * amt, kneeF: Math.max(0, -Math.cos(ph)) * 30 * amt, kneeB: Math.max(0, Math.cos(ph)) * 30 * amt,
+ shF: -Math.sin(ph) * 16 * amt, shB: Math.sin(ph) * 16 * amt, elF: 12, elB: 12, y: -Math.abs(Math.cos(ph)) * 6 * amt});
+export const mix = (a, b, k) => {const o = {}; for (const key of new Set([...Object.keys(a), ...Object.keys(b)])) o[key] = lerp(a[key] ?? 0, b[key] ?? 0, k); return o;};
+export const overlay = (parent, fill, extra = {}) => h('rect', {x: -400, y: -300, width: 2400, height: 1500, fill, ...extra}, parent);
+

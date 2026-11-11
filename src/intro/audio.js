@@ -6,7 +6,7 @@ const NOTE = {C: -9, 'C#': -8, Db: -8, D: -7, 'D#': -6, Eb: -6, E: -5, F: -4, 'F
 const up = (n, o) => n.replace(/-?\d$/, d => +d + o);
 export const hz = n => {const m = /^([A-G][b#]?)(-?\d)$/.exec(n); return A4 * 2 ** ((NOTE[m[1]] + (m[2] - 4) * 12) / 12);};
 
-export function createAudio(ctx, {low = false} = {}) {
+export function createAudio(ctx, {low = false, score: customScore} = {}) {
  const out = ctx.createGain(); out.gain.value = 0;
  const comp = ctx.createDynamicsCompressor();
  comp.threshold.value = -16; comp.ratio.value = 5; comp.attack.value = .004; comp.release.value = .2;
@@ -207,7 +207,7 @@ export function createAudio(ctx, {low = false} = {}) {
 
  let lastBlip = 0;
  return {
-  ctx, events: score(),
+  ctx, events: customScore ? customScore({pad, bass, arp, bell, dombra, kobyz, kick, taiko, hat, stab, fx: (n, w, d) => FX[n]?.(w, d), up}).sort((a, b) => a.t - b.t) : score(),
   fx(name, when, dur) {FX[name]?.(when, dur);},
   blip(who, when) {
    if (when - lastBlip < .06) return; lastBlip = when;

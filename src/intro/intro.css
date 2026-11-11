@@ -67,3 +67,15 @@
 @keyframes tj-hud-top{from{transform:translateY(-100%);opacity:0}to{transform:none;opacity:1}}
 @keyframes tj-hud-fade{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
 @media (prefers-reduced-motion:reduce){.tj-sfx,.tj-flash,.tj-title{animation:none}.intro-handoff *{animation:none!important}}
+/* Info cards (author easter egg): the clock stops until "next" is pressed. */
+.tj-card{pointer-events:auto;text-align:left;background:#f6ead0;border:3px solid var(--ink);box-shadow:.4em .4em 0 #0c0a0bcc;color:#2a1d0c;padding:1.1em 1.3em 1.2em;font-size:max(12px,calc(var(--u)*1.25));line-height:1.45;animation:tj-card .45s cubic-bezier(.2,1.2,.4,1) both;white-space:normal}
+.tj-card .tj-card-k{font:800 .68em/1 Rubik,sans-serif;letter-spacing:.2em;text-transform:uppercase;color:#a3631e;margin-bottom:.5em}
+.tj-card h3{margin:0;font:400 1.9em/1.05 'PT Serif',Georgia,serif;color:#7a1f2b}
+.tj-card .tj-card-y{font:italic .95em 'PT Serif',Georgia,serif;color:#5a3416;margin:.25em 0 .6em}
+.tj-card p{margin:0 0 .8em}
+.tj-next{min-height:40px;border-radius:999px;background:#7a1f2b;color:#fff6dc;border:2px solid var(--ink);font:800 .9em Rubik,sans-serif;padding:0 1.2em;cursor:pointer;letter-spacing:.06em}
+.tj-holding .tj-next{animation:tj-pulse 1.4s ease-in-out infinite}
+.tj-next:focus-visible{outline:3px solid #f8d68b;outline-offset:3px}
+@keyframes tj-card{from{opacity:0;transform:translate(-50%,-46%) scale(.94)}to{opacity:1;transform:translate(-50%,-50%)}}
+@keyframes tj-pulse{50%{box-shadow:0 0 0 6px #f8d68b66}}
+@media (max-height:420px){.tj-card{font-size:11px;padding:.8em 1em}.tj-card h3{font-size:1.5em}}
