@@ -160,3 +160,4 @@ dialog.admin-modal h2 { font-size: 20px; font-weight: 600; margin-bottom: 16px; 
   #admin-app { flex-direction: column; }
   aside.admin-sidebar { width: 100%; border-right: none; border-bottom: 1px solid var(--border); }
 }
+
