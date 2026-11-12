@@ -20,7 +20,6 @@
   },
   "devDependencies": {
     "@electric-sql/pglite": "^0.3.14",
-    "vite": "6.4.1"
+    "vite": "6.4.6"
   }
 }
-

@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {readFile} from 'node:fs/promises';
+import {readFile,readdir} from 'node:fs/promises';
 import {randomUUID} from 'node:crypto';
 import {PGlite} from '@electric-sql/pglite';
 import {answers} from '../scripts/answers.mjs';
@@ -11,7 +11,8 @@ test('PostgreSQL: authoritative runs, retries, branches, history and permissions
  create table auth.users(id uuid primary key);
  create function auth.uid() returns uuid language sql stable as $$select nullif(current_setting('request.jwt.claim.sub',true),'')::uuid$$;
  grant usage on schema auth to authenticated,anon;grant execute on function auth.uid() to authenticated,anon;`);
- for(const f of ['001_schema.sql','002_content.sql','003_progression.sql'])await db.exec(await readFile(new URL('../supabase/migrations/'+f,import.meta.url),'utf8'));
+ const migrationDir=new URL('../supabase/migrations/',import.meta.url);
+ for(const f of (await readdir(migrationDir)).filter(f=>f.endsWith('.sql')).sort())await db.exec(await readFile(new URL(f,migrationDir),'utf8'));
  const teacher=randomUUID(),bob=randomUUID(),cara=randomUUID(),outsider=randomUUID();
  for(const u of [teacher,bob,cara,outsider])await db.query('insert into auth.users values($1)',[u]);
  await db.query('insert into private.teachers values($1)',[teacher]);
