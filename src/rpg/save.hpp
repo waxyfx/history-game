@@ -1,59 +1,61 @@
 #pragma once
-// Explicit little-endian WASM words, no compiler struct layout or pointers.
-// v1 (31 words) is migrated by supplying empty task/event flags; v2 has 33.
+// Save format v3: explicit little-endian WASM words (no struct layout, no pointers).
+// v1/v2 belonged to the single-screen prototype map and cannot be mapped onto MAP01 v3;
+// they are rejected with -2 so the UI can explain why and start a fresh journey.
 namespace tj {
-constexpr uint32_t SaveMagic=0x544a5250,SaveVersion=2;
-uint32_t saveWords[64];
+constexpr uint32_t SaveMagic=0x544a5250,SaveVersion=3;
+constexpr int SaveCount=24+ItemCount+EnemyCount*2;
+uint32_t saveWords[96];
 uint32_t saveChecksum(int count) {
     uint32_t hash=2166136261u;
     for(int i=0;i<count;++i)if(i!=3)for(int shift=0;shift<32;shift+=8){hash^=(saveWords[i]>>shift)&255;hash*=16777619u;}
     return hash;
 }
 int serialize() {
-    if(game.transition||game.attack.active||game.dying)return 0;
+    const Player& p=players[0];
+    if(p.attack.active||p.dead||p.down||game.cinematic)return 0;
     auto* w=saveWords;
-    w[0]=SaveMagic;w[1]=SaveVersion;w[2]=33;w[3]=0;
-    w[4]=uint32_t(game.x*1000);w[5]=uint32_t(game.y*1000);w[6]=game.zone;
-    w[7]=game.health;w[8]=game.lives;w[9]=game.weapon;w[10]=game.visited;w[11]=game.facing;w[12]=game.inventory.picked;
-    for(int i=0;i<ItemCount;++i)w[13+i]=game.inventory.counts[i];
-    // Word 21 reserved; must remain zero in both schemas.
-    w[21]=0;
-    for(int i=0;i<EnemyCount;++i){w[22+i*3]=enemies[i].health;w[23+i*3]=uint32_t(enemies[i].x*1000);w[24+i*3]=uint32_t(enemies[i].y*1000);}
-    w[31]=game.completedTasks;w[32]=game.storyEvents;w[3]=saveChecksum(33);
-    return 33*4;
-}
-bool validFeet(int zone,float x,float y) {
-    return !solid(zone,x-4,y-3)&&!solid(zone,x+4,y-3)&&!solid(zone,x-4,y+3)&&!solid(zone,x+4,y+3);
+    w[0]=SaveMagic;w[1]=SaveVersion;w[2]=SaveCount;w[3]=0;
+    w[4]=uint32_t(p.x*1000);w[5]=uint32_t(p.y*1000);w[6]=game.zone;w[7]=p.hp;w[8]=game.lives;w[9]=p.weapon;
+    w[10]=game.visited;w[11]=p.facing;w[12]=game.staticPicked;
+    uint32_t tags=0;for(int i=1;i<TagCount&&i<32;++i)if(world.hiddenTag[i])tags|=1u<<i;
+    uint32_t ias=0;for(int i=0;i<InteractCount&&i<32;++i)if(world.iaEnabled[i])ias|=1u<<i;
+    w[13]=tags;w[14]=ias;w[15]=game.triggerFired;w[16]=game.triggerArmed;w[17]=game.groups;w[18]=game.torch;
+    w[19]=game.checkX;w[20]=game.checkY;w[21]=game.kills;w[22]=game.completedTasks;w[23]=game.storyEvents;
+    for(int i=0;i<ItemCount;++i)w[24+i]=game.inv.counts[i];
+    for(int i=0;i<EnemyCount;++i){const auto& e=enemies[i];w[24+ItemCount+i*2]=e.active?e.hp:0;w[25+ItemCount+i*2]=e.alerted;}
+    w[3]=saveChecksum(SaveCount);
+    return SaveCount*4;
 }
 int restore(int length) {
     const auto* w=saveWords;
     if(length<16||length>int(sizeof(saveWords))||length%4||w[0]!=SaveMagic)return -1;
-    if(w[1]!=1&&w[1]!=SaveVersion)return -2;
-    int count=w[1]==1?31:33;
-    if(length!=count*4||w[2]!=uint32_t(count)||w[3]!=saveChecksum(count))return -1;
-    if(w[4]>=Width*1000||w[5]>=Height*1000||w[6]>=ZoneCount||w[7]>100||w[8]>3||w[9]>2||w[10]<1||w[10]>=(1u<<ZoneCount)||w[11]>7||w[12]>=(1u<<PickupCount)||w[21]!=0)return -1;
-    if((w[7]==0)!=(w[8]==0)||!(w[10]&(1u<<w[6])))return -1;
-    Game next;next.x=w[4]/1000.f;next.y=w[5]/1000.f;next.zone=w[6];
-    if(!validFeet(next.zone,next.x,next.y))return -1;
-    next.health=w[7];next.lives=w[8];next.weapon=w[9];next.visited=w[10];next.facing=w[11];next.inventory.picked=w[12];
-    for(int i=0;i<ItemCount;++i) {
-        if(w[13+i]>uint32_t(items[i].limit)||(i<3&&w[13+i]!=1))return -1;
-        next.inventory.counts[i]=w[13+i];
-    }
-    Enemy restored[EnemyCount];
-    for(int i=0;i<EnemyCount;++i) {
-        if(w[22+i*3]>uint32_t(enemySpecs[i].health)||w[23+i*3]>=Width*1000||w[24+i*3]>=Height*1000)return -1;
-        restored[i]=Enemy{};auto& e=restored[i];e.type=i;e.health=w[22+i*3];e.homeX=232+i*80;e.homeY=264;
-        e.x=w[23+i*3]/1000.f;e.y=w[24+i*3]/1000.f;
-        if(!validFeet(1,e.x,e.y))return -1;
-        e.state=e.health?Idle:Death;e.timer=45;e.attack.cooldown=60;
-    }
-    if(w[1]==2){next.completedTasks=w[31];next.storyEvents=w[32];}
-    next.gameover=!next.lives;next.event=next.gameover?5:0;
-    next.paused=game.paused;next.invulnerable=60;
-    // Commit only after all validation. Frame state and projectiles are reset.
-    game=next;for(int i=0;i<EnemyCount;++i)enemies[i]=restored[i];
-    for(auto& p:projectiles)p.active=false;
-    return w[1]==1?2:1;
+    if(w[1]!=SaveVersion)return -2;
+    if(length!=SaveCount*4||w[2]!=uint32_t(SaveCount)||w[3]!=saveChecksum(SaveCount))return -1;
+    float x=w[4]/1000.f,y=w[5]/1000.f;
+    if(w[4]>=uint32_t(MapW*Tile*1000)||w[5]>=uint32_t(MapH*Tile*1000)||w[6]>=uint32_t(ZoneCount)||w[7]>100||w[8]>3||w[9]>2||w[11]>7)return -1;
+    if(w[10]<1||w[10]>=(1u<<ZoneCount)||(w[7]==0)!=(w[8]==0))return -1;
+    if(blockedFeet(x,y))return -1;
+    for(int i=0;i<ItemCount;++i)if(w[24+i]>uint32_t(items[i].limit))return -1;
+    if(w[24]!=1)return -1; // the sword is never lost
+    for(int i=0;i<EnemyCount;++i)if(w[24+ItemCount+i*2]>uint32_t(enemySpecs[enemyDefs[i].type].health))return -1;
+    // Validation passed: rebuild the world, then apply the saved state.
+    int paused=game.paused,netRole=game.netRole,party=game.partySize,sheet=players[0].sheet;
+    reset();
+    game.paused=paused;game.netRole=netRole;game.partySize=party;
+    Player& p=players[0];p.sheet=sheet;
+    p.x=p.tx=x;p.y=p.ty=y;game.zone=w[6];p.hp=w[7];game.lives=w[8];p.weapon=w[9];game.visited=w[10];p.facing=w[11];
+    game.staticPicked=w[12];
+    for(auto& k:pickups)if(k.active&&k.id>=0&&((game.staticPicked>>k.id)&1))k.active=false;
+    for(int i=1;i<TagCount&&i<32;++i)world.hiddenTag[i]=(w[13]>>i)&1;
+    for(int i=0;i<InteractCount&&i<32;++i)world.iaEnabled[i]=(w[14]>>i)&1;
+    game.triggerFired=w[15];game.triggerArmed=w[16];game.groups=w[17];game.torch=w[18];
+    game.checkX=w[19];game.checkY=w[20];game.kills=w[21];game.completedTasks=w[22];game.storyEvents=w[23];
+    for(int i=0;i<ItemCount;++i)game.inv.counts[i]=w[24+i];
+    for(int i=0;i<EnemyCount;++i){auto& e=enemies[i];e.hp=w[24+ItemCount+i*2];e.active=e.hp>0;e.alerted=0;}
+    game.gameover=!game.lives;p.invuln=60;
+    if(!p.hp)p.hp=p.maxhp;
+    snapCamera();
+    return 1;
 }
 }

@@ -1,29 +1,26 @@
 #pragma once
 namespace tj {
-constexpr int ItemCount=8;
+// Item ids 1..ItemCount. Names/descriptions shown in the UI are localised in JS (src/rpg/i18n.js);
+// the Kazakh strings here are kept for the stable tj_item_text ABI.
+constexpr int ItemCount=14;
 enum ItemType { WeaponItem,AmmoItem,ConsumableItem,HistoricalItem,KeyItem,ArtifactItem };
+enum ItemId { ISword=1,ISpear,IBow,IArrows,IKit,ITool,ITorch,IPage,IHerb,IQuiver,IOchre,IFlute,ICrystal,INecklace };
 struct ItemDef {const char* id;const char* name;const char* description;int type,limit;};
 constexpr ItemDef items[]={
- {"sword","Қылыш","Жақын қашықтықтағы кең соққы. Уақыт саяхатшысының жабдығы.",WeaponItem,1},
- {"spear","Найза","Ұзын әрі тар бағытталған соққы.",WeaponItem,1},
- {"bow","Садақ","Жебені жұмсайтын қашықтық қаруы.",WeaponItem,1},
- {"arrows","Жебелер","Садаққа арналған оқ-дәрі. Әр шығарылған жебе жұмсалады.",AmmoItem,99},
- {"field-kit","Көмек қобдишасы","Саяхатшының қобдишасы: 35 денсаулық қалпына келтіреді.",ConsumableItem,9},
- {"stone-tool","Тас құрал","Зерттеу үшін жиналған тас құрал. Оқу тапсырмасына арналған зат.",HistoricalItem,1},
- {"time-key","Уақыт кілті","Болашақ оқиғаға арналған сюжеттік зат. Уақыт құрдымын тұрақтандырады.",KeyItem,1},
- {"chronicle-shard","Шежіре сынығы","Табылған көркем артефакт. Тарихи жад сынығы.",ArtifactItem,9}
+ {"sword","Қылыш","Шежіре институтының жеңіл жүзі. Кең әрі жылдам соққы.",WeaponItem,1},
+ {"spear","Найза","Тас ұшты найза. Ұзын әрі тар соққы.",WeaponItem,1},
+ {"bow","Садақ","Қашықтықтан ату. Әр жебе жұмсалады.",WeaponItem,1},
+ {"arrows","Жебелер","Шақпақтас ұшты жебелер.",AmmoItem,40},
+ {"field-kit","Көмек қобдишасы","2087 жылғы дәрі қобдишасы: +45 денсаулық.",ConsumableItem,5},
+ {"stone-tool","Тас құрал","Шақпақтың шапқы құралы.",HistoricalItem,1},
+ {"torch","Алау","Үңгірдің қараңғысын жарықтандырады.",KeyItem,1},
+ {"chronicle-page","Шежіре парағы","Шежіре парағының үзіндісі.",ArtifactItem,3},
+ {"herbs","Емдік шөп","Жусан мен түймедақ: +20 денсаулық.",ConsumableItem,9},
+ {"quiver","Жебейдің қорамсағы","Жоғалған аңшының қорамсағы.",KeyItem,1},
+ {"ochre","Жосa","Жартас суретіне қолданылған қызыл бояу.",ArtifactItem,1},
+ {"flute","Сүйек сыбызғы","Үңгірде жасырылған сүйек сыбызғы.",ArtifactItem,1},
+ {"crystal","Бөтен кристалл","Бұл дәуірге жатпайтын күлгін сынық.",KeyItem,3},
+ {"necklace","Тіс алқа","Аңшылардың сыйы — сенім белгісі.",ArtifactItem,1}
 };
-struct Inventory {int counts[ItemCount]={1,1,1,12,0,0,0,0};unsigned picked=0;};
-struct Pickup {int zone,item,quantity;float x,y;};
-constexpr Pickup pickups[]={
- {0,5,2,136,184},
- {0,4,8,168,184},
- {1,6,1,264,216},
- {1,7,1,408,248},
- {1,8,1,312,280},
- {2,6,1,240,180},
- {3,4,12,320,180},
- {4,8,1,200,220}
-};
-constexpr int PickupCount=sizeof(pickups)/sizeof(pickups[0]);
+struct Inventory {int counts[ItemCount]={1,0,0,0,1,0,0,0,0,0,0,0,0,0};};
 }
