@@ -18,3 +18,22 @@ Snapshot: `{id,session_id,sequence,level,score,status,stage,started_at,ended_at,
 История: select `game_runs` и `run_questions` ограничен RLS владельцем; direct insert/update/delete запрещён. Старые строки `attempts`/`answers` сохраняются как legacy, не участвуют в v2 рейтинге. Преподаватель не может редактировать баллы. Текущий rate limit из 001 — 60 успешных RPC/минуту на пользователя; отклонённые транзакции откатывают счётчик, поэтому для ограничения злоупотреблений ошибочными запросами требуется gateway/WAF лимит на хостинге.
 
 Граница античита: сервер не принимает клиентский итоговый балл и защищает порядок ответов/веток/переходов. Положение игрока, бой и факт физического нахождения фрагмента исполняются в клиентском Doom. Сервер проверяет допустимость события завершения ветки, но не доказывает передвижение по карте; взломанный клиент может вызвать это событие напрямую. Локальная тренировка не является защищённым соревнованием.
+
+## Участники и официальные результаты (006)
+
+Миграция `006_members_results.sql` (применять после 001–005).
+
+**Вход.** Google OAuth через Supabase Auth (PKCE, `src/api.js`). После входа триггер на `auth.users` и RPC `sync_my_profile()` создают/обновляют `public.profiles` **на сервере** из `auth.users` и `auth.identities`: `id`, `google_user_id`, `display_name` (= name), `email`, `avatar_url` (только https), `created_at`, `role`. Клиент эти поля не передаёт и не может записать (нет INSERT/UPDATE grant). Роль по умолчанию `student`; источник истины — `private.user_roles` (`student`/`teacher`/`admin`, legacy `player` = `student`), меняется только `admin_set_user_role` администратором и зеркалируется в `profiles.role`.
+
+**Игровой save и соревновательный результат разделены.** Save — `localStorage` (`tarikh.rpg.v3`, проверяется `src/rpg/persistence.js`), влияет только на сюжет. Результат — `public.level_results`, пишется только функцией `level_finish_run`.
+
+RPC (authenticated):
+- `level_start_run(p_level, p_mode 'solo'|'team', p_session)` → `{id, level_id, mode, status, started_at, score, max_score, answers}`. Одна активная попытка на пользователя и уровень (повторный вызов возвращает её). `team` требует членства в начатой сессии.
+- `level_submit_answer(p_run, p_quiz, p_choice, p_request)` → `{correct, awarded, attempts, closed, run, duplicate}`. Клиент отправляет только номер варианта; ключи в `private.official_quiz_keys`. Основные вопросы 100/60/30 за первый верный ответ, бонусные 50 только за первый ответ.
+- `level_finish_run(p_run, p_request)` → строка результата. Требует решённого обязательного задания (MAP01: `stone_secret`) и не менее `min_seconds` (60 с) от серверного `started_at`. Сервер считает `score`, `max_score` (MAP01: 750), `percentage`, `duration_seconds`, `attempt_number` (под advisory lock), `passed` (MAP01: score ≥ 250).
+- `level_abandon_run(p_run)`, `get_my_profile()` (профиль, лучшие результаты, число попыток, пройденные уровни, активные попытки, последние 20 попыток), `sync_my_profile()`.
+- `admin_get_level_results(p_level, p_limit, p_offset)` — только teacher/admin.
+
+Повтор с тем же `p_request` и теми же параметрами возвращает сохранённый ответ (`duplicate:true`); другие параметры отвергаются. RLS: ученик видит только свои `level_runs`/`level_results`; teacher/admin — все результаты. Прямые INSERT/UPDATE/DELETE запрещены.
+
+Граница античита: сервер не принимает счёт от клиента и проверяет ответы, но не видит движение и бой — секреты и бой в официальный счёт не входят. Варианты ответов MAP01 присутствуют и в клиентском бандле (офлайн‑режим), поэтому знание ответов из кода не предотвращается.

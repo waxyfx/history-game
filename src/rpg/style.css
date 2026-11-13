@@ -155,3 +155,7 @@ html, body { height: 100%; overflow: hidden; background: #050909; }
 @keyframes pulse { from { filter: brightness(1); } to { filter: brightness(1.4); } }
 @keyframes bob { from { transform: translateY(0); } to { transform: translateY(-3px); } }
 @keyframes rise { from { transform: translateY(6px); opacity: 0; } to { transform: none; opacity: 1; } }
+
+.official { margin: .6em 0; padding: .55em .8em; border: 1px solid #4ea59a88; background: #4ea59a1a; border-radius: .6em; text-align: left; }
+.official.warn { border-color: #e06a3f; background: #8a2c1f33; }
+.official small { color: var(--muted); }

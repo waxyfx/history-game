@@ -10,6 +10,8 @@ import {ALL_EPOCHS} from './campaign.js';
 import {sfx, music, ambience, toggleAudioMute, isAudioMuted, unlockAudio} from './audio.js';
 import {createParty, makeCode, MAX_PARTY} from './net.js';
 import {restoreSnapshot} from './persistence.js';
+import {db, rpc} from '../api.js';
+import {currentUser, createOfficialRun} from '../members.js';
 import {A, SH, TS, IT, newFlags, mergeFlags, applyWorld, createQuest, questStage, questTarget, scoreOf, secretsFound, quizPoints} from './quest.js';
 
 const W = 480, H = 320, SAVE_KEY = 'tarikh.rpg.v3', RESULTS_KEY = 'tarikh.rpg.results';
@@ -228,6 +230,25 @@ function closePanel() {
 }
 const panelDone = () => new Promise(r => { panelResolve = r; });
 
+// ---------------------------------------------------------------- official (competitive) run
+// Signed-in players get a server-scored attempt: choices go to the server, which checks them against
+// private keys and stores the result. The local save/flags keep driving the story only.
+let official = null;
+async function startOfficial(fresh) {
+  official = null;
+  try {
+    if (!db || !(await currentUser(db))) return;
+    const run = createOfficialRun({rpc, level: 1}), session = new URLSearchParams(location.search).get('session');
+    const mode = session ? 'team' : 'solo';
+    await run.start(mode, session);
+    // A new journey must not inherit answers from an unfinished older attempt.
+    if (fresh && Object.keys(run.run.answers || {}).length) { await rpc('level_abandon_run', [run.run.id]); await run.start(mode, session); }
+    official = run;
+    toast(lang === 'ru' ? 'Официальная попытка: результат сохраняется на сервере.' : 'Ресми попытка: нәтиже серверде сақталады.');
+    updateHud(true);
+  } catch (e) { console.warn(e); toast(lang === 'ru' ? 'Официальная попытка недоступна — игра в режиме тренировки.' : 'Ресми попытка қолжетімсіз — жаттығу режимі.', 'warn'); }
+}
+const netFail = () => toast(lang === 'ru' ? 'Нет связи с сервером. Повтори ответ.' : 'Сервермен байланыс жоқ. Жауапты қайтала.', 'warn');
 function quiz(n) {
   const q = HISTORICAL_QUIZZES[n];
   const fld = k => lang === 'ru' && q[k + '_ru'] ? q[k + '_ru'] : q[k];
@@ -237,14 +258,20 @@ function quiz(n) {
     return panelDone().then(() => true);
   }
   openPanel(`${head}<p class="q">${esc(fld('question'))}</p><div class="opts">${fld('options').map((o, i) => `<button data-opt="${i}">${esc(o)}</button>`).join('')}</div><div id="qfb" class="qfb" hidden></div><p class="src">${esc(t('source'))}: ${esc(q.source)}</p><button class="primary" data-close hidden>${esc(t('next'))} →</button>`, 'quiz');
-  $('panel-card').querySelectorAll('[data-opt]').forEach(btn => btn.onclick = () => {
-    if (btn.disabled) return;
-    const a = (G.local.attempts[q.id] || 0) + 1; G.local.attempts[q.id] = a;
+  $('panel-card').querySelectorAll('[data-opt]').forEach(btn => btn.onclick = async () => {
+    if (btn.disabled || btn.dataset.busy) return;
+    let a = (G.local.attempts[q.id] || 0) + 1, right = +btn.dataset.opt === q.correctIndex, server = null;
+    if (official?.active) {
+      btn.dataset.busy = 1;
+      try { server = await official.answer(q.id, +btn.dataset.opt); } catch { delete btn.dataset.busy; netFail(); return; }
+      delete btn.dataset.busy; right = server.correct; a = server.attempts || a;
+    }
+    G.local.attempts[q.id] = a;
     const fb = $('qfb'); fb.hidden = false;
-    if (+btn.dataset.opt === q.correctIndex) {
+    if (right) {
       sfx('quiz_ok');
       if (!G.flags.quiz[q.id]) { G.flags.quiz[q.id] = {a, t: Date.now(), by: party.slot}; changed(); }
-      const pts = quizPoints(G.flags.quiz[q.id].a);
+      const pts = server ? server.awarded : quizPoints(G.flags.quiz[q.id].a);
       fb.className = 'qfb ok'; fb.innerHTML = `<b>✓ ${esc(t('quizRight'))} +${pts} ${esc(t('points'))}</b><br>${esc(fld('explanation'))}`;
       $('panel-card').querySelectorAll('[data-opt]').forEach(b => b.disabled = true);
       btn.classList.add('right');
@@ -263,9 +290,15 @@ function bonusQuiz() {
   const show = () => {
     const q = BONUS_QUIZ.questions[i];
     openPanel(`<p class="eyebrow">${esc(L(BONUS_QUIZ.title))} · ${i + 1}/${total} · ${esc(t('fact'))}</p>${i === 0 ? `<p>${esc(t('bonusIntro'))}</p>` : ''}<p class="q">${esc(L(q.q))}</p><div class="opts">${L(q.o).map((o, k) => `<button data-opt="${k}">${esc(o)}</button>`).join('')}</div><div id="qfb" class="qfb" hidden></div><button class="primary" id="bq-next" hidden>${esc(t('next'))} →</button>`, 'quiz');
-    $('panel-card').querySelectorAll('[data-opt]').forEach(btn => btn.onclick = () => {
-      if (btn.disabled) return;
-      const ok = +btn.dataset.opt === q.a; if (ok) correct++;
+    $('panel-card').querySelectorAll('[data-opt]').forEach(btn => btn.onclick = async () => {
+      if (btn.disabled || btn.dataset.busy) return;
+      let ok = +btn.dataset.opt === q.a;
+      if (official?.active) {
+        btn.dataset.busy = 1;
+        try { ok = (await official.answer('stone_bonus_' + (i + 1), +btn.dataset.opt)).correct; } catch { delete btn.dataset.busy; netFail(); return; }
+        delete btn.dataset.busy;
+      }
+      if (ok) correct++;
       sfx(ok ? 'quiz_ok' : 'quiz_bad');
       $('panel-card').querySelectorAll('[data-opt]').forEach(b => { b.disabled = true; if (+b.dataset.opt === q.a) b.classList.add('right'); });
       if (!ok) btn.classList.add('wrong');
@@ -334,9 +367,21 @@ function complete() {
   } catch {}
   save(true);
   music('camp');
-  openPanel(`<p class="eyebrow">${esc(t('complete'))}</p><h2>${esc(t('completeSub'))}</h2>${resultsHTML()}<div class="row"><button class="primary" id="go-camp">${esc(t('toCamp'))}</button><button data-close>${esc(t('stay'))}</button></div>`, 'complete');
+  return finishOfficial().then(officialHTML => {
+  openPanel(`<p class="eyebrow">${esc(t('complete'))}</p><h2>${esc(t('completeSub'))}</h2>${resultsHTML()}${officialHTML}<div class="row"><button class="primary" id="go-camp">${esc(t('toCamp'))}</button><button data-close>${esc(t('stay'))}</button></div>`, 'complete');
   $('go-camp').onclick = () => { closePanel(); quest.interact('homegate'); };
   return panelDone();
+  });
+}
+async function finishOfficial() {
+  if (!official?.active) return '';
+  const ru = lang === 'ru';
+  try {
+    const r = await official.finish(), secs = r.duration_seconds;
+    return `<div class="official"><b>${ru ? 'Официальный результат' : 'Ресми нәтиже'}:</b> ${r.score} / ${r.max_score} (${Number(r.percentage).toFixed(0)}%) · ${r.attempt_number}-${ru ? 'я попытка' : 'попытка'} · ${Math.floor(secs / 60)}:${String(secs % 60).padStart(2, '0')} · ${r.passed ? (ru ? 'пройдено' : 'өтті') : (ru ? 'не пройдено' : 'өтпеді')}<br><small>${ru ? 'Сохранено на сервере. Секреты и бой в официальный счёт не входят.' : 'Серверде сақталды. Құпиялар мен ұрыс ресми есепке кірмейді.'}</small></div>`;
+  } catch (e) {
+    return `<div class="official warn">${ru ? 'Официальный результат не сохранён' : 'Ресми нәтиже сақталмады'}: ${esc(e.message)}</div>`;
+  }
 }
 function results() {
   openPanel(`<p class="eyebrow">${esc(t('results'))}</p><h2>${esc(t('completeSub'))}</h2>${resultsHTML()}<div class="row"><button id="back-stone">${esc(t('returnStone'))}</button><button class="primary" data-close>${esc(t('close'))}</button></div>`, 'complete');
@@ -346,7 +391,7 @@ function results() {
 function gameOver() {
   openPanel(`<h2>${esc(t('gameOver'))}</h2><p>${esc(t('gameOverText'))}</p><div class="col"><button class="primary" id="go-load">${esc(t('continueSave'))}</button><button id="go-new">${esc(t('restart'))}</button></div>`);
   $('go-load').onclick = () => { closePanel(); if (!load()) newGame(); };
-  $('go-new').onclick = () => { closePanel(); newGame(); };
+  $('go-new').onclick = () => { closePanel(); newGame(); startOfficial(true); };
 }
 
 // ---------------------------------------------------------------- co-op
@@ -497,7 +542,7 @@ function updateHud(force) {
   const hp = E.tj_state(8), lives = E.tj_state(9), weapon = E.tj_state(13), arrows = E.tj_state(14), zone = E.tj_state(2);
   const stage = questStage(G.flags), q = QUESTS[stage][lang];
   const allies = party.size > 1 ? [...party.peers.values()].map(p => `${p.slot}:${p.hp}:${p.down}`).join(',') : '';
-  const key = [hp, lives, weapon, arrows, zone, stage, lang, scoreOf(G.flags), party.size, E.tj_item_count(2), E.tj_item_count(3), secretsFound(G.flags), allies, isAudioMuted()].join('|');
+  const key = [hp, lives, weapon, arrows, zone, stage, lang, scoreOf(G.flags), party.size, E.tj_item_count(2), E.tj_item_count(3), secretsFound(G.flags), allies, isAudioMuted(), !!official?.active].join('|');
   if (key === hudKey && !force) return;
   hudKey = key;
   $('hp-fill').style.width = Math.max(0, hp) + '%';
@@ -513,7 +558,7 @@ function updateHud(force) {
   $('slots').querySelectorAll('[data-weapon]').forEach(b => b.onclick = () => equip(+b.dataset.weapon));
   $('zone-name').textContent = ZONE_NAMES[lang][zone] || '';
   $('obj-title').textContent = q[0]; $('obj-detail').textContent = q[1];
-  $('s-score').textContent = `${t('score')} ${scoreOf(G.flags)}`;
+  $('s-score').textContent = `${t('score')} ${scoreOf(G.flags)}${official?.active ? (lang === 'ru' ? ' · офиц.' : ' · ресми') : ''}`;
   $('s-secrets').textContent = `${t('secrets')} ${secretsFound(G.flags)}/${SECRETS.length}`;
   $('s-quiz').textContent = `${lang === 'ru' ? 'Квизы' : 'Квиз'} ${MAIN_QUIZ_ORDER.filter(n => G.flags.quiz[HISTORICAL_QUIZZES[n].id]).length}/5`;
   $('b-inv').innerHTML = `<kbd>I</kbd> ${esc(t('inventory'))}`; $('b-save').textContent = '💾 ' + t('save'); $('b-load').textContent = '📂 ' + t('load');
@@ -745,9 +790,9 @@ async function boot() {
     if (params.has('new')) { // Started from the intro comic: a fresh journey into MAP01.
       try { const old = localStorage.getItem(SAVE_KEY); if (old) localStorage.setItem(SAVE_KEY + '.prev', old); localStorage.removeItem(SAVE_KEY); } catch {}
       history.replaceState(null, '', location.pathname + (params.get('party') ? '?party=' + params.get('party') : ''));
-      newGame();
-    } else if (load(true)) $('fade').style.opacity = 0;
-    else newGame();
+      newGame(); startOfficial(true);
+    } else if (load(true)) { $('fade').style.opacity = 0; startOfficial(false); }
+    else { newGame(); startOfficial(true); }
     if (params.has('coop')) setTimeout(() => !cine && coopPanel(), 400);
     const code = new URLSearchParams(location.search).get('party');
     if (code && /^[A-Z0-9]{6}$/.test(code)) startParty(code);
