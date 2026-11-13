@@ -52,7 +52,7 @@ const settle = async (p, {maxMs = 30000} = {}) => {
     if (s.d) { await p.js('__tj.advanceDialog()'); await delay(30); continue; }
     if (s.p) {
       if (s.next) await p.js(`document.querySelector('#bq-next').click()`);
-      else if (s.opt) await p.js(`document.querySelector('#panel-card [data-opt]:not(:disabled)').click()`);
+      else if (s.opt) await p.js(`(() => { const o = document.querySelector('#panel-card [data-trial]'); const k = ${JSON.stringify(KEY)}[o?.dataset.trial] ?? 0; o.querySelector('[data-opt="' + k + '"]').click(); })()`);
       else if (s.close) await p.js(`document.querySelector('#panel-card [data-close]:not([hidden])').click()`);
       await delay(60); continue;
     }
@@ -62,6 +62,8 @@ const settle = async (p, {maxMs = 30000} = {}) => {
   throw new Error('UI did not settle');
 };
 const T = 16;
+// QA answer key (matches supabase/migrations/006/007 keys).
+const KEY = {stone_main: 1, stone_workshop: 1, stone_hunting: 2, stone_cave: 1, stone_secret: 0, stone_bonus_1: 0, stone_bonus_2: 0, stone_bonus_3: 1, stone_bonus_4: 0, stone_bonus_5: 0};
 try {
   for (let i = 0; i < 100 && !port; i++) { try { port = (await readFile(join(profile, 'DevToolsActivePort'), 'utf8')).split('\n')[0]; } catch { await delay(100); } }
   assert(port, 'Browser launch failed');
@@ -71,13 +73,16 @@ try {
   await a.wait('__tj.cine === "intro"');
   await delay(1200); await a.shot('map01-01-arrival');
   await a.js('__tj.skipCutscene()');
-  await a.wait('__tj.panelOpen && !!document.querySelector("#panel-card [data-opt]")');
+  // Observe first: the trial opens with Aibar's reasoning, then the choice panel.
+  for (let i = 0; i < 200 && !(await a.js('__tj.panelOpen && !!document.querySelector("#panel-card [data-opt]")')); i++) { await a.js('__tj.advanceDialog()'); await delay(60); }
   await a.shot('map01-02-quiz');
-  await a.js(`document.querySelector('#panel-card [data-opt="0"]').click()`);
+  assert(!(await a.js('document.querySelector("#qfb")')), 'no right/wrong verdict element during a trial');
   await a.js(`document.querySelector('#panel-card [data-opt="1"]').click()`);
-  assert.equal(await a.js('__tj.G.flags.quiz.stone_main.a'), 2);
+  await a.wait('!__tj.panelOpen');
+  assert.equal(await a.js('document.querySelectorAll("#panel-card .right, #panel-card .wrong").length'), 0);
+  assert.equal(await a.js('__tj.G.flags.quiz.stone_main.ok'), true);
   await settle(a);
-  assert.equal(await a.js('document.querySelector("#s-score").textContent.replace(/\\D/g,"")'), '60');
+  assert.match(await a.js('document.querySelector("#s-score").textContent'), /⏱ \d+:\d\d/, 'live timer, no live score');
   assert.equal(await a.js('__tj.E.tj_item_count(8)'), 1, 'page fragment 1/3');
   // 2. Real keyboard movement and collision with the map border.
   const p0 = await a.js('__tj.E.tj_state(0)');
@@ -153,8 +158,10 @@ try {
   await a.key('KeyE', 'e', 'keyDown'); await a.js('__tj.step(130)'); await a.key('KeyE', 'e', 'keyUp'); await delay(200); await settle(a);
   assert(await a.js('__tj.G.flags.b.chamber'));
   await a.js(`__tj.E.tj_teleport(${7 * T}, ${81.2 * T + 14}); __tj.E.tj_face(0); __tj.step(3)`);
-  await a.press('KeyE', 'e'); await a.wait('__tj.panelOpen'); await a.shot('map01-08-bonus-quiz'); await settle(a);
-  assert(await a.js('!!__tj.G.flags.bonus'));
+  await a.press('KeyE', 'e');
+  for (let i = 0; i < 200 && !(await a.js('__tj.panelOpen')); i++) { await a.js('__tj.advanceDialog()'); await delay(60); }
+  await a.shot('map01-08-bonus-quiz'); await settle(a);
+  assert.equal(await a.js('[1,2,3,5].filter(n => __tj.G.flags.quiz["stone_bonus_" + n]).length'), 4, 'chamber investigation answered');
   await a.js(`__tj.E.tj_teleport(${9 * T}, ${86.6 * T + 14}); __tj.E.tj_face(0); __tj.step(3)`); await a.press('KeyE', 'e'); await delay(150); await settle(a);
   assert(await a.js('__tj.G.flags.b.flute'));
   // 11. Zulmat's mark (quiz 5), the page, completion screen, portal to the camp.
@@ -163,16 +170,28 @@ try {
   await a.js(`__tj.E.tj_teleport(${25 * T}, ${79.2 * T + 12}); __tj.E.tj_face(0); __tj.step(3)`); await a.press('KeyE', 'e');
   await a.wait('__tj.cine === "page"'); await delay(2500); await a.shot('map01-09-page');
   await a.js('__tj.skipCutscene()'); await a.wait('__tj.panelOpen && !!document.querySelector("#go-camp")', 10000);
+  assert.match(await a.js('document.querySelector(".verdict").textContent'), /94 \/ 100/);
+  await a.js(`document.querySelector('#open-journal').click()`); await a.wait('!!document.querySelector(".journal-list")');
+  await a.shot('map01-10b-journal');
+  await a.js(`document.querySelector('#journal-back').click()`); await a.wait('!!document.querySelector("#go-camp")');
   await a.shot('map01-10-complete');
   assert(await a.js('__tj.G.flags.b.finished && __tj.E.tj_item_count(8) === 3'));
   await a.js(`document.querySelector('#go-camp').click()`); await a.wait('__tj.E.tj_state(2) === 6', 8000); await settle(a);
   await a.js('__tj.step(30)'); await a.shot('map01-11-camp');
-  const score = await a.js('document.querySelector("#s-score").textContent.replace(/\\D/g,"")');
+  const score = await a.js('Object.values(__tj.G.flags.quiz).filter(r => r.ok).length');
   // 12. Save, reload, verify.
   await a.js('__tj.save()');
   await a.call('Page.reload'); await delay(1500); await a.wait('window.__tj && __tj.E && __tj.G.flags.b.finished');
   assert.equal(await a.js('__tj.E.tj_state(2)'), 6, 'position restored');
-  assert.equal(await a.js('document.querySelector("#s-score").textContent.replace(/\\D/g,"")'), score, 'score restored');
+  assert.equal(await a.js('Object.values(__tj.G.flags.quiz).filter(r => r.ok).length'), score, 'trial choices restored');
+  // Failing branch: a wrong final choice keeps the game going, then the level ends below 90 with a retry.
+  await a.js(`__tj.G.flags.quiz.stone_secret.ok = false; __tj.G.changed(); __tj.results(); 1`);
+  await a.wait('!!document.querySelector("#retry-epoch")');
+  assert.match(await a.js('document.querySelector(".verdict").textContent'), /64 \/ 100/);
+  await a.shot('map01-13-fail');
+  await a.js(`document.querySelector('#retry-epoch').click()`); await a.wait('__tj.cine === "intro"', 8000);
+  assert.equal(await a.js('Object.keys(__tj.G.flags.quiz).length'), 0, 'retry starts the epoch from zero');
+  await settle(a);
   assert.deepEqual(a.errors, [], 'no runtime errors (solo)');
   // 13. Co-op: three tabs in one party, a fourth is refused.
   const code = 'QATEST';

@@ -3,7 +3,7 @@
 // co-op peers can merge them in any order without conflicts or duplicated rewards.
 import {MAP01} from './gen/map01.js';
 import {ANIMS, SHEETS} from './gen/atlas.js';
-import {DIALOGUES, HISTORICAL_QUIZZES, FACTS, VILLAGERS, SECRETS, QUESTS} from './story.js';
+import {DIALOGUES, HISTORICAL_QUIZZES, FACTS, VILLAGERS, SECRETS, QUESTS, BONUS_META, CACHE_BRANCH} from './story.js';
 
 export const TS = 16;
 export const A = Object.fromEntries(ANIMS.map((n, i) => [n, i]));
@@ -31,15 +31,21 @@ export function mergeFlags(a, b) {
   out.tEnd = a.tEnd && b.tEnd ? Math.min(a.tEnd, b.tEnd) : a.tEnd || b.tEnd || 0;
   return out;
 }
-export const quizPoints = attempts => attempts <= 1 ? 100 : attempts === 2 ? 60 : 30;
+
 export function secretsFound(f) {
   return SECRETS.filter(s => s === 'petro' ? f.petro.length >= 4 : f.b[s]).length;
 }
+// Level score (max 100, pass 90): trial weights from story.js; mirrors 007_competition.sql.
+export const MAX_SCORE = 100, PASS_SCORE = 90;
+export const TRIAL_POINTS = Object.fromEntries([...Object.values(HISTORICAL_QUIZZES).map(q => [q.id, q.points]), ...BONUS_META.map(b => [b.id, b.points])]);
 export function scoreOf(f) {
   let s = 0;
-  for (const r of Object.values(f.quiz)) s += quizPoints(r.a);
-  if (f.bonus) s += f.bonus.correct * 50;
-  return s + secretsFound(f) * 25;
+  for (const [id, r] of Object.entries(f.quiz)) if (r.ok) s += TRIAL_POINTS[id] || 0;
+  return Math.min(MAX_SCORE, s);
+}
+// Page completeness: the four lines restored by the mandatory and final trials.
+export function pageLines(f) {
+  return ['stone_main', 'stone_hunting', 'stone_cave', 'stone_secret'].filter(id => f.quiz[id]?.ok).length;
 }
 export function questStage(f) {
   const b = f.b;
@@ -141,10 +147,10 @@ export function createQuest(G) {
       if (!B.village) return;
       if (!B.elderTask && f.talked.length >= 3) return G.cine('elderTask', cutElderTask);
       if (!B.elderTask) return G.say(f.talked.length ? D.elderWait : D.elder1);
-      if (B.returned) return G.say([D.return1[8], D.return1[9]]);
+      if (B.returned) return G.say(D.elderAfter);
       return G.say([D.elder2[3]]);
     }
-    if (npcKey === 'hunter') return G.say([{who: 'hunter', kk: 'Садақ — аңшының жаны. Мен оны Шақпақтан үйрендім.', ru: 'Лук — душа охотника. Я учился у Шақпақа.'}]);
+    if (npcKey === 'hunter') return G.say(D.hunterTalk);
     if (npcKey === 'dana') return G.say(G.flags.b.camp ? D.dana : D.camp);
     if (npcKey === 'erlan') return G.say(D.erlan);
     if (!VILLAGERS.includes(npcKey)) return;
@@ -165,7 +171,11 @@ export function createQuest(G) {
     switch (key) {
       case 'page1': if (!B.page1) return G.cine('intro', cutIntro, true); return;
       case 'firepit': E.tj_checkpoint(...P(31, 42.6)); E.tj_heal(100); G.save(true); return G.say(D.firepit, FACTS.fire);
-      case 'toolpile': await G.say(D.toolpile); return G.quiz(2);
+      case 'toolpile': { // Shaqpaq's trial (secret): trust and a gift depend on the choice.
+        const r = await G.quiz(2);
+        if (r.fresh && r.ok) { E.tj_item_add(IT.tool, 1); E.tj_item_add(IT.arrows, 6); G.sfx('pickup'); }
+        return;
+      }
       case 'track1': case 'track2': case 'track3': case 'track4': {
         const n = +key.slice(5);
         await G.say(D[key]);
@@ -175,7 +185,7 @@ export function createQuest(G) {
       }
       case 'thicket': set('thicket'); G.sfx('secret'); G.spawnFx(pos('thicket'), 2, 10); return G.say(D.thicket);
       case 'cachebush': set('cachebush'); G.spawnFx(pos('cachebush'), 2, 8); return G.say(D.cachebush);
-      case 'cache': if (!B.cache) { set('cache'); E.tj_item_add(IT.arrows, 10); E.tj_item_add(IT.herb, 1); E.tj_item_add(IT.kit, 1); G.sfx('secret'); return G.say(D.cache); } return;
+      case 'cache': if (!B.cache) { set('cache'); E.tj_item_add(IT.arrows, 10); E.tj_item_add(IT.herb, 1); E.tj_item_add(IT.kit, 1); G.sfx('secret'); await G.say(D.cache); await G.bonusTrial(3, CACHE_BRANCH); } return;
       case 'rope': if (hold && !B.freed) { set('freed'); return G.cine('freed', cutFreed); } return;
       case 'boulder': return G.say(G.party() > 1 ? D.boulderCoop : [...D.boulder, ...D.boulderSolo]);
       case 'lever': if (hold && !B.caveOpen) { set('caveOpen'); return G.cine('opened', cutOpened); } return;
@@ -186,7 +196,7 @@ export function createQuest(G) {
       case 'caveexit': return G.travel(...P(102, 10.4));
       case 'petro1': case 'petro2': case 'petro3': case 'petro4': {
         const n = +key.slice(5);
-        await G.say(D[key], FACTS.petro);
+        if (n !== 1) await G.say(D[key], FACTS.petro); // petro1 is the «sun-headed man» trial
         if (!f.petro.includes(n)) {
           f.petro = [...f.petro, n]; G.changed();
           if (f.petro.length === 4) { E.tj_item_add(IT.ochre, 1); G.sfx('secret'); await G.say(D.petroAll, FACTS.ochre); }
@@ -195,7 +205,7 @@ export function createQuest(G) {
         return;
       }
       case 'crack': if (hold && !B.crack) { set('crack'); set('chamber'); G.sfx('rumble'); E.tj_shake(18); G.spawnFx(pos('crack'), 2, 14); G.sfx('secret'); return G.say([...D.crack, ...D.chamber]); } return;
-      case 'altar': return G.bonusQuiz();
+      case 'altar': return G.chamber();
       case 'flute': if (!B.flute) { set('flute'); E.tj_item_add(IT.flute, 1); G.sfx('secret'); return G.say(D.flute); } return;
       case 'zmark':
         if (f.quiz.stone_secret) return G.say([D.zmark[0]]);
@@ -206,9 +216,9 @@ export function createQuest(G) {
       case 'homegate':
         G.sfx('portal');
         await G.travel(...P(76, 83));
-        if (!B.camp) { set('camp'); if (G.party() === 1) await G.cine('camp', async d => { d.music('camp'); await d.say(D.camp); }); }
+        if (!B.camp) { set('camp'); if (G.party() === 1) await G.cine('camp', cutCamp); }
         return;
-      case 'campgate': return G.say(D.campgate);
+      case 'campgate': return G.say(G.levelPassed() ? D.campgateOpen : D.campgateLocked);
       case 'holo': return G.results();
     }
   }
@@ -234,24 +244,37 @@ export function createQuest(G) {
   }
 
   // ------------------------------------------------------------ cutscenes
-  // Every cutscene is idempotent: `final` applies the end state when it is skipped.
+  // Every cutscene: opening shot -> action -> dialogue -> visual event -> reaction -> hand-off.
+  // Skipping fast-forwards the same script, so the end state (flags, items, NPCs) is identical.
+  const npcGo = (key, x, y, run = 0, anim = A.idle) => E.tj_npc_goto(NPC[key], ...P(x, y), run, anim);
   async function cutIntro(d) {
     const hero = G.heroPos();
-    d.music('explore');
-    d.pose(A.death, 200); d.cam(hero[0], hero[1] - 20, 999);
-    await d.fadeIn(1400);
-    await d.wait(500);
+    d.music('mystery');
+    d.pose(A.death, 400); d.cam(hero[0], hero[1] - 20, 999);
+    G.sfx('portal');
+    await d.flash(500);
+    await d.fadeIn(1800);
+    await d.wait(900);
+    await d.say(D.wake.slice(0, 1));
     d.pose(A.idle, 1);
-    await d.say(D.wake);
-    d.cam(...P(32, 39), 2.2); await d.wait(2200);
-    d.fx(...P(32, 40.4), 1, 6);
+    await d.wait(500);
+    await d.say(D.wake.slice(1));
+    // Looking around: left, right, then the horizon.
+    d.face(6); await d.wait(700); d.face(2); await d.wait(700);
+    d.cam(hero[0] + 90, hero[1] - 40, 1.2); await d.wait(1200);
+    await d.say(D.look);
+    d.music('explore');
+    d.cam(...P(32, 39), 2.2); await d.wait(2400);
+    d.fx(...P(32, 40.4), 1, 8);
+    await d.wait(500);
     await d.say(D.smoke);
     d.cam(...pos('page1'), 3); await d.wait(900);
     await d.walk(pos('page1')[0] - 12, pos('page1')[1] + 4);
     d.face(2); d.pose(A.interact, 30);
     await d.say([D.fragment[0]]);
-    G.sfx('page'); d.fx(...pos('page1'), 0, 16);
+    G.sfx('page'); d.fx(...pos('page1'), 0, 18); E.tj_shake(6);
     set('page1'); applyWorld(G);
+    await d.wait(600);
     await d.say(D.fragment.slice(1));
     d.camFollow();
     d.final(() => { set('intro'); set('page1'); });
@@ -259,24 +282,33 @@ export function createQuest(G) {
   }
   async function cutMeet(d) {
     d.music('village');
-    d.cam(...P(32, 40), 2.5);
-    E.tj_npc_goto(NPC.child, ...P(32.4, 39.8), 1, A.talk);
-    E.tj_npc_goto(NPC.scraper, ...P(27, 42.6), 1, A.idle);
-    await d.wait(1300);
-    await d.say(D.meet.slice(0, 3));
-    E.tj_npc_goto(NPC.elder, ...P(27.6, 41.4), 0, A.talk);
+    d.cam(...P(32, 41), 2.5);              // Opening: the fire, people at work.
     await d.wait(1200);
+    npcGo('child', 32.4, 39.8, 1, A.talk);  // The child runs to the elder.
+    E.tj_npc_face(NPC.crafter, 6); E.tj_npc_face(NPC.cook, 6);
+    await d.wait(900);
+    await d.say(D.meet.slice(0, 1));
+    npcGo('scraper', 27, 42.6, 1, A.idle);  // Qamys blocks the stranger's way.
+    d.cam(...P(27, 42.4), 3); await d.wait(900);
+    await d.say(D.meet.slice(1, 3));
+    await d.wait(400);
+    npcGo('elder', 27.6, 41.4, 0, A.talk);
+    d.cam(...P(28.5, 41.6), 1.6); await d.wait(1600);
     await d.say(D.meet.slice(3));
     d.final(() => { set('village'); G.forceNpc = true; for (const k of ['elder', 'child', 'scraper']) E.tj_npc_routine(NPC[k]); });
   }
   async function cutElderTask(d) {
     d.cam(...P(33, 40), 3);
-    await d.say(D.elder2.slice(0, 2));
-    d.cam(...P(60, 46), 3.2); await d.wait(1500);
-    d.fx(...P(85, 32), 1, 8);
-    await d.say(D.elder2.slice(2, 4));
-    d.cam(...P(33, 40), 4); await d.wait(900);
-    await d.say(D.elder2.slice(4));
+    await d.say(D.elder2.slice(0, 1));
+    G.sfx('howl');                           // Far away, the wolves answer.
+    d.cam(...P(60, 46), 3.2); await d.wait(1600);
+    d.fx(...P(85, 32), 1, 10);
+    await d.say(D.elder2.slice(1, 2));
+    d.cam(...P(31, 42), 4); await d.wait(900);
+    await d.say(D.elder2.slice(2, 3));
+    await d.wait(500);
+    d.cam(...P(33, 40), 2); await d.wait(600);
+    await d.say(D.elder2.slice(3));
     d.final(() => set('elderTask'));
   }
   async function cutFreed(d) {
@@ -284,21 +316,28 @@ export function createQuest(G) {
     const post = P(89.2, 21.6);
     d.cam(post[0], post[1] - 10, 3);
     E.tj_npc_set(NPC.hunter, post[0] - 6, post[1] + 6, 2, A.idle, 1);
+    await d.wait(500);
     await d.say(D.freed);
-    // Scene 4: the shadow on the rocks.
+    // Scene 4: the shadow on the rocks. Silence first, then fog.
     const rock = P(100, 19.6);
-    d.fog(170); G.sfx('shadow');
-    d.cam(rock[0], rock[1] - 10, 1.6);
-    await d.wait(1400);
-    for (let a = 0; a <= 220; a += 20) { E.tj_shadow(rock[0], rock[1] - 22, a); await d.wait(70); }
+    d.music('off'); await d.wait(700);
+    d.fog(170); G.sfx('shadow'); E.tj_light(150, 130, 175);
+    d.cam(rock[0], rock[1] - 10, 1.4);
+    await d.wait(1600);
+    for (let a = 0; a <= 220; a += 20) { E.tj_shadow(rock[0], rock[1] - 22, a); await d.wait(80); }
+    await d.wait(600);
     await d.say(D.shadow.slice(0, 1));
+    await d.wait(400);
     await d.say(D.shadow.slice(1, 2));
-    E.tj_shake(12); G.sfx('whoosh');
+    E.tj_shake(14); G.sfx('whoosh'); await d.flash(220);
     for (let a = 220; a >= 0; a -= 22) { E.tj_shadow(rock[0], rock[1] - 22, a); await d.wait(50); }
-    d.fx(rock[0], rock[1] - 24, 7, 24);
-    d.fog(0);
-    d.cam(post[0], post[1] - 10, 2.4); await d.wait(700);
-    await d.say(D.shadow.slice(2));
+    d.fx(rock[0], rock[1] - 24, 7, 28);
+    d.fog(0); E.tj_light(214, 196, 166);
+    await d.wait(500);
+    d.cam(post[0], post[1] - 10, 2.4); await d.wait(800);
+    await d.say(D.shadow.slice(2, 4));
+    await d.say(D.shadow.slice(4));
+    d.music('explore');
     await d.say(D.shadowAfter);
     E.tj_npc_goto(NPC.hunter, ...P(84, 30), 1, A.idle);
     await d.wait(1600);
@@ -306,59 +345,77 @@ export function createQuest(G) {
   }
   async function cutReturn(d) {
     d.music('village');
+    E.tj_light(185, 150, 150);              // Sunset over the settlement.
     E.tj_npc_set(NPC.hunter, ...P(36, 44), 6, A.idle, 1);
-    E.tj_npc_goto(NPC.child, ...P(34.4, 43.4), 1, A.talk);
     d.cam(...P(33, 42), 2.5);
-    await d.wait(900);
-    await d.say(D.return1.slice(0, 4));
+    await d.wait(800);
+    npcGo('child', 34.4, 43.4, 1, A.talk);
+    await d.say(D.return1.slice(0, 1));
+    npcGo('cook', 33.2, 44.4, 0, A.idle); npcGo('crafter', 37, 43, 0, A.idle);
+    await d.wait(700);
+    await d.say(D.return1.slice(1, 4));
     G.sfx('pickup');
     await d.say(D.return1.slice(4, 5));
     E.tj_light(170, 136, 150);
+    await d.wait(600);
     await d.say(D.return1.slice(5, 7));
-    d.cam(...P(100, 10), 5); await d.wait(1900);
-    await d.say(D.return1.slice(7, 9));
-    d.cam(...P(33, 42), 6); await d.wait(800);
-    await d.say(D.return1.slice(9));
+    d.cam(...P(100, 10), 5); await d.wait(2000);   // The painted cave, far in the ravine.
+    G.sfx('howl');
+    await d.say(D.return1.slice(7, 8));
+    d.cam(...P(33, 42), 6); await d.wait(900);
+    await d.say(D.return1.slice(8));
     d.final(() => { set('returned'); G.forceNpc = true; });
   }
   async function cutOpened(d) {
     const bp = pos('boulder');
     d.cam(bp[0], bp[1], 3);
-    await d.wait(500);
+    await d.wait(600);
     G.sfx('rumble'); E.tj_shake(40);
-    for (let i = 0; i < 5; i++) { d.fx(bp[0] + (i - 2) * 10, bp[1], 2, 6); await d.wait(180); }
+    for (let i = 0; i < 6; i++) { d.fx(bp[0] + (i - 2.5) * 10, bp[1], 2, 6); await d.wait(170); }
     set('caveOpen'); applyWorld(G);
-    await d.wait(400);
+    await d.wait(700);
+    d.cam(bp[0], bp[1] - 24, 1); await d.wait(700);
     await d.say(D.opened);
     d.final(() => set('caveOpen'));
   }
   async function cutBear(d) {
+    d.music('off');
+    d.cam(...P(25, 96.6), 3); await d.wait(1100);
+    E.tj_shake(24); G.sfx('roar');
     d.music('danger');
-    d.cam(...P(25, 96.6), 3); await d.wait(900);
-    E.tj_shake(20); G.sfx('roar');
-    await d.wait(700);
+    await d.wait(800);
     await d.say(D.bear);
   }
   async function cutPage(d) {
     d.music('mystery');
     const pp = pos('page2');
     d.cam(pp[0], pp[1] - 10, 2);
-    d.pose(A.victory, 200);
-    G.sfx('page'); d.fx(pp[0], pp[1] - 6, 0, 24);
+    d.pose(A.victory, 260);
+    G.sfx('page'); d.fx(pp[0], pp[1] - 6, 0, 28); await d.flash(300);
     E.tj_item_add(IT.page, 2);
     await d.say(D.page.slice(0, 2));
-    d.fog(140); G.sfx('shadow');
-    for (let a = 0; a <= 140; a += 20) { E.tj_shadow(pp[0], pp[1] - 40, a); await d.wait(60); }
-    await d.say(D.page.slice(2, 4));
-    for (let a = 140; a >= 0; a -= 20) { E.tj_shadow(pp[0], pp[1] - 40, a); await d.wait(50); }
+    d.music('off'); await d.wait(600);
+    d.fog(150); G.sfx('shadow'); E.tj_light(90, 70, 120);
+    for (let a = 0; a <= 150; a += 15) { E.tj_shadow(pp[0], pp[1] - 40, a); await d.wait(70); }
+    await d.say(D.page.slice(2, 3));
+    await d.wait(700);
+    await d.say(D.page.slice(3, 4));
+    for (let a = 150; a >= 0; a -= 15) { E.tj_shadow(pp[0], pp[1] - 40, a); await d.wait(50); }
     d.fog(0);
     await d.say(D.page.slice(4));
-    G.sfx('portal');
+    G.sfx('portal'); E.tj_shake(10);
     set('finished'); if (!G.flags.tEnd) G.flags.tEnd = Date.now(); applyWorld(G);
-    d.cam(...pos('homegate'), 2); await d.wait(900);
+    d.cam(...pos('homegate'), 2); await d.wait(1100);
     await d.say(D.portal);
     d.final(() => { E.tj_shadow(0, 0, 0); E.tj_fog(0); set('finished'); if (!G.flags.tEnd) G.flags.tEnd = Date.now(); });
     d.after(() => G.complete());
+  }
+  async function cutCamp(d) {
+    d.music('camp');
+    d.cam(...P(66, 84), 2); await d.wait(900);   // Tents of the field team, then the gate.
+    d.cam(...P(76, 80), 2); await d.wait(1100);
+    d.cam(...P(76, 86), 2); await d.wait(700);
+    await d.say(D.camp);
   }
 
   // Peers replay a story beat that a teammate triggered (flags inside the scripts are idempotent).

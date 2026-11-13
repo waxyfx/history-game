@@ -5,14 +5,14 @@ import {decodePNG, browserInflate} from './png.js';
 import {ATLAS_RECTS} from './gen/atlas.js';
 import {MAP01} from './gen/map01.js';
 import {UI, ITEMS, ITEM_ICONS, INTERACT_LABEL, getLang, setLang} from './i18n.js';
-import {SPEAKERS, ZONE_NAMES, QUESTS, HISTORICAL_QUIZZES, BONUS_QUIZ, MAIN_QUIZ_ORDER, SECRETS} from './story.js';
+import {SPEAKERS, ZONE_NAMES, QUESTS, HISTORICAL_QUIZZES, BONUS_QUIZ, BONUS_META, CHAMBER_FAIL, TRIAL_LEVELS, MAIN_QUIZ_ORDER, SECRETS, DIALOGUES} from './story.js';
 import {ALL_EPOCHS} from './campaign.js';
 import {sfx, music, ambience, toggleAudioMute, isAudioMuted, unlockAudio} from './audio.js';
 import {createParty, makeCode, MAX_PARTY} from './net.js';
 import {restoreSnapshot} from './persistence.js';
 import {db, rpc} from '../api.js';
 import {currentUser, createOfficialRun} from '../members.js';
-import {A, SH, TS, IT, newFlags, mergeFlags, applyWorld, createQuest, questStage, questTarget, scoreOf, secretsFound, quizPoints} from './quest.js';
+import {A, SH, TS, IT, newFlags, mergeFlags, applyWorld, createQuest, questStage, questTarget, scoreOf, secretsFound, pageLines, MAX_SCORE, PASS_SCORE} from './quest.js';
 
 const W = 480, H = 320, SAVE_KEY = 'tarikh.rpg.v3', RESULTS_KEY = 'tarikh.rpg.results';
 const SFX_NAMES = ['step_grass', 'step_dirt', 'step_water', 'step_cave', 'sword', 'spear', 'bow', 'arrow_hit', 'enemy_hurt', 'enemy_die', 'howl', 'growl', 'roar', 'swipe', 'shout', 'pickup', 'splash', 'hooves', 'block', 'down', 'revive', 'impact', 'bowstring'];
@@ -198,6 +198,7 @@ async function playCutscene(id, script, broadcast = true) {
     },
     fx: (x, y, type, n) => E.tj_spawn_fx(type, Math.round(x), Math.round(y), n),
     fog: n => E.tj_fog(n), music: m => music(m),
+    flash: async ms => { if (d.skipping) return; const f = $('fade'); f.style.transition = 'none'; f.style.background = '#fff'; f.style.opacity = .85; await sleep(40); f.style.transition = `opacity ${ms}ms`; f.style.opacity = 0; await sleep(ms); f.style.background = ''; },
     final: fn => fn(), after: fn => d.afters.push(fn),
   });
   try { await script(d); } catch (e) { console.error(e); }
@@ -242,81 +243,83 @@ async function startOfficial(fresh) {
     const mode = session ? 'team' : 'solo';
     await run.start(mode, session);
     // A new journey must not inherit answers from an unfinished older attempt.
-    if (fresh && Object.keys(run.run.answers || {}).length) { await rpc('level_abandon_run', [run.run.id]); await run.start(mode, session); }
+    if (fresh && (run.run.answered || []).length) { await rpc('level_abandon_run', [run.run.id]); await run.start(mode, session); }
+    if (run.run.server_now) clockSkew = Date.parse(run.run.server_now) - Date.now();
     official = run;
     toast(lang === 'ru' ? 'Официальная попытка: результат сохраняется на сервере.' : 'Ресми попытка: нәтиже серверде сақталады.');
     updateHud(true);
   } catch (e) { console.warn(e); toast(lang === 'ru' ? 'Официальная попытка недоступна — игра в режиме тренировки.' : 'Ресми попытка қолжетімсіз — жаттығу режимі.', 'warn'); }
 }
 const netFail = () => toast(lang === 'ru' ? 'Нет связи с сервером. Повтори ответ.' : 'Сервермен байланыс жоқ. Жауапты қайтала.', 'warn');
-function quiz(n) {
-  const q = HISTORICAL_QUIZZES[n];
-  const fld = k => lang === 'ru' && q[k + '_ru'] ? q[k + '_ru'] : q[k];
-  const head = `<p class="eyebrow">${esc(fld('questTitle'))} · ${esc(t('fact'))}</p><h2>${esc(fld('title'))}</h2>`;
-  if (G.flags.quiz[q.id]) {
-    openPanel(`${head}<p>${esc(t('solvedBefore'))}</p><p class="fact">${esc(fld('explanation'))}</p><p class="src">${esc(t('source'))}: ${esc(q.source)}</p><button class="primary" data-close>${esc(t('next'))} →</button>`, 'quiz');
-    return panelDone().then(() => true);
+const evidenceHTML = list => list && list.length ? `<div class="evidence"><small>${esc(t('evidence'))}</small><ul>${list.map(e => `<li>${esc(L(e))}</li>`).join('')}</ul></div>` : '';
+// Historical trial = a story decision. The player observes (intro + evidence), thinks and chooses ONCE.
+// No right/wrong verdict is shown during the level: the choice changes what happens next (branch
+// lines, trust, gifts, page completeness). Verdicts and the historical logic are revealed in the
+// chronicle journal after the level. In an official run the server records the choice and scores it.
+async function trial(def) {
+  const done = G.flags.quiz[def.id];
+  const head = `<p class="eyebrow">${esc(def.questTitle)} · ${esc(t('trial'))}${def.level ? ' · ' + esc(TRIAL_LEVELS[def.level]) : ''}</p><h2>${esc(def.title)}</h2>`;
+  if (done) {
+    openPanel(`${head}<p>${esc(t('decided'))}</p><button class="primary" data-close>${esc(t('next'))} →</button>`, 'quiz');
+    await panelDone();
+    return {ok: !!done.ok, fresh: false};
   }
-  openPanel(`${head}<p class="q">${esc(fld('question'))}</p><div class="opts">${fld('options').map((o, i) => `<button data-opt="${i}">${esc(o)}</button>`).join('')}</div><div id="qfb" class="qfb" hidden></div><p class="src">${esc(t('source'))}: ${esc(q.source)}</p><button class="primary" data-close hidden>${esc(t('next'))} →</button>`, 'quiz');
-  $('panel-card').querySelectorAll('[data-opt]').forEach(btn => btn.onclick = async () => {
-    if (btn.disabled || btn.dataset.busy) return;
-    let a = (G.local.attempts[q.id] || 0) + 1, right = +btn.dataset.opt === q.correctIndex, server = null;
-    if (official?.active) {
-      btn.dataset.busy = 1;
-      try { server = await official.answer(q.id, +btn.dataset.opt); } catch { delete btn.dataset.busy; netFail(); return; }
-      delete btn.dataset.busy; right = server.correct; a = server.attempts || a;
-    }
-    G.local.attempts[q.id] = a;
-    const fb = $('qfb'); fb.hidden = false;
-    if (right) {
-      sfx('quiz_ok');
-      if (!G.flags.quiz[q.id]) { G.flags.quiz[q.id] = {a, t: Date.now(), by: party.slot}; changed(); }
-      const pts = server ? server.awarded : quizPoints(G.flags.quiz[q.id].a);
-      fb.className = 'qfb ok'; fb.innerHTML = `<b>✓ ${esc(t('quizRight'))} +${pts} ${esc(t('points'))}</b><br>${esc(fld('explanation'))}`;
-      $('panel-card').querySelectorAll('[data-opt]').forEach(b => b.disabled = true);
-      btn.classList.add('right');
-      const c = $('panel-card').querySelector('[data-close]'); c.hidden = false; c.focus();
-      applyWorld(G); autosave();
-    } else {
-      sfx('quiz_bad'); btn.disabled = true; btn.classList.add('wrong');
-      fb.className = 'qfb bad'; fb.innerHTML = `<b>✗ ${esc(t('quizWrong'))}</b> ${esc(fld('hint'))} <em>(${a} ${esc(t('attempt'))})</em>`;
-    }
-  });
-  return panelDone().then(() => !!G.flags.quiz[q.id]);
-}
-function bonusQuiz() {
-  let i = 0, correct = 0;
-  const total = BONUS_QUIZ.questions.length;
-  const show = () => {
-    const q = BONUS_QUIZ.questions[i];
-    openPanel(`<p class="eyebrow">${esc(L(BONUS_QUIZ.title))} · ${i + 1}/${total} · ${esc(t('fact'))}</p>${i === 0 ? `<p>${esc(t('bonusIntro'))}</p>` : ''}<p class="q">${esc(L(q.q))}</p><div class="opts">${L(q.o).map((o, k) => `<button data-opt="${k}">${esc(o)}</button>`).join('')}</div><div id="qfb" class="qfb" hidden></div><button class="primary" id="bq-next" hidden>${esc(t('next'))} →</button>`, 'quiz');
+  if (def.intro) await say(def.intro);
+  let picked = null;
+  openPanel(`${head}${evidenceHTML(def.evidence)}<p class="q">${esc(def.question)}</p><div class="opts" data-trial="${esc(def.id)}">${def.options.map((o, i) => `<button data-opt="${i}">${esc(o)}</button>`).join('')}</div><p class="note">${esc(t('oneChoice'))}</p>`, 'quiz');
+  await new Promise(resolve => {
     $('panel-card').querySelectorAll('[data-opt]').forEach(btn => btn.onclick = async () => {
-      if (btn.disabled || btn.dataset.busy) return;
-      let ok = +btn.dataset.opt === q.a;
+      if (picked !== null || btn.dataset.busy) return;
+      const idx = +btn.dataset.opt;
       if (official?.active) {
         btn.dataset.busy = 1;
-        try { ok = (await official.answer('stone_bonus_' + (i + 1), +btn.dataset.opt)).correct; } catch { delete btn.dataset.busy; netFail(); return; }
-        delete btn.dataset.busy;
+        try { await official.answer(def.id, idx); } catch { delete btn.dataset.busy; netFail(); return; }
       }
-      if (ok) correct++;
-      sfx(ok ? 'quiz_ok' : 'quiz_bad');
-      $('panel-card').querySelectorAll('[data-opt]').forEach(b => { b.disabled = true; if (+b.dataset.opt === q.a) b.classList.add('right'); });
-      if (!ok) btn.classList.add('wrong');
-      const fb = $('qfb'); fb.hidden = false; fb.className = 'qfb ' + (ok ? 'ok' : 'bad');
-      fb.innerHTML = `<b>${ok ? '✓ ' + esc(t('quizRight')) : '✗'}</b> ${esc(L(q.e))}`;
-      const nb = $('bq-next'); nb.hidden = false; nb.focus();
-      nb.onclick = () => { i++; if (i < total) show(); else done(); };
+      picked = idx;
+      $('panel-card').querySelectorAll('[data-opt]').forEach(b => { b.disabled = true; });
+      btn.classList.add('picked');
+      sfx('dialog');
+      G.local.attempts[def.id] = 1;
+      G.flags.quiz[def.id] = {a: 1, t: Date.now(), by: party.slot, ok: idx === def.correctIndex, ch: idx};
+      changed(); applyWorld(G); autosave();
+      setTimeout(() => { closePanel(); resolve(); }, 450);
     });
-  };
-  const done = () => {
-    if (!G.flags.bonus) { G.flags.bonus = {correct, t: Date.now(), by: party.slot}; changed(); }
-    const best = G.flags.bonus.correct;
-    openPanel(`<p class="eyebrow">${esc(L(BONUS_QUIZ.title))}</p><h2>${esc(t('bonusDone'))}</h2><p class="big">${correct} / ${total} ${esc(t('correct'))}</p><p>${esc(t('bonus'))}: +${best * 50} ${esc(t('points'))}</p><p class="src">${esc(t('source'))}: ${esc(BONUS_QUIZ.source)}</p><div class="row"><button id="bq-again">${esc(t('replay'))}</button><button class="primary" data-close>${esc(t('close'))}</button></div>`, 'quiz');
-    $('bq-again').onclick = () => { i = 0; correct = 0; show(); };
-    autosave();
-  };
-  show();
-  return panelDone();
+  });
+  const ok = G.flags.quiz[def.id].ok;
+  const lines = ok ? def.branch?.ok : def.branch?.no;
+  if (lines?.length) await say(lines);
+  return {ok, fresh: true};
+}
+const quiz = n => {
+  const q = HISTORICAL_QUIZZES[n];
+  return trial({...q, question: q.question});
+};
+function bonusDef(i) {
+  const q = BONUS_QUIZ.questions[i], m = BONUS_META[i];
+  return {id: m.id, level: m.level, title: L(BONUS_QUIZ.title), questTitle: lang === 'ru' ? 'СЕКРЕТНОЕ ИСПЫТАНИЕ' : 'ЖАСЫРЫН СЫНАҚ',
+    evidence: q.ev ? L(q.ev) : null, question: L(q.q), options: L(q.o), correctIndex: q.a};
+}
+// Secret trial in Jebey's cache (microliths).
+async function bonusTrial(i, branch) {
+  const r = await trial({...bonusDef(i), branch});
+  return r;
+}
+// Hidden chamber: one investigation in four steps (no verdicts), then a secret scene for 3+ correct.
+async function chamber() {
+  const steps = BONUS_META.map((m, i) => i).filter(i => BONUS_META[i].at === 'altar');
+  const pending = steps.filter(i => !G.flags.quiz[BONUS_META[i].id]);
+  if (!pending.length) {
+    openPanel(`<p class="eyebrow">${esc(L(BONUS_QUIZ.title))}</p><p>${esc(t('decided'))}</p><button class="primary" data-close>${esc(t('close'))}</button>`, 'quiz');
+    return panelDone();
+  }
+  if (BONUS_QUIZ.intro) await say(BONUS_QUIZ.intro);
+  for (const i of pending) await trial(bonusDef(i));
+  const right = steps.filter(i => G.flags.quiz[BONUS_META[i].id]?.ok).length;
+  if (right >= 3 && !G.local.seen.includes('bonusSecret')) {
+    G.local.seen.push('bonusSecret'); sfx('secret');
+    await say(DIALOGUES.bonusSecret);
+  } else if (right < 3) await say(CHAMBER_FAIL);
+  autosave();
 }
 function inventory() {
   const rows = [];
@@ -345,48 +348,93 @@ function pauseMenu() {
 function roadmap() {
   openPanel(`<p class="eyebrow">TARIKH JOLY</p><h2>${lang === 'ru' ? 'Карта эпох' : 'Дәуірлер картасы'}</h2><div class="epochs">${ALL_EPOCHS.map(e => `<article class="${e.id === 1 ? 'on' : ''}"><small>MAP ${String(e.id).padStart(2, '0')} · ${esc(e.badge)}</small><b>${esc(e.title)}</b><span>${esc(e.period)}</span>${e.id > 1 ? `<em>${esc(t('mapLocked'))}</em>` : ''}</article>`).join('')}</div><button class="primary" data-close>${esc(t('close'))}</button>`, 'wide');
 }
+// ---------------------------------------------------------------- level result (100 / pass 90)
+const fmt = s => s == null ? '—' : `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
+let lastOfficial = null; // display copy of the server result (the server stays the source of truth)
+const levelPassed = () => !!(lastOfficial ? lastOfficial.passed : (G.flags.b.finished && scoreOf(G.flags) >= PASS_SCORE));
+function scoreBlock(score, passed, extra = '') {
+  return `<div class="verdict ${passed ? 'pass' : 'fail'}"><b class="big">${score} / ${MAX_SCORE}</b>
+    <span>${esc(t('passScore'))}: ${PASS_SCORE}</span><strong>${esc(passed ? t('trialPassed') : t('trialFailed'))}</strong>
+    ${passed ? `<em>${esc(t('nextOpened'))}</em>` : ''}${extra}</div>`;
+}
 function resultsHTML() {
-  const f = G.flags, solved = MAIN_QUIZ_ORDER.filter(n => f.quiz[HISTORICAL_QUIZZES[n].id]).length;
-  const secs = Math.max(0, Math.round(((f.tEnd || Date.now()) - f.t0) / 1000));
+  const f = G.flags, secs = Math.max(0, Math.round(((f.tEnd || Date.now()) - f.t0) / 1000));
   return `<div class="results">
-    <span><small>${esc(t('score'))}</small><b>${scoreOf(f)}</b></span>
-    <span><small>${esc(t('quizzes'))}</small><b>${solved} / 5</b></span>
-    <span><small>${esc(t('bonus'))}</small><b>${f.bonus ? f.bonus.correct + ' / 5' : '—'}</b></span>
+    <span><small>${esc(t('pageFull'))}</small><b>${pageLines(f)} / 4</b></span>
     <span><small>${esc(t('secrets'))}</small><b>${secretsFound(f)} / ${SECRETS.length}</b></span>
     <span><small>${esc(t('enemies'))}</small><b>${E.tj_state(32)}</b></span>
-    <span><small>${esc(t('time'))}</small><b>${Math.floor(secs / 60)}:${String(secs % 60).padStart(2, '0')}</b></span>
+    <span><small>${esc(t('time'))}</small><b>${fmt(secs)}</b></span>
   </div>`;
 }
-function complete() {
-  try { // Local history of completed runs (one entry per journey).
+// Chronicle journal: after the level every trial shows the verdict and the historical logic.
+function journalHTML() {
+  const rows = [...MAIN_QUIZ_ORDER.map(n => HISTORICAL_QUIZZES[n]), ...BONUS_META.map((m, i) => ({...bonusDef(i), explanation: L(BONUS_QUIZ.questions[i].e), tier: 'secret'}))];
+  return `<div class="journal-list">${rows.map(q => {
+    const r = G.flags.quiz[q.id];
+    const state = !r ? '·' : r.ok ? '✓' : '✗';
+    const pts = q.points ?? BONUS_META.find(m => m.id === q.id)?.points;
+    return `<article class="${!r ? 'unplayed' : r.ok ? 'ok' : 'no'}"><b>${state} ${esc(q.title)}</b> <small>${esc(q.tier === 'secret' ? t('secretTrial') : q.tier === 'final' ? t('finalTrial') : t('mainTrial'))} · ${pts}</small>
+      ${r && !r.ok ? `<p class="why">${esc(t('rightWas'))}: ${esc(q.options[q.correctIndex])}</p>` : ''}<p>${esc(q.explanation)}</p></article>`;
+  }).join('')}</div>`;
+}
+function journal(back) {
+  openPanel(`<p class="eyebrow">${esc(t('chronicle'))}</p><h2>${esc(t('chronicle'))}</h2>${journalHTML()}${back ? `<button class="primary" id="journal-back">← ${esc(t('back'))}</button>` : `<button class="primary" data-close>${esc(t('close'))}</button>`}`, 'wide');
+  if (back) $('journal-back').onclick = back;
+}
+async function complete() {
+  try { // Local history of completed journeys.
     const hist = JSON.parse(localStorage.getItem(RESULTS_KEY) || '[]');
     if (!hist.find(h => h.t0 === G.flags.t0)) {
-      hist.push({map: 1, t0: G.flags.t0, at: new Date().toISOString(), score: scoreOf(G.flags), secrets: secretsFound(G.flags), bonus: G.flags.bonus?.correct ?? null, party: party.size});
+      hist.push({map: 1, t0: G.flags.t0, at: new Date().toISOString(), score: scoreOf(G.flags), passed: scoreOf(G.flags) >= PASS_SCORE, party: party.size});
       localStorage.setItem(RESULTS_KEY, JSON.stringify(hist.slice(-20)));
     }
   } catch {}
   save(true);
   music('camp');
-  return finishOfficial().then(officialHTML => {
-  openPanel(`<p class="eyebrow">${esc(t('complete'))}</p><h2>${esc(t('completeSub'))}</h2>${resultsHTML()}${officialHTML}<div class="row"><button class="primary" id="go-camp">${esc(t('toCamp'))}</button><button data-close>${esc(t('stay'))}</button></div>`, 'complete');
-  $('go-camp').onclick = () => { closePanel(); quest.interact('homegate'); };
-  return panelDone();
-  });
-}
-async function finishOfficial() {
-  if (!official?.active) return '';
-  const ru = lang === 'ru';
-  try {
-    const r = await official.finish(), secs = r.duration_seconds;
-    return `<div class="official"><b>${ru ? 'Официальный результат' : 'Ресми нәтиже'}:</b> ${r.score} / ${r.max_score} (${Number(r.percentage).toFixed(0)}%) · ${r.attempt_number}-${ru ? 'я попытка' : 'попытка'} · ${Math.floor(secs / 60)}:${String(secs % 60).padStart(2, '0')} · ${r.passed ? (ru ? 'пройдено' : 'өтті') : (ru ? 'не пройдено' : 'өтпеді')}<br><small>${ru ? 'Сохранено на сервере. Секреты и бой в официальный счёт не входят.' : 'Серверде сақталды. Құпиялар мен ұрыс ресми есепке кірмейді.'}</small></div>`;
-  } catch (e) {
-    return `<div class="official warn">${ru ? 'Официальный результат не сохранён' : 'Ресми нәтиже сақталмады'}: ${esc(e.message)}</div>`;
+  let score = scoreOf(G.flags), passed = score >= PASS_SCORE, extra = '';
+  if (official?.active) {
+    try {
+      const r = await official.finish();
+      lastOfficial = r; score = r.score; passed = r.passed;
+      extra = `<small class="official">${esc(t('officialSaved'))} · ${r.attempt_number}-${esc(t('attempt'))} · ${esc(t('time'))} ${fmt(r.duration_seconds)} · ${esc(t('total'))} ${fmt(r.competition_seconds)}</small>`;
+    } catch (e) { extra = `<small class="official warn">${esc(t('officialFail'))}: ${esc(e.message)}</small>`; }
   }
+  const show = () => {
+    openPanel(`<p class="eyebrow">${esc(t('complete'))}</p><h2>${esc(t('completeSub'))}</h2>${scoreBlock(score, passed, extra)}${resultsHTML()}
+      <div class="row">${passed ? `<button class="primary" id="go-camp">${esc(t('toCamp'))}</button>` : `<button class="primary" id="retry-epoch">${esc(t('retryEpoch'))}</button>`}
+      <button id="open-journal">${esc(t('chronicle'))}</button>${passed ? `<button data-close>${esc(t('stay'))}</button>` : ''}</div>`, 'complete');
+    $('go-camp')?.addEventListener('click', () => { closePanel(); quest.interact('homegate'); });
+    $('retry-epoch')?.addEventListener('click', () => { closePanel(); retryEpoch(); });
+    $('open-journal').onclick = () => journal(show);
+  };
+  show();
+  return panelDone();
+}
+// Failed level: the next epoch stays locked; the epoch restarts from zero (new attempt, new score).
+function retryEpoch() {
+  lastOfficial = null;
+  try { localStorage.removeItem(SAVE_KEY); } catch {}
+  newGame();
+  startOfficial(true);
 }
 function results() {
-  openPanel(`<p class="eyebrow">${esc(t('results'))}</p><h2>${esc(t('completeSub'))}</h2>${resultsHTML()}<div class="row"><button id="back-stone">${esc(t('returnStone'))}</button><button class="primary" data-close>${esc(t('close'))}</button></div>`, 'complete');
+  const score = lastOfficial ? lastOfficial.score : scoreOf(G.flags), passed = levelPassed();
+  openPanel(`<p class="eyebrow">${esc(t('results'))}</p><h2>${esc(t('completeSub'))}</h2>${scoreBlock(score, passed)}${resultsHTML()}<div class="row"><button id="back-stone">${esc(t('returnStone'))}</button><button id="open-journal">${esc(t('chronicle'))}</button>${passed ? '' : `<button id="retry-epoch">${esc(t('retryEpoch'))}</button>`}<button class="primary" data-close>${esc(t('close'))}</button></div>`, 'complete');
   $('back-stone').onclick = () => { closePanel(); travel(30 * TS, 43.2 * TS); };
+  $('open-journal').onclick = () => journal(() => { closePanel(); results(); });
+  $('retry-epoch')?.addEventListener('click', () => { closePanel(); retryEpoch(); });
   return panelDone();
+}
+// Live timer: the official run uses the server clock (started_at, server_now); the browser only draws it.
+let clockSkew = 0;
+function timerText() {
+  const now = Date.now() + clockSkew;
+  if (official?.run?.started_at) {
+    const att = (now - Date.parse(official.run.started_at)) / 1000;
+    const tot = official.run.competition_started_at ? (now - Date.parse(official.run.competition_started_at)) / 1000 : null;
+    return `⏱ ${fmt(Math.max(0, att))}${tot != null ? ` · ${t('total')} ${fmt(Math.max(0, tot))}` : ''}`;
+  }
+  return `⏱ ${fmt(Math.max(0, ((G.flags.tEnd || Date.now()) - G.flags.t0) / 1000))}`;
 }
 function gameOver() {
   openPanel(`<h2>${esc(t('gameOver'))}</h2><p>${esc(t('gameOverText'))}</p><div class="col"><button class="primary" id="go-load">${esc(t('continueSave'))}</button><button id="go-new">${esc(t('restart'))}</button></div>`);
@@ -542,7 +590,7 @@ function updateHud(force) {
   const hp = E.tj_state(8), lives = E.tj_state(9), weapon = E.tj_state(13), arrows = E.tj_state(14), zone = E.tj_state(2);
   const stage = questStage(G.flags), q = QUESTS[stage][lang];
   const allies = party.size > 1 ? [...party.peers.values()].map(p => `${p.slot}:${p.hp}:${p.down}`).join(',') : '';
-  const key = [hp, lives, weapon, arrows, zone, stage, lang, scoreOf(G.flags), party.size, E.tj_item_count(2), E.tj_item_count(3), secretsFound(G.flags), allies, isAudioMuted(), !!official?.active].join('|');
+  const key = [hp, lives, weapon, arrows, zone, stage, lang, Object.keys(G.flags.quiz).length, party.size, E.tj_item_count(2), E.tj_item_count(3), secretsFound(G.flags), allies, isAudioMuted(), !!official?.active].join('|');
   if (key === hudKey && !force) return;
   hudKey = key;
   $('hp-fill').style.width = Math.max(0, hp) + '%';
@@ -558,9 +606,9 @@ function updateHud(force) {
   $('slots').querySelectorAll('[data-weapon]').forEach(b => b.onclick = () => equip(+b.dataset.weapon));
   $('zone-name').textContent = ZONE_NAMES[lang][zone] || '';
   $('obj-title').textContent = q[0]; $('obj-detail').textContent = q[1];
-  $('s-score').textContent = `${t('score')} ${scoreOf(G.flags)}${official?.active ? (lang === 'ru' ? ' · офиц.' : ' · ресми') : ''}`;
+  $('s-score').textContent = timerText() + (official?.active ? (lang === 'ru' ? ' · офиц.' : ' · ресми') : '');
   $('s-secrets').textContent = `${t('secrets')} ${secretsFound(G.flags)}/${SECRETS.length}`;
-  $('s-quiz').textContent = `${lang === 'ru' ? 'Квизы' : 'Квиз'} ${MAIN_QUIZ_ORDER.filter(n => G.flags.quiz[HISTORICAL_QUIZZES[n].id]).length}/5`;
+  $('s-quiz').textContent = `${t('trials')} ${MAIN_QUIZ_ORDER.filter(n => G.flags.quiz[HISTORICAL_QUIZZES[n].id]).length}/5`;
   $('b-inv').innerHTML = `<kbd>I</kbd> ${esc(t('inventory'))}`; $('b-save').textContent = '💾 ' + t('save'); $('b-load').textContent = '📂 ' + t('load');
   $('b-help').textContent = '?'; $('b-help').title = t('helpTitle'); $('b-road').textContent = '🗺 ' + (lang === 'ru' ? 'Эпохи' : 'Дәуірлер');
   $('lang-btn').textContent = t('lang'); $('audio-btn').textContent = isAudioMuted() ? '🔇' : '🔊'; $('audio-btn').title = t('mute');
@@ -698,7 +746,7 @@ function loop(now) {
   ctx.putImageData(frame, 0, 0);
   updateHud(); updatePrompt();
   if ((now / 100 | 0) % 2 === 0) drawMinimap(now);
-  if ((now / 250 | 0) !== ambTick) { ambTick = now / 250 | 0; ambienceTick(); }
+  if ((now / 250 | 0) !== ambTick) { ambTick = now / 250 | 0; ambienceTick(); $('s-score').textContent = timerText() + (official?.active ? (lang === 'ru' ? ' · офиц.' : ' · ресми') : ''); }
   netTick(now);
   if (now - lastSave > 60000 && !cine && !panelOpen) autosave();
 }
@@ -779,7 +827,7 @@ async function boot() {
     E.tj_init();
     frame = new ImageData(new Uint8ClampedArray(E.memory.buffer, E.tj_pixels(), W * H * 4), W, H);
     Object.assign(G, {
-      say, quiz, bonusQuiz, results, complete, travel, toast, changed, heroPos, save: s => save(s),
+      say, quiz, bonusTrial, chamber, journal, levelPassed, results, complete, travel, toast, changed, heroPos, save: s => save(s),
       cine: (id, fn) => playCutscene(id, fn), sfx, spawnFx: (p, type, n) => E.tj_spawn_fx(type, p[0], p[1], n),
     });
     quest = createQuest(G);
@@ -803,7 +851,7 @@ async function boot() {
     musicForZone(true);
     // Debug/QA handle (used by scripts/check-rpg-browser.mjs).
     const step = n => { for (let i = 0; i < n; i++) { E.tj_tick(); handleEvents(); } E.tj_render(); ctx.putImageData(frame, 0, 0); updateHud(); updatePrompt(); drawMinimap(performance.now()); };
-    window.__tj = {E, G, party, quest, save, load, newGame, skipCutscene, closePanel, advanceDialog, travel, step, inventory, coopPanel, startParty, leaveParty,
+    window.__tj = {E, G, party, quest, retryEpoch, results, get official() { return official; }, save, load, newGame, skipCutscene, closePanel, advanceDialog, travel, step, inventory, coopPanel, startParty, leaveParty,
       get panelOpen() { return panelOpen; }, get cine() { return cine?.id || null; }, get dialog() { return !$('dlg').hidden; }};
   } catch (err) {
     console.error(err);

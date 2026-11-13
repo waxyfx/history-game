@@ -66,69 +66,90 @@ test('Members: admin role is server-checked and reflected in the profile', async
   await as(admin); await assert.rejects(rpc('admin_set_user_role', [st, 'owner']), /Рөл/);
 });
 
-test('Results: official run is scored on the server and cannot be forged from the client', async t => {
+test('Results: single-choice trials are scored secretly on the server and cannot be forged', async t => {
   const {db, as, rpc, sys, googleUser} = await setup(); t.after(() => db.close());
   const st = await googleUser('Bek', 'g-bek'), other = await googleUser('Other', 'g-other');
   await as(st);
   const run = await rpc('level_start_run', [1, 'solo', null]);
-  assert.equal(run.status, 'active'); assert.equal(run.score, 0); assert.equal(run.max_score, 750);
-  assert.equal((await rpc('level_start_run', [1, 'solo', null])).id, run.id, 'active run is resumed, not duplicated');
+  assert.equal(run.status, 'active'); assert.equal(run.max_score, 100); assert.equal(run.pass_score, 90);
+  assert(run.server_now && run.competition_started_at, 'server clock for the live timer');
+  assert.equal(run.score, undefined, 'no score during the run');
+  assert.equal((await rpc('level_start_run', [1, 'solo', null])).id, run.id, 'active run is resumed');
   const ans = (quiz, choice, req = randomUUID()) => rpc('level_submit_answer', [run.id, quiz, choice, req]);
-  // Main quiz: wrong then right = 60; repeat gives nothing; idempotent replay; altered payload rejected.
-  assert.equal((await ans('stone_main', 0)).correct, false);
-  const req = randomUUID(), ok = await ans('stone_main', 1, req);
-  assert.deepEqual([ok.correct, ok.awarded, ok.attempts], [true, 60, 2]);
-  assert.equal((await ans('stone_main', 1, req)).duplicate, true);
-  await assert.rejects(ans('stone_main', 2, req), /басқа деректермен/);
-  assert.equal((await ans('stone_main', 1)).awarded, 0);
-  for (const [q, c] of [['stone_workshop', 1], ['stone_hunting', 2], ['stone_cave', 1]]) assert.equal((await ans(q, c)).awarded, 100);
-  // Bonus: only the first answer counts.
-  assert.equal((await ans('stone_bonus_1', 3)).awarded, 0);
-  assert.equal((await ans('stone_bonus_1', 0)).awarded, 0, 'bonus is closed after the first answer');
-  assert.equal((await ans('stone_bonus_2', 0)).awarded, 50);
+  // Wrong choice on a mandatory trial: recorded, no verdict revealed, cannot be changed afterwards.
+  const first = await ans('stone_main', 0);
+  assert.equal(first.recorded, true); assert.equal(first.correct, undefined); assert.equal(first.awarded, undefined);
+  assert.deepEqual(first.run.answered, ['stone_main']);
+  assert.equal((await ans('stone_main', 1)).recorded, false, 'one choice per trial');
+  const req = randomUUID(); await ans('stone_hunting', 2, req);
+  assert.equal((await ans('stone_hunting', 2, req)).duplicate, true);
+  await assert.rejects(ans('stone_hunting', 1, req), /басқа деректермен/);
+  await ans('stone_cave', 1);
   await assert.rejects(ans('unknown_quiz', 0), /табылмады/);
-  await assert.rejects(ans('stone_cave', 42), /Жауап/);
-  // Finishing requires the mandatory quiz and a plausible duration.
-  await assert.rejects(rpc('level_finish_run', [run.id, randomUUID()]), /міндетті/);
-  await ans('stone_secret', 0);
+  await assert.rejects(rpc('level_finish_run', [run.id, randomUUID()]), /соңғы сынағы/);
+  await ans('stone_secret', 2); // a wrong final choice is a story branch, not a softlock
   await assert.rejects(rpc('level_finish_run', [run.id, randomUUID()]), /жылдам/);
-  // Another user can neither see nor touch this run.
   await as(other);
   await assert.rejects(rpc('level_submit_answer', [run.id, 'stone_secret', 0, randomUUID()]), /табылмады/);
-  await assert.rejects(rpc('level_finish_run', [run.id, randomUUID()]), /табылмады/);
   assert.equal((await db.query('select * from public.level_runs')).rows.length, 0, 'RLS hides other runs');
   await backdate(sys, run.id, 600);
   await as(st);
-  const freq = randomUUID(), result = await rpc('level_finish_run', [run.id, freq]);
-  assert.equal(result.score, 60 + 300 + 50 + 100); assert.equal(result.max_score, 750);
-  assert.equal(Number(result.percentage), 68); assert.equal(result.attempt_number, 1); assert.equal(result.passed, true);
-  assert.equal(result.mode, 'solo'); assert(result.duration_seconds >= 600);
-  assert.equal((await rpc('level_finish_run', [run.id, freq])).duplicate, true);
-  await assert.rejects(rpc('level_finish_run', [run.id, randomUUID()]), /аяқталған/);
-  await assert.rejects(ans('stone_cave', 1), /аяқталған/);
-  // Direct writes to results are impossible for students.
-  await assert.rejects(db.query(`insert into public.level_results(run_id,user_id,level_id,score,max_score,percentage,started_at,finished_at,duration_seconds,attempt_number,passed,mode) values($1,$2,1,750,750,100,now(),now(),1,9,true,'solo')`, [run.id, st]), /permission denied/);
-  await assert.rejects(db.query(`update public.level_results set score=750`), /permission denied/);
-  await assert.rejects(db.query(`delete from public.level_results`), /permission denied/);
+  const result = await rpc('level_finish_run', [run.id, randomUUID()]);
+  assert.equal(result.score, 40); assert.equal(result.max_score, 100); assert.equal(result.passed, false);
+  assert.equal(result.next_level_unlocked, false); assert.equal(result.answers.stone_main.correct, false, 'verdicts only after the level');
+  await assert.rejects(db.query(`insert into public.level_results(run_id,user_id,level_id,score,max_score,percentage,started_at,finished_at,duration_seconds,attempt_number,passed,mode) values($1,$2,1,100,100,100,now(),now(),1,9,true,'solo')`, [run.id, st]), /permission denied/);
+  await assert.rejects(db.query(`update public.level_results set score=100, passed=true`), /permission denied/);
   await assert.rejects(db.query(`select * from private.official_quiz_keys`), /permission denied/);
-  // Second attempt: separate record, attempt_number 2, failing score kept as not passed.
-  const run2 = await rpc('level_start_run', [1, 'solo', null]);
-  assert.notEqual(run2.id, run.id);
-  await rpc('level_submit_answer', [run2.id, 'stone_secret', 1, randomUUID()]);
-  await rpc('level_submit_answer', [run2.id, 'stone_secret', 2, randomUUID()]);
-  await rpc('level_submit_answer', [run2.id, 'stone_secret', 0, randomUUID()]);
-  await backdate(sys, run2.id, 120);
-  const r2 = await rpc('level_finish_run', [run2.id, randomUUID()]);
-  assert.deepEqual([r2.score, r2.attempt_number, r2.passed], [30, 2, false]);
-  const prof = await rpc('get_my_profile');
-  assert.deepEqual([prof.levels[0].attempts, prof.levels[0].best_score, prof.levels[0].passed], [2, 510, true]);
-  assert.equal(prof.recent.length, 2); assert.equal(prof.recent[0].attempt_number, 2);
-  // Teachers/admins read results via RPC; other students do not see them.
-  await as(other); assert.equal((await db.query('select * from public.level_results')).rows.length, 0);
+  await assert.rejects(db.query(`select * from private.level_run_answers`), /permission denied/);
   const adm = await googleUser('Teacher', 'g-t'); await sys(`insert into private.user_roles values($1,'teacher')`, [adm]);
   await as(adm);
-  const list = await rpc('admin_get_level_results', [1, 50, 0]);
-  assert.equal(list.length, 2); assert.equal(list[0].name, 'Bek');
+  assert.equal((await rpc('admin_get_level_results', [1, 50, 0]))[0].name, 'Bek');
+});
+
+test('Competition: 89 fail, 90 pass, 100 pass, retries, next-level lock and server time', async t => {
+  const {db, as, rpc, sys, googleUser} = await setup(); t.after(() => db.close());
+  // Configurable weights (operator-side): final 50 + main 39 = 89, + cave 1 = 90, + hunting 10 = 100.
+  await sys(`update private.official_quiz_keys set points = 0 where level_id = 1`);
+  for (const [q, p] of [['stone_secret', 50], ['stone_main', 39], ['stone_cave', 1], ['stone_hunting', 10]])
+    await sys(`update private.official_quiz_keys set points = $2 where level_id = 1 and quiz_id = $1`, [q, p]);
+  assert.equal((await sys(`select pass_score, max_score from private.official_level_rules where level_id = 1`)).rows[0].pass_score, 90);
+  const st = await googleUser('Aru', 'g-aru');
+  await as(st);
+  await assert.rejects(rpc('level_start_run', [2, 'solo', null]), /құлыптаулы/, 'level 2 is locked before level 1 is passed');
+  const play = async (answers, backSeconds) => {
+    const run = await rpc('level_start_run', [1, 'solo', null]);
+    for (const [q, c] of answers) await rpc('level_submit_answer', [run.id, q, c, randomUUID()]);
+    await backdate(sys, run.id, backSeconds); await as(st);
+    return [run, await rpc('level_finish_run', [run.id, randomUUID()])];
+  };
+  // Attempt 1: 89 -> finished but NOT passed.
+  const [run1, r1] = await play([['stone_secret', 0], ['stone_main', 1], ['stone_cave', 0]], 300);
+  assert.deepEqual([r1.score, r1.passed, r1.attempt_number, r1.next_level_unlocked], [89, false, 1, false]);
+  await assert.rejects(rpc('level_start_run', [2, 'solo', null]), /құлыптаулы/);
+  // Attempt 2 starts from zero (previous answers are not carried over): 90 -> PASS, level 2 unlocks.
+  const [run2, r2] = await play([['stone_secret', 0], ['stone_main', 1], ['stone_cave', 1]], 200);
+  assert.notEqual(run2.id, run1.id); assert.deepEqual(run2.answered, [], 'fresh attempt');
+  assert.deepEqual([r2.score, r2.passed, r2.attempt_number, r2.next_level_unlocked, r2.next_level], [90, true, 2, true, 2]);
+  // Server time: attempt duration from this run only; competition time keeps counting across attempts.
+  assert(r2.duration_seconds >= 200 && r2.duration_seconds < 260, 'attempt duration from server timestamps');
+  assert.equal(r2.competition_id, r1.competition_id, 'retries keep the same competition timer');
+  assert(r2.competition_seconds >= r1.competition_seconds, 'competition timer is not reset');
+  await sys(`update public.competitions set started_at = started_at - interval '1 hour' where id = $1`, [r2.competition_id]);
+  await as(st);
+  const lvl2 = await rpc('level_start_run', [2, 'solo', null]);
+  assert.equal(lvl2.level_id, 2);
+  // Another attempt at level 1 after passing: 100 is a pass and gets attempt 3.
+  await rpc('level_abandon_run', [lvl2.id]);
+  const [, r3] = await play([['stone_secret', 0], ['stone_main', 1], ['stone_cave', 1], ['stone_hunting', 2]], 120);
+  assert.deepEqual([r3.score, r3.passed, r3.attempt_number], [100, true, 3]);
+  assert(r3.competition_seconds >= 3600, 'competition duration measured from the first official start');
+  const prof = await rpc('get_my_profile');
+  assert.deepEqual(prof.unlocked_levels, [1, 2]);
+  assert.deepEqual([prof.levels[0].attempts, prof.levels[0].best_score, prof.levels[0].passed], [3, 100, true]);
+  assert.equal(prof.recent.length, 3, 'failed attempts stay in the statistics');
+  // A forged client clock cannot change anything: durations come only from server timestamps.
+  const rows = (await sys(`select duration_seconds, extract(epoch from finished_at - started_at)::int as d from public.level_results`)).rows;
+  for (const r of rows) assert(Math.abs(r.duration_seconds - r.d) <= 1);
 });
 
 test('Results: team mode requires membership of a started session; abandon frees the slot', async t => {
@@ -143,7 +164,8 @@ test('Results: team mode requires membership of a started session; abandon frees
   await as(s1); const run = await rpc('level_start_run', [1, 'team', room.id]); assert.equal(run.mode, 'team');
   await assert.rejects(rpc('level_start_run', [1, 'team', null]), /сессия/);
   await assert.rejects(rpc('level_start_run', [1, 'solo', room.id]), /сессия/);
-  await assert.rejects(rpc('level_start_run', [7, 'solo', null]), /табылмады/);
+  await assert.rejects(rpc('level_start_run', [7, 'solo', null]), /құлыптаулы/);
+  await assert.rejects(rpc('level_start_run', [11, 'solo', null]), /табылмады/);
   await rpc('level_abandon_run', [run.id]);
   const fresh = await rpc('level_start_run', [1, 'solo', null]); assert.notEqual(fresh.id, run.id);
 });

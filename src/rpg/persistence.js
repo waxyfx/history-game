@@ -5,7 +5,7 @@ import { HISTORICAL_QUIZZES } from './story.js';
 // buffer has 96 words, so never size a view from unchecked input. Scores are not stored:
 // they are derived from validated quiz/secret flags, which prevents forged or duplicated totals.
 export const SAVE_WORDS = 54;
-const quizIds = new Set(Object.values(HISTORICAL_QUIZZES).map(q => q.id));
+const quizIds = new Set([...Object.values(HISTORICAL_QUIZZES).map(q => q.id), 'stone_bonus_1', 'stone_bonus_2', 'stone_bonus_3', 'stone_bonus_4', 'stone_bonus_5']);
 const SETS = {talked: ['crafter', 'cook', 'scraper', 'child'], tracks: [1, 2, 3, 4], petro: [1, 2, 3, 4]};
 const GRANTS = new Set(['bow', 'spear', 'torch', 'page']);
 const invalid = () => { throw new Error('Invalid RPG save'); };
@@ -22,11 +22,12 @@ export function validateFlags(f) {
   if (!f.quiz || typeof f.quiz !== 'object' || Array.isArray(f.quiz)) invalid();
   for (const [id, r] of Object.entries(f.quiz)) {
     if (!quizIds.has(id) || !r || !Number.isSafeInteger(r.a) || r.a < 1 || r.a > 99 || !isTime(r.t)) invalid();
+    if ((r.ok != null && typeof r.ok !== 'boolean') || (r.ch != null && (!Number.isSafeInteger(r.ch) || r.ch < 0 || r.ch > 9))) invalid();
   }
   if (f.bonus != null && (!Number.isSafeInteger(f.bonus.correct) || f.bonus.correct < 0 || f.bonus.correct > 5 || !isTime(f.bonus.t))) invalid();
   if (!isTime(f.t0 ?? 0) || !isTime(f.tEnd ?? 0)) invalid();
   return {b: {...f.b}, talked: [...(f.talked || [])], tracks: [...(f.tracks || [])], petro: [...(f.petro || [])],
-    quiz: Object.fromEntries(Object.entries(f.quiz).map(([k, r]) => [k, {a: r.a, t: r.t, by: Number.isSafeInteger(r.by) ? r.by : 0}])),
+    quiz: Object.fromEntries(Object.entries(f.quiz).map(([k, r]) => [k, {a: r.a, t: r.t, by: Number.isSafeInteger(r.by) ? r.by : 0, ok: r.ok === true, ch: Number.isSafeInteger(r.ch) ? r.ch : null}])),
     bonus: f.bonus ? {correct: f.bonus.correct, t: f.bonus.t, by: Number.isSafeInteger(f.bonus.by) ? f.bonus.by : 0} : null, t0: f.t0 || 0, tEnd: f.tEnd || 0};
 }
 export function validateLocal(l) {
