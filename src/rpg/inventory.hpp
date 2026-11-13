@@ -2,11 +2,13 @@
 namespace tj {
 // Item ids 1..ItemCount. Names/descriptions shown in the UI are localised in JS (src/rpg/i18n.js);
 // the Kazakh strings here are kept for the stable tj_item_text ABI.
-constexpr int ItemCount=19;
+constexpr int ItemCount=25;
+constexpr int PrevItemCount=19;   // saves written before the shared consumables
 constexpr int LegacyItemCount=14; // MAP01 saves written before MAP02
 enum ItemType { WeaponItem,AmmoItem,ConsumableItem,HistoricalItem,KeyItem,ArtifactItem };
 enum ItemId { ISword=1,ISpear,IBow,IArrows,IKit,ITool,ITorch,IPage,IHerb,IQuiver,IOchre,IFlute,ICrystal,INecklace,
-              ITablet,IEmber,IMould,ISeal,IBracelet };
+              ITablet,IEmber,IMould,ISeal,IBracelet,
+              IHerbBig,IStrength,IGuard,ISwift,ICoal,ICurd };
 struct ItemDef {const char* id;const char* name;const char* description;int type,limit;};
 constexpr ItemDef items[]={
  {"sword","Қылыш","Шежіре институтының жеңіл жүзі. Кең әрі жылдам соққы.",WeaponItem,1},
@@ -17,7 +19,7 @@ constexpr ItemDef items[]={
  {"stone-tool","Тас құрал","Шақпақтың шапқы құралы.",HistoricalItem,1},
  {"torch","Алау","Үңгірдің қараңғысын жарықтандырады.",KeyItem,1},
  {"chronicle-page","Шежіре парағы","Шежіре парағының үзіндісі.",ArtifactItem,3},
- {"herbs","Емдік шөп","Жусан мен түймедақ: +20 денсаулық.",ConsumableItem,9},
+ {"herbs","Кіші емдік шөп","Жусан мен түймедақ: +25 денсаулық.",ConsumableItem,9},
  {"quiver","Жебейдің қорамсағы","Жоғалған аңшының қорамсағы.",KeyItem,1},
  {"ochre","Жосa","Жартас суретіне қолданылған қызыл бояу.",ArtifactItem,1},
  {"flute","Сүйек сыбызғы","Үңгірде жасырылған сүйек сыбызғы.",ArtifactItem,1},
@@ -27,7 +29,14 @@ constexpr ItemDef items[]={
  {"sacred-ember","Қасиетті шоқ","Сақшыдан қайтарылған оттың шоғы.",KeyItem,1},
  {"stone-mould","Тас қалып","Жасырын шеберханадан табылған құю қалыбы.",ArtifactItem,1},
  {"institute-seal","Институт таңбасы","Тас бағанадан көшірілген бөтен таңба.",ArtifactItem,1},
- {"bronze-bracelet","Қола білезік","Жоғалған тұрғынның сынған білезігі.",HistoricalItem,1}
+ {"bronze-bracelet","Қола білезік","Жоғалған тұрғынның сынған білезігі.",HistoricalItem,1},
+ // Shared consumables (effects.hpp)
+ {"herbs-large","Үлкен емдік шөп","+50 денсаулық.",ConsumableItem,5},
+ {"strength-infusion","Күш тұнбасы","15 с: соққы +30%.",ConsumableItem,3},
+ {"guard-infusion","Қорған тұнбасы","15 с: алатын зақым −25%.",ConsumableItem,3},
+ {"swift-infusion","Жүйрік тұнбасы","12 с: жылдамдық +20%.",ConsumableItem,3},
+ {"forge-coal","Ұста шоғы","20 с: қаруға от, соққы +25%.",ConsumableItem,3},
+ {"dried-curd","Кептірілген ірімшік","10 с бойы секундына +3 денсаулық.",ConsumableItem,5}
 };
 struct Inventory {int counts[ItemCount]={1,0,0,0,1,0,0,0,0,0,0,0,0,0};};
 }

@@ -8,7 +8,7 @@ constexpr WeaponSpec weapons[]={{26,6,20,26,16},{30,10,30,44,7},{24,14,26,200,0}
 struct Vec { float x,y; };
 constexpr Vec directions[]={{0,-1},{.70710678f,-.70710678f},{1,0},{.70710678f,.70710678f},
     {0,1},{-.70710678f,.70710678f},{-1,0},{-.70710678f,-.70710678f}};
-enum EnemyType { Wolf, Stranger, Archer, Bear, Shade, Wraith, Keeper, EnemyTypeCount };
+enum EnemyType { Wolf, Stranger, Archer, Bear, Shade, Wraith, Keeper, Rider, EnemyTypeCount };
 enum EnemyState { Idle, Patrol, Chase, Attacking, Hurt, Death, Circle, Retreat, Roar, Charge, Stunned, Telegraph };
 struct EnemySpec { int health,damage,windup,recovery; float speed,detection,range; };
 constexpr EnemySpec enemySpecs[EnemyTypeCount]={
@@ -18,7 +18,8 @@ constexpr EnemySpec enemySpecs[EnemyTypeCount]={
     {280,24,28,70,.62f,128,28},  // cave bear: roar, charge, swipe
     {64,14,16,50,1.05f,124,22},  // shade-touched warrior: lunging cut
     {42,12,30,72,.72f,150,118},  // ash wraith: floats, throws fire bolts
-    {640,22,36,50,.58f,170,34}}; // boss: distorted keeper of the sacred fire
+    {640,22,36,50,.58f,170,34},  // boss: distorted keeper of the sacred fire
+    {720,20,30,50,.95f,190,36}}; // boss: the golden-armoured rider (MAP03)
 struct Attack {
     int age=0,weapon=0,facing=4,cooldown=0;
     bool active=false,connected=false;

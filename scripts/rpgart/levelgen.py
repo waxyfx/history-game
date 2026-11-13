@@ -48,6 +48,15 @@ KINDS = {
     'trapdoor': ('O_TRAPDOOR_0', 2, 0, (0, 0), DECAL), 'stairs': ('O_STAIRS', 1, 0, (0, 0), DECAL), 'ashpile': ('O_ASHPILE', 1, 0, (0, 0), DECAL),
     'symbol': ('O_SYMBOL', 1, 0, (0, 0), DECAL), 'altar': ('O_ALTAR', 1, 0, (12, 5), 0), 'deadtree': ('O_DEADTREE_0', 2, 0, (3, 2), TALL),
     'brazier': ('O_BRAZIER', 1, 0, (5, 3), LIGHT | FLAME | FLICKER, (250, 140, 60, 60, 12)), 'sheaf': ('O_SHEAF', 1, 1, (3, 2), 0),
+    # ---- MAP03 (Saka)
+    'yurt': ('O_YURT_0', 2, 0, (24, 6), TALLBOX), 'wagon': ('O_WAGON', 1, 0, (23, 4), 0), 'hitch': ('O_HITCH', 1, 0, (11, 3), 0),
+    'cauldron': ('O_CAULDRON_0', 4, 2, (8, 4), LIGHT | FLICKER, (255, 150, 60, 56, 6)), 'sakaltar': ('O_SAKALTAR', 1, 0, (14, 4), 0),
+    'standard': ('O_STANDARD', 1, 0, (2, 2), TALL), 'deerstone': ('O_DEERSTONE', 1, 0, (5, 3), TALL), 'target': ('O_TARGET', 1, 0, (5, 3), 0),
+    'weaponrack': ('O_WEAPONRACK', 1, 0, (13, 3), 0), 'goldtable': ('O_GOLDTABLE', 1, 0, (15, 3), 0),
+    'royalkurgan': ('O_ROYALKURGAN', 1, 0, (50, 8), 0), 'ringstone': ('O_RINGSTONE_0', 2, 0, (4, 2), 0), 'coffin': ('O_COFFIN', 1, 0, (18, 5), 0),
+    'goldarmor': ('O_GOLDARMOR_0', 2, 3, (6, 3), LIGHT, (255, 220, 120, 40, 20)), 'mirror': ('O_MIRROR_0', 4, 2, (6, 3), LIGHT, (170, 80, 220, 64, 14)),
+    'horsebones': ('O_HORSEBONES', 1, 0, (0, 0), DECAL), 'tunnel': ('O_TUNNEL', 1, 0, (0, 0), DECAL), 'plaques': ('O_PLAQUES', 1, 0, (0, 0), DECAL),
+    'shard': ('O_SHARD', 1, 0, (0, 0), DECAL), 'hoofs': ('O_HOOFS', 1, 0, (0, 0), DECAL), 'snowpine': ('O_SNOWPINE_0', 2, 0, (4, 3), TALL),
 }
 
 class Level:
@@ -147,8 +156,8 @@ class Level:
         lines.append(f'constexpr int EnemyCount={len(L.enemies)};')
         lines.append('constexpr EnemyDef enemyDefs[EnemyCount]={' + ','.join('{%d,%d,%d,%d}' % (t, g, x * TS, y * TS) for t, x, y, g in L.enemies) + '};')
         # Sprite sheet per enemy type: wolf, stranger, archer, bear, shade, wraith, keeper
-        es = [L.enemy_sheets.get(i, 'WOLF') for i in range(7)]
-        lines.append('constexpr unsigned char enemySheet[7]={' + ','.join('art::SH_' + s for s in es) + '};')
+        es = [L.enemy_sheets.get(i, 'WOLF') for i in range(8)]
+        lines.append('constexpr unsigned char enemySheet[8]={' + ','.join('art::SH_' + s for s in es) + '};')
         lines.append('struct PickupDef { short item,qty,x,y; };')
         lines.append(f'constexpr int PickupDefCount={len(L.pickups)};')
         lines.append('constexpr PickupDef pickupDefs[PickupDefCount>0?PickupDefCount:1]={' + (','.join('{%d,%d,%d,%d}' % (i, q, x * TS, y * TS) for i, q, x, y in L.pickups) or '{0,0,0,0}') + '};')

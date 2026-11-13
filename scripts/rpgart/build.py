@@ -9,7 +9,7 @@ Outputs:
 import math, os, sys, struct, zlib
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from rpgart.core import *
-from rpgart import world as W, chars as C, chars2 as C2, bronze as B
+from rpgart import world as W, chars as C, chars2 as C2, bronze as B, consumables as CONS, saka as SAKA
 
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -125,7 +125,7 @@ def icon(kind):
     return outline(img), (8, 15)
 
 # ------------------------------------------------------------ registry
-FRINGES = ('grass', 'steppe', 'dirt', 'sand', 'camp', 'shallow', 'ash', 'clay', 'pave')
+FRINGES = ('grass', 'steppe', 'dirt', 'sand', 'camp', 'shallow', 'ash', 'clay', 'pave', 'meadow')
 WATER_FRINGES = ('grass', 'steppe', 'dirt', 'sand')
 def register():
     for k in W.TERRAINS:
@@ -143,6 +143,10 @@ def register():
         add(f'FACE_cave_{v}', (W.rock_face(v, cave=True), (0, 0)))
     for v in range(3):
         add(f'FACE_deep_{v}', (W.rock_face(v, deep=True), (0, 0)))
+    for v in range(3):   # three variants each, interleaved (stride 2)
+        add(f'FACE_log_{v}', (W.log_face(v), (0, 0)))
+        add(f'FACE_snow_{v}', (W.snow_face(v), (0, 0)))
+    SAKA.register(add)   # MAP03 props
     # Props
     for v in range(2): add(f'O_poplar_{v}', W.tree_poplar(v))
     for v in range(2): add(f'O_birch_{v}', W.tree_birch(v))
@@ -218,6 +222,7 @@ def register():
     add('O_brazier', B.brazier()); add('O_sheaf', B.sheaf())
     for f in range(2): add(f'X_firebolt_{f}', B.firebolt(f))
     for k in ('tablet', 'ember', 'mould', 'seal', 'bracelet'): add(f'I_{k}', B.icon(k))
+    for k in CONS.KINDS: add(f'I_{k}', CONS.icon(k))  # shared consumables (all epochs)
     for n in C.PORTRAITS:
         add(f'P_{n}', (C.portrait(n), (0, 0)))
 
@@ -245,6 +250,7 @@ ANIMAL_SHEETS = {
     'bear': ['idle', 'walk', 'charge', 'swipe', 'roar', 'hurt', 'death'],
     'hare': ['idle', 'run'],
 }
+HUMAN_SHEETS.update(SAKA.HUMAN_SHEETS); ANIMAL_SHEETS.update(SAKA.ANIMAL_SHEETS)   # MAP03
 
 def pack(items, width):
     """Shelf packer. items: list of (key, w, h). Returns {key: (x, y)}, height."""
@@ -344,7 +350,7 @@ def main():
     lines.append('constexpr const char* terrainNames[]={' + ','.join('"%s"' % t for t in W.TERRAINS) + '};')
     # Terrain rules shared by every level (drawTerrain / collisions in the engine).
     idx = {n: i for i, (n, _, _) in enumerate(sprites)}
-    face = {'rock': ('FACE_rock_0', 2), 'cavewall': ('FACE_cave_0', 2), 'deepwall': ('FACE_deep_0', 1)}
+    face = {'rock': ('FACE_rock_0', 2), 'cavewall': ('FACE_cave_0', 2), 'deepwall': ('FACE_deep_0', 1), 'logwall': ('FACE_log_0', 2), 'snowrock': ('FACE_snow_0', 2)}
     lines.append('constexpr unsigned char terrainPriority[]={' + ','.join(str(W.PRIORITY.get(t, 9)) for t in W.TERRAINS) + '};')
     lines.append('constexpr unsigned char terrainSolid[]={' + ','.join('1' if t in W.SOLID else '0' for t in W.TERRAINS) + '};')
     lines.append('constexpr short terrainBase[]={' + ','.join(str(idx[f'T_{t}_0']) for t in W.TERRAINS) + '};')

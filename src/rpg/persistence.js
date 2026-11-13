@@ -34,7 +34,7 @@ export function makePersistence(schema) {
     if (l == null) return local;
     if (typeof l !== 'object' || Array.isArray(l)) invalid();
     if (l.granted != null) { if (!Array.isArray(l.granted) || l.granted.some(g => !GRANTS.has(g))) invalid(); local.granted = [...new Set(l.granted)]; }
-    if (l.seen != null) { if (!Array.isArray(l.seen) || l.seen.length > 32 || l.seen.some(s => typeof s !== 'string' || s.length > 24)) invalid(); local.seen = [...new Set(l.seen)]; }
+    if (l.seen != null) { if (!Array.isArray(l.seen) || l.seen.length > 48 || l.seen.some(s => typeof s !== 'string' || s.length > 24)) invalid(); local.seen = [...new Set(l.seen)]; }
     if (l.attempts != null) {
       if (typeof l.attempts !== 'object' || Array.isArray(l.attempts)) invalid();
       for (const [id, n] of Object.entries(l.attempts)) { if (!quizIds.has(id) || !Number.isSafeInteger(n) || n < 1 || n > 99) invalid(); local.attempts[id] = n; }
@@ -59,10 +59,11 @@ export function makePersistence(schema) {
   return {validateFlags, validateLocal, validateSnapshot, restoreSnapshot};
 }
 
-// MAP01: 59 words now (19 items); 54-word saves from before MAP02 (14 items) stay loadable.
-export const SAVE_WORDS = 59, LEGACY_SAVE_WORDS = 54;
+// MAP01: 73 words now (25 items + 4 effect slots). Earlier layouts stay loadable: 59 words (19 items,
+// MAP02 release) and 54 words (14 items, first MAP01 release).
+export const SAVE_WORDS = 73, PREV_SAVE_WORDS = 59, LEGACY_SAVE_WORDS = 54;
 const map01 = makePersistence({
   quizIds: [...Object.values(HISTORICAL_QUIZZES).map(q => q.id), 'stone_bonus_1', 'stone_bonus_2', 'stone_bonus_3', 'stone_bonus_4', 'stone_bonus_5'],
   sets: {talked: ['crafter', 'cook', 'scraper', 'child'], tracks: [1, 2, 3, 4], petro: [1, 2, 3, 4]},
-  grants: ['bow', 'spear', 'torch', 'page'], words: [SAVE_WORDS, LEGACY_SAVE_WORDS]});
+  grants: ['bow', 'spear', 'torch', 'page'], words: [SAVE_WORDS, PREV_SAVE_WORDS, LEGACY_SAVE_WORDS]});
 export const {validateFlags, validateLocal, validateSnapshot, restoreSnapshot} = map01;

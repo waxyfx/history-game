@@ -14,7 +14,8 @@ export const TRIG = Object.fromEntries(MAP01.triggers.map((n, i) => [n, i]));
 export const TAG = Object.fromEntries(MAP01.tags.map((n, i) => [n, i]));
 const P = (x, y) => [Math.round(x * TS), Math.round(y * TS)];
 // Item ids (src/rpg/inventory.hpp)
-export const IT = {sword: 1, spear: 2, bow: 3, arrows: 4, kit: 5, tool: 6, torch: 7, page: 8, herb: 9, quiver: 10, ochre: 11, flute: 12, crystal: 13, necklace: 14};
+export const IT = {sword: 1, spear: 2, bow: 3, arrows: 4, kit: 5, tool: 6, torch: 7, page: 8, herb: 9, quiver: 10, ochre: 11, flute: 12, crystal: 13, necklace: 14,
+  herbbig: 20, strength: 21, guard: 22, swift: 23, coal: 24, curd: 25}; // 15–19: MAP02 story items (quest02.js)
 
 export function newFlags() {
   return {b: {}, talked: [], tracks: [], petro: [], quiz: {}, bonus: null, t0: Date.now(), tEnd: 0};
@@ -185,7 +186,7 @@ export function createQuest(G) {
       }
       case 'thicket': set('thicket'); G.sfx('secret'); G.spawnFx(pos('thicket'), 2, 10); return G.say(D.thicket);
       case 'cachebush': set('cachebush'); G.spawnFx(pos('cachebush'), 2, 8); return G.say(D.cachebush);
-      case 'cache': if (!B.cache) { set('cache'); E.tj_item_add(IT.arrows, 10); E.tj_item_add(IT.herb, 1); E.tj_item_add(IT.kit, 1); G.sfx('secret'); await G.say(D.cache); await G.bonusTrial(3, CACHE_BRANCH); } return;
+      case 'cache': if (!B.cache) { set('cache'); E.tj_item_add(IT.arrows, 10); E.tj_item_add(IT.herb, 1); E.tj_item_add(IT.kit, 1); E.tj_item_add(IT.herbbig, 1); E.tj_item_add(IT.strength, 1); G.sfx('secret'); await G.say(D.cache); await G.bonusTrial(3, CACHE_BRANCH); } return;
       case 'rope': if (hold && !B.freed) { set('freed'); return G.cine('freed', cutFreed); } return;
       case 'boulder': return G.say(G.party() > 1 ? D.boulderCoop : [...D.boulder, ...D.boulderSolo]);
       case 'lever': if (hold && !B.caveOpen) { set('caveOpen'); return G.cine('opened', cutOpened); } return;

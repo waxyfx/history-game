@@ -4,6 +4,7 @@
 #include "world.hpp"
 #include "combat.hpp"
 #include "inventory.hpp"
+#include "effects.hpp"
 namespace tj {
 Renderer renderer;
 enum Keys { Up=1, Down=2, Left=4, Right=8, Interact=16, Strike=32, Run=64 };
@@ -11,7 +12,8 @@ constexpr int MaxPlayers=3;
 
 // ------------------------------------------------------------------ events (polled by JS)
 enum EventType { EV_NONE, EV_SFX, EV_INTERACT, EV_TRIGGER, EV_ENEMY_DIED, EV_PICKUP, EV_HURT, EV_DOWN, EV_DEAD,
-                 EV_REVIVED, EV_ZONE, EV_ENEMY_HIT, EV_PEER_HIT, EV_REVIVE_PEER, EV_PLATES, EV_ALERT, EV_HOLD_START, EV_NOAMMO };
+                 EV_REVIVED, EV_ZONE, EV_ENEMY_HIT, EV_PEER_HIT, EV_REVIVE_PEER, EV_PLATES, EV_ALERT, EV_HOLD_START, EV_NOAMMO,
+                 EV_EFFECT /* a=effect id, b=1 start, 2 refreshed, 0 ended */, EV_USED /* a=item, b=healed hp */ };
 enum Sfx { SFX_STEP_GRASS, SFX_STEP_DIRT, SFX_STEP_WATER, SFX_STEP_CAVE, SFX_SWORD, SFX_SPEAR, SFX_BOW, SFX_ARROW_HIT,
            SFX_ENEMY_HURT, SFX_ENEMY_DIE, SFX_HOWL, SFX_GROWL, SFX_ROAR, SFX_SWIPE, SFX_SHOUT, SFX_PICKUP, SFX_SPLASH,
            SFX_HOOVES, SFX_BLOCK, SFX_DOWN, SFX_REVIVE, SFX_IMPACT, SFX_BOWSTRING };
@@ -42,7 +44,7 @@ struct Npc {
 struct Animal { bool active=true; int sheet; float x,y,hx,hy,vx=0,vy=0; int facing=2,anim=art::A_IDLE,animTime=0,timer=0,flee=0; };
 struct Enemy {
     bool active=true,enabled=true;
-    int type=0,group=0,hp=0,state=Idle,facing=4,timer=0,anim=art::A_IDLE,animTime=0,target=-1,alerted=0,seed=0,hitFlash=0,showBar=0,phase=1,special=0;
+    int type=0,group=0,hp=0,state=Idle,facing=4,timer=0,anim=art::A_IDLE,animTime=0,target=-1,alerted=0,seed=0,hitFlash=0,showBar=0,phase=1,special=0,illusions=0;
     float px[3]{},py[3]{};
     float x=0,y=0,homeX=0,homeY=0,dx=0,dy=0,nx=0,ny=0;
     Attack attack;
@@ -66,6 +68,7 @@ struct Game {
     int shadowX=0,shadowY=0,shadowAlpha=0;
     unsigned completedTasks=0,storyEvents=0;
     int prevKeys=0,interactCooldown=0,hurtFlash=0;
+    ActiveEffect fx[MaxEffects]; int useCooldown=0;
 } game;
 Player players[MaxPlayers];
 Npc npcs[NpcCount];
@@ -127,20 +130,56 @@ bool startAttack(Attack& a,int weapon,int facing,float x,float y){
     if(a.cooldown||a.active)return false;
     a.age=0;a.weapon=weapon;a.facing=facing;a.cooldown=weapons[weapon].windup+weapons[weapon].recovery;a.active=true;a.connected=false;a.x=x;a.y=y;return true;
 }
+// ------------------------------------------------------------------ timed effects (data in effects.hpp)
+int effectSum(int kind){ int s=0; for(const auto& f:game.fx)if(f.id&&effectDefs[f.id].kind==kind)s+=effectDefs[f.id].magnitude; return s>KindCap[kind]?KindCap[kind]:s; }
+int outgoingDamage(int base){ return base*(100+effectSum(KindDamage))/100; }
+int incomingDamage(int dmg){ int r=dmg*(100-effectSum(KindDefense))/100; return r<1?1:r; }
+float speedFactor(){ return 1.f+effectSum(KindSpeed)/100.f; }
+bool hasEffect(int id){ for(const auto& f:game.fx)if(f.id==id)return true; return false; }
+void burst(float x,float y,uint32_t color,int n){ for(int i=0;i<n;++i)particle(x+(frand()-.5f)*12,y-4-frand()*18,(frand()-.5f)*1.2f,-.3f-frand()*1.1f,26,0,rgba(color)); }
+// Same effect: refresh to full duration (no magnitude stacking). New effect: free slot, else replace the one ending soonest.
+void applyEffect(int id){
+    if(id<=0||id>=EffectIdCount)return;
+    for(auto& f:game.fx)if(f.id==id){f.ticks=effectDefs[id].duration;emit(EV_EFFECT,id,2);return;}
+    ActiveEffect* slot=nullptr;for(auto& f:game.fx)if(!f.id){slot=&f;break;}
+    if(!slot){slot=&game.fx[0];for(auto& f:game.fx)if(f.ticks<slot->ticks)slot=&f;emit(EV_EFFECT,slot->id,0);}
+    slot->id=id;slot->ticks=effectDefs[id].duration;emit(EV_EFFECT,id,1);
+    burst(me().x,me().y,effectDefs[id].color,18);
+}
+void clearEffects(){ for(auto& f:game.fx)f=ActiveEffect{}; }
+// Timers run only while the game runs (not during cutscenes, dialogue or pause).
+void tickEffects(){
+    Player& p=me();
+    if(game.useCooldown)--game.useCooldown;
+    if(game.cinematic||p.hp<=0||p.down||p.dead)return;
+    for(auto& f:game.fx)if(f.id){const EffectDef& d=effectDefs[f.id];
+        if(d.kind==KindRegen&&f.ticks%60==0&&p.hp<p.maxhp){p.hp+=d.magnitude;if(p.hp>p.maxhp)p.hp=p.maxhp;}
+        bool ending=f.ticks<180&&(f.ticks/8)%2;              // last 3 s: visuals flicker
+        if(!ending){
+            if(d.visual==0&&game.ticks%3==0){particle(p.x+(frand()-.5f)*12,p.y-2-frand()*16,(frand()-.5f)*.3f,-.5f,22,0,rgba(d.color));particle(p.x+(frand()-.5f)*8,p.y-6-frand()*12,0,-.7f,16,0,rgba(0xffb08a));}
+            else if(d.visual==2&&p.moving&&game.ticks%2==0)particle(p.x-directions[p.facing].x*5+(frand()-.5f)*4,p.y-2-frand()*10,-directions[p.facing].x*.4f,0,16,0,rgba(d.color,200));
+            else if(d.visual==3&&game.ticks%4==0)particle(p.x+directions[p.facing].x*8+(frand()-.5f)*6,p.y-8-frand()*8,(frand()-.5f)*.4f,-.7f,20,0,rgba(frand()<.5f?d.color:0xffd35a));
+            else if(d.visual==4&&game.ticks%9==0)particle(p.x+(frand()-.5f)*10,p.y-frand()*14,0,-.35f,30,0,rgba(d.color));
+        }
+        if(--f.ticks<=0){emit(EV_EFFECT,f.id,0);burst(p.x,p.y,0xd8d8d8,10);f=ActiveEffect{};}
+    }
+}
 void dropLoot(const Enemy& e){
-    unsigned r=rng()%100;
-    if(e.type==Wolf){ if(r<45)spawnPickup(IHerb,1,e.x,e.y); }
-    else if(e.type==Stranger){ spawnPickup(IArrows,4,e.x,e.y); if(r<40)spawnPickup(IHerb,1,e.x+8,e.y+2); }
-    else if(e.type==Archer){ spawnPickup(IArrows,7,e.x,e.y); }
-    else if(e.type==Shade){ if(r<50)spawnPickup(IHerb,1,e.x,e.y); for(int i=0;i<16;++i)particle(e.x,e.y-12,(frand()-.5f)*2,-frand()*2,40,0,rgba(0xa35cc0)); }
-    else if(e.type==Wraith){ if(r<40)spawnPickup(IArrows,4,e.x,e.y); }
-    else if(e.type==Keeper){ spawnPickup(IKit,1,e.x-10,e.y); spawnPickup(IArrows,10,e.x+10,e.y); }
-    else if(e.type==Bear){ spawnPickup(IKit,1,e.x-8,e.y); spawnPickup(IArrows,8,e.x+8,e.y); }
+    int k=0;
+    for(const auto& d:drops)if(d.type==e.type&&int(rng()%100)<d.chance){spawnPickup(d.item,d.qty,e.x+(k%3-1)*9,e.y+(k/3)*6);++k;}
+    if(e.type==Shade)for(int i=0;i<16;++i)particle(e.x,e.y-12,(frand()-.5f)*2,-frand()*2,40,0,rgba(0xa35cc0));
 }
 void alertGroup(int group){ for(auto& e:enemies)if(e.group==group&&e.hp>0&&!e.alerted){e.alerted=1;emit(EV_ALERT,int(&e-enemies),e.type);} }
 void hurtEnemy(Enemy& e,int damage,float fromX,float fromY){
     if(e.hp<=0||!e.enabled)return;
     if(e.type==Bear&&e.state==Stunned)damage=damage*3/2;
+    if(e.type==Rider){
+        // On foot the golden armour deflects every frontal blow; the back, the moment after his strike and the daze are open.
+        if(e.phase>=2&&e.special!=5&&e.special!=6&&e.state!=Roar){auto d=directions[e.facing];float ax=fromX-e.x,ay=fromY-e.y,l=sqrtf(ax*ax+ay*ay)+.01f;
+            if((ax*d.x+ay*d.y)/l>.3f){for(int i=0;i<8;++i)particle(e.x+d.x*8,e.y-14,(frand()-.5f)*2.4f,-frand()*1.6f,16,0,rgba(0xffe08a));
+                e.showBar=240;alertGroup(e.group);sfx(SFX_BLOCK,e.x,e.y);emit(EV_ALERT,int(&e-enemies),-1);return;}}
+        if(e.special==6)damage*=2;
+    }
     e.hp=e.hp>damage?e.hp-damage:0;e.hitFlash=8;e.showBar=240;
     alertGroup(e.group);e.alerted=1;
     float dx=e.x-fromX,dy=e.y-fromY,len=sqrtf(dx*dx+dy*dy)+.01f;
@@ -148,9 +187,9 @@ void hurtEnemy(Enemy& e,int damage,float fromX,float fromY){
     if(!blockedFeet(e.x+dx/len*kb,e.y,5,3))e.x+=dx/len*kb;
     if(!blockedFeet(e.x,e.y+dy/len*kb,5,3))e.y+=dy/len*kb;
     for(int i=0;i<5;++i)particle(e.x,e.y-8,(frand()-.5f)*2,-frand()*1.5f,18,0,rgba(0xf3d68b));
-    if(e.hp==0){e.state=Death;e.timer=e.type==Keeper?200:150;e.attack.active=false;e.animTime=0;++game.kills;dropLoot(e);
+    if(e.hp==0){e.state=Death;e.timer=e.type==Keeper||e.type==Rider?200:150;e.illusions=0;e.attack.active=false;e.animTime=0;++game.kills;dropLoot(e);
         sfx(SFX_ENEMY_DIE,e.x,e.y);emit(EV_ENEMY_DIED,int(&e-enemies),e.type);}
-    else { if(e.type!=Keeper&&(e.type!=Bear||e.state!=Charge)){e.state=Hurt;e.timer=12;e.attack.active=false;} sfx(SFX_ENEMY_HURT,e.x,e.y); }
+    else { if(e.type!=Keeper&&e.type!=Rider&&(e.type!=Bear||e.state!=Charge)){e.state=Hurt;e.timer=12;e.attack.active=false;} sfx(SFX_ENEMY_HURT,e.x,e.y); }
 }
 // Player-side hit on an enemy: the host applies it, a network client only predicts the flash.
 void playerHitsEnemy(int index,int damage,float fx,float fy){
@@ -161,9 +200,12 @@ void playerHitsEnemy(int index,int damage,float fx,float fy){
 void damageLocal(int damage){
     Player& p=me();
     if(damage<=0||p.hp<=0||p.invuln||p.down||p.dead||game.cinematic)return;
+    damage=incomingDamage(damage);
+    if(effectSum(KindDefense))burst(p.x,p.y,0x8fc3ee,6);
     p.hp=damage>=p.hp?0:p.hp-damage;p.invuln=50;p.hurt=12;p.attack.active=false;p.holdTicks=0;game.hurtFlash=14;game.shake=6;
     emit(EV_HURT,damage,p.hp);
     if(p.hp==0){
+        clearEffects();
         p.keys=0;p.moving=false;
         if(game.partySize>1){p.down=60*30;emit(EV_DOWN);sfx(SFX_DOWN,p.x,p.y);}
         else {p.dead=100;sfx(SFX_DOWN,p.x,p.y);}
@@ -175,7 +217,9 @@ void hitPlayer(int slot,int damage){
 }
 void strikeEnemies(const Attack& a){
     for(int i=0;i<EnemyCount;++i){auto& e=enemies[i];
-        if(e.enabled&&e.hp>0&&inArc(a.weapon,a.facing,a.x,a.y-4,e.x,e.y-4)&&lineClear(a.x,a.y,e.x,e.y))playerHitsEnemy(i,weapons[a.weapon].damage,a.x,a.y);}
+        if(e.enabled&&e.hp>0&&inArc(a.weapon,a.facing,a.x,a.y-4,e.x,e.y-4)&&lineClear(a.x,a.y,e.x,e.y))playerHitsEnemy(i,outgoingDamage(weapons[a.weapon].damage),a.x,a.y);}
+    for(auto& e:enemies)if(e.type==Rider&&e.illusions&&e.hp>0)for(int k=1;k<3;++k)if((e.illusions&(1<<k))&&inArc(a.weapon,a.facing,a.x,a.y-4,e.px[k],e.py[k]-4)){
+        e.illusions&=~(1<<k);sfx(SFX_BLOCK,e.px[k],e.py[k]);for(int i=0;i<22;++i)particle(e.px[k],e.py[k]-18,(frand()-.5f)*3,(frand()-.5f)*3,30,0,rgba(0xd29ae6));}
     // NPC reaction: villagers flinch when someone swings next to them.
     for(auto& n:npcs)if(n.active&&!n.hidden){float dx=n.x-a.x,dy=n.y-a.y;if(dx*dx+dy*dy<48*48)n.alert=90;}
 }
@@ -267,7 +311,7 @@ void tickLocalPlayer(){
         ++a.age;
         const auto& w=weapons[a.weapon];
         if(a.age==w.windup){
-            if(a.weapon==Bow){ if(game.inv.counts[IArrows-1]>0&&launch(-1,p.x,p.y-8,a.facing,w.damage)){--game.inv.counts[IArrows-1];sfx(SFX_BOW,p.x,p.y);} }
+            if(a.weapon==Bow){ if(game.inv.counts[IArrows-1]>0&&launch(-1,p.x,p.y-8,a.facing,outgoingDamage(w.damage))){--game.inv.counts[IArrows-1];sfx(SFX_BOW,p.x,p.y);} }
             else if(!a.connected){strikeEnemies(a);a.connected=true;}
         }
         if(a.age>=w.windup+12)a.active=false;
@@ -281,7 +325,7 @@ void tickLocalPlayer(){
         if(!a.active&&!p.hurt&&(dx||dy)&&p.holdTicks==0){
             p.facing=dy<0?(dx<0?7:dx>0?1:0):dy>0?(dx<0?5:dx>0?3:4):(dx<0?6:2);
             p.running=(p.keys&Run)!=0;
-            float speed=p.running?1.8f:1.15f;
+            float speed=(p.running?1.8f:1.15f)*speedFactor();
             int t=terrainAt(int(p.x)/Tile,int(p.y)/Tile);
             if(t==Shallow)speed*=.6f;
             if(dx&&dy)speed*=.70710678f;
@@ -514,6 +558,99 @@ void tickKeeper(Enemy& e){
     if(dist>30){walkEnemy(e,p.x,p.y,speed);setAnim(e.anim,e.animTime,art::A_WALK);}
     else setAnim(e.anim,e.animTime,art::A_IDLE);
 }
+// ------------------------------------------------------------------ boss: the golden-armoured rider (MAP03)
+// Phase 1 (mounted): a telegraphed charge along a line (a wall leaves him dazed: double damage) and arrow volleys.
+// Phase 2 (on foot): the golden armour deflects frontal hits; strike from the side/back or right after his akinak cut.
+// Phase 3 (mirror): two illusions mirror him around the hero; only the real one casts a shadow and a gold glint,
+// only his bolts hurt; a blow shatters an illusion. Phase 2 also wakes the group after his (corrupted warriors).
+bool isBoss(int type){ return type==Keeper||type==Rider; }
+void riderIllusions(Enemy& e,const Player& p){
+    for(int k=1;k<3;++k)if(e.illusions&(1<<k)){float a=k==1?2.094f:-2.094f,dx=e.x-p.x,dy=e.y-p.y;
+        e.px[k]=p.x+dx*cosf(a)-dy*sinf(a);e.py[k]=p.y+dx*sinf(a)+dy*cosf(a);}
+}
+void tickRider(Enemy& e){
+    const auto& spec=enemySpecs[e.type];
+    bossIndex=int(&e-enemies);
+    if(e.state==Death){ if(e.timer>0)--e.timer;
+        if(e.timer%5==0&&e.timer>50)for(int i=0;i<5;++i)particle(e.x+(frand()-.5f)*36,e.y-10-frand()*30,(frand()-.5f)*1.4f,-frand()*1.4f,40,0,rgba(frand()<.6f?0xffd24a:0xa35cc0));
+        if(!e.timer)e.active=false; setAnim(e.anim,e.animTime,art::A_DEATH); return; }
+    if(game.cinematic){setAnim(e.anim,e.animTime,e.phase==1?art::A_IDLE:art::A_INTERACT);return;}
+    // Phases follow health even when nobody is in sight (damage from afar must not skip a phase change).
+    int maxhp=spec.health,phase=e.hp*5>maxhp*3?1:e.hp*4>maxhp?2:3;
+    if(phase>e.phase){e.phase=phase;e.state=Roar;e.timer=90;e.special=0;e.illusions=0;game.shake=22;sfx(SFX_ROAR,e.x,e.y);
+        for(int i=0;i<40;++i)particle(e.x+(frand()-.5f)*30,e.y-10-frand()*20,(frand()-.5f)*2.5f,-frand()*2,46,phase==2?1:0,phase==2?0:rgba(0xa35cc0));}
+    float dist;int target=nearestPlayer(e,dist);
+    if(target<0){ setAnim(e.anim,e.animTime,e.phase==1?art::A_IDLE:art::A_INTERACT); if(e.state!=Roar)e.special=0; else if(--e.timer<=0){e.state=Chase;if(e.phase==3){e.illusions=6;riderIllusions(e,me());}} return; }
+    const Player& p=players[target];
+    float dx=p.x-e.x,dy=p.y-e.y;
+    if(!e.alerted){e.alerted=1;alertGroup(e.group);e.state=Roar;e.timer=80;game.shake=20;sfx(SFX_HOOVES,e.x,e.y);}
+    if(e.state==Roar){ setAnim(e.anim,e.animTime,e.phase==1?art::A_IDLE:art::A_ROAR);
+        if(--e.timer<=0){e.state=Chase;e.attack.cooldown=30;if(e.phase==3){e.illusions=6;riderIllusions(e,p);}} return; }
+    if(e.phase==3&&!e.illusions&&game.ticks%420==0){e.special=8;e.timer=50;sfx(SFX_ROAR,e.x,e.y);}
+    riderIllusions(e,p);
+    bool mounted=e.phase==1;
+    if(e.attack.cooldown)--e.attack.cooldown;
+    switch(e.special){
+    case 1: setAnim(e.anim,e.animTime,art::A_IDLE); if(--e.timer<=0){e.special=2;e.timer=50;e.attack.connected=false;sfx(SFX_HOOVES,e.x,e.y);} return;
+    case 2:{ // gallop along the telegraphed line
+        setAnim(e.anim,e.animTime,art::A_RUN);
+        float lx=e.px[0]-e.x,ly=e.py[0]-e.y,l=sqrtf(lx*lx+ly*ly)+.01f,sx=lx/l*4.2f,sy=ly/l*4.2f;
+        bool wall=blockedFeet(e.x+sx*2,e.y+sy*2,8,4);
+        if(!wall){e.x+=sx;e.y+=sy;}
+        if(game.ticks%2==0)particle(e.x-sx*3,e.y,(frand()-.5f)*.6f,-.3f,22,2);
+        if(!e.attack.connected)for(int s=0;s<MaxPlayers;++s){auto& q=players[s];if(q.active&&q.hp>0&&!q.down&&fabsf(q.x-e.x)<15&&fabsf(q.y-e.y)<12){hitPlayer(s,spec.damage+6);e.attack.connected=true;}}
+        if(wall){e.special=6;e.timer=120;game.shake=20;sfx(SFX_IMPACT,e.x,e.y);for(int i=0;i<20;++i)particle(e.x+sx*3,e.y-8,(frand()-.5f)*2,-frand()*2,30,2);}
+        else if(--e.timer<=0||l<8){e.special=0;e.attack.cooldown=50;}
+        return;}
+    case 3: setAnim(e.anim,e.animTime,art::A_BOW);
+        if(--e.timer<=0){for(int k=-1;k<=1;++k){launch(int(&e-enemies),e.x,e.y-22,(e.facing+k+8)&7,spec.damage-8);}
+            sfx(SFX_BOW,e.x,e.y);e.special=e.seed++%2?3:0;e.timer=e.special?20:0;e.attack.cooldown=70;}
+        return;
+    case 4: setAnim(e.anim,e.animTime,art::A_SWIPE); // akinak: wind-up then a cut in front
+        if(--e.timer<=0){for(int s=0;s<MaxPlayers;++s){auto& q=players[s];if(q.active&&q.hp>0&&!q.down&&inCone(e,q.x,q.y+8,48,.45f))hitPlayer(s,spec.damage);}
+            sfx(SFX_SWORD,e.x,e.y);e.special=5;e.timer=70;}
+        return;
+    case 5: setAnim(e.anim,e.animTime,art::A_INTERACT); if(--e.timer<=0){e.special=0;e.attack.cooldown=30;} return; // guard down
+    case 6: setAnim(e.anim,e.animTime,mounted?art::A_IDLE:art::A_INTERACT); // dazed after the wall
+        if(e.timer%10==0)particle(e.x+(frand()-.5f)*14,e.y-40,0,-.3f,20,0,rgba(0xfff2c4));
+        if(--e.timer<=0){e.special=0;e.attack.cooldown=40;} return;
+    case 7: setAnim(e.anim,e.animTime,art::A_ROAR); // mirror bolts: only the real one hurts
+        if(--e.timer<=0){launch(int(&e-enemies),e.x,e.y-24,heading(dx,dy),spec.damage-6,false,true);
+            for(int k=1;k<3;++k)if(e.illusions&(1<<k))launch(int(&e-enemies),e.px[k],e.py[k]-24,heading(p.x-e.px[k],p.y-e.py[k]),0,true,true);
+            e.special=0;e.attack.cooldown=60;}
+        return;
+    case 8: setAnim(e.anim,e.animTime,art::A_ROAR); if(--e.timer<=0){e.illusions=6;e.special=0;riderIllusions(e,p);for(int i=0;i<20;++i)particle(e.x,e.y-20,(frand()-.5f)*3,(frand()-.5f)*3,30,0,rgba(0xa35cc0));} return;
+    }
+    if(!mounted&&e.animTime%16!=0){} else e.facing=heading(dx,dy); // on foot he turns slowly: flanking works
+    if(mounted){
+        if(!e.attack.cooldown){
+            if(dist>56&&(e.seed++%3)!=2){e.special=1;e.timer=46;e.px[0]=p.x+dx/(dist+.01f)*80;e.py[0]=p.y+dy/(dist+.01f)*80;sfx(SFX_SHOUT,e.x,e.y);return;}
+            if(dist<170){e.special=3;e.timer=34;return;}
+        }
+        // Circle the hero at bow range like a horse archer.
+        float a=atan2f(-dy,-dx)+.035f,R=96;
+        walkEnemy(e,p.x+cosf(a)*R,p.y+sinf(a)*R*.8f,spec.speed*1.3f);setAnim(e.anim,e.animTime,art::A_WALK);
+        return;
+    }
+    if(!e.attack.cooldown){
+        if(dist<46){e.special=4;e.timer=phase==3?20:26;sfx(SFX_GROWL,e.x,e.y);return;}
+        if(phase==3&&dist<180&&(e.seed++%2)){e.special=7;e.timer=34;return;}
+    }
+    if(dist>30){walkEnemy(e,p.x,p.y,spec.speed*(phase==3?1.3f:1.f));setAnim(e.anim,e.animTime,art::A_INTERACT);}
+    else setAnim(e.anim,e.animTime,art::A_CHARGE); // guard stance
+}
+void drawRiderTelegraphs(const Enemy& e){
+    int cx=int(e.x)-renderer.camX,cy=int(e.y)-renderer.camY;
+    unsigned pulse=120+unsigned(60*sinf(game.ticks*.4f));uint32_t red=rgba(0xe0421f,pulse);
+    if(e.special==1){float lx=e.px[0]-e.x,ly=e.py[0]-e.y,l=sqrtf(lx*lx+ly*ly)+.01f;
+        for(float t=0;t<l;t+=3){int x=cx+int(lx/l*t),y=cy+int(ly/l*t);for(int k=-9;k<=9;k+=9)renderer.pixel(x+int(-ly/l*k),y+int(lx/l*k),red);}
+        int ex=int(e.px[0])-renderer.camX,ey=int(e.py[0])-renderer.camY;for(int i=0;i<24;++i){float a=i/24.f*6.283f;renderer.pixel(ex+int(cosf(a)*10),ey+int(sinf(a)*7),red);}}
+    if(e.special==3){auto d=directions[e.facing];for(int l=12;l<120;l+=5)for(int k=-l*4/10;k<=l*4/10;k+=4)renderer.pixel(cx+int(d.x*l-d.y*k),cy-14+int(d.y*l+d.x*k),red);}
+    if(e.special==4){auto d=directions[e.facing];for(int i=-10;i<=10;++i){float a=atan2f(d.y,d.x)+i*.08f;renderer.pixel(cx+int(cosf(a)*42),cy-6+int(sinf(a)*32),red);}}
+    if(e.special==7||e.special==8){for(int k=0;k<3;++k){if(k&&!(e.illusions&(1<<k))&&e.special==7)continue;int x=k?int(e.px[k])-renderer.camX:cx,y=k?int(e.py[k])-renderer.camY:cy;
+        for(int i=0;i<30;++i){float a=i/30.f*6.283f+game.ticks*.1f;renderer.pixel(x+int(cosf(a)*12),y-30+int(sinf(a)*12),rgba(0xd29ae6,pulse));}}}
+    if(e.special==6){for(int i=0;i<3;++i){float a=game.ticks*.15f+i*2.09f;renderer.pixel(cx+int(cosf(a)*9),cy-46+int(sinf(a)*3),rgba(0xfff2c4));}}
+}
 void drawKeeperTelegraphs(const Enemy& e){
     int cx=int(e.x)-renderer.camX,cy=int(e.y)-renderer.camY;
     unsigned pulse=120+unsigned(60*sinf(game.ticks*.4f));
@@ -541,6 +678,7 @@ void drawBossBar(const Enemy& e){
 }
 void tickEnemy(Enemy& e){
     if(e.type==Keeper&&e.state!=Hurt){ ++e.animTime;if(e.hitFlash)--e.hitFlash;if(e.showBar)--e.showBar; tickKeeper(e); return; }
+    if(e.type==Rider){ ++e.animTime;if(e.hitFlash)--e.hitFlash;if(e.showBar)--e.showBar; tickRider(e); return; }
     const auto& spec=enemySpecs[e.type];auto& a=e.attack;
     ++e.animTime;
     if(e.hitFlash)--e.hitFlash;
@@ -731,6 +869,7 @@ void tick(){
     Player& p=me();
     if(!game.gameover){
         tickLocalPlayer();
+        tickEffects();
         if(!game.cinematic&&p.hp>0&&!p.down&&!p.dead){updateFocus();tickHold();if((p.keys&Interact)&&!(game.prevKeys&Interact))pressInteract();}
         else {game.focusKind=-1;game.focusId=-1;}
         game.prevKeys=p.keys;
@@ -746,11 +885,11 @@ void tick(){
 static const int view5[8]={4,3,2,1,0,1,2,3};
 static const bool flip5[8]={false,false,false,false,false,true,true,true};
 static const int view3[8]={2,1,1,1,0,1,1,1};
-void drawActor(int sheet,int anim,int f,int facing,float x,float y,unsigned alpha=255,int flash=0,uint32_t tint=0){
+void drawActor(int sheet,int anim,int f,int facing,float x,float y,unsigned alpha=255,int flash=0,uint32_t tint=0,bool castShadow=true){
     const auto& sh=art::sheets[sheet];
     int view=sh.views==5?view5[facing]:view3[facing];bool flip=sh.views==5?flip5[facing]:(facing>=5);
     int shadow=sh.cell>=48?4:sheet==art::SH_HARE?0:2;
-    if(anim!=art::A_DEATH||f<2)renderer.sprite(art::X_SHADOW_0+shadow,int(x),int(y),false,alpha*2/3);
+    if(castShadow&&(anim!=art::A_DEATH||f<2))renderer.sprite(art::X_SHADOW_0+shadow,int(x),int(y),false,alpha*2/3);
     if(!renderer.frame(sheet,anim,view,f,int(x),int(y),flip,alpha,flash,tint))renderer.frame(sheet,art::A_IDLE,view,0,int(x),int(y),flip,alpha,flash,tint);
 }
 int loopFrame(int anim,int time){int n=art::animFrames[anim];int f=time/animFrameTicks(anim);return anim==art::A_DEATH?(f>=n?n-1:f):f%n;}
@@ -854,7 +993,18 @@ void render(){
         case 1:{const Player& p=players[d.idx];
             int f=d.idx==0?playerFrame(p):p.netFrame;
             unsigned alpha=(p.invuln&&(game.ticks/3)%2)?150:255;
-            drawActor(p.sheet,p.anim,f,p.facing,p.x,p.y,alpha,p.hurt>8?90:0);
+            uint32_t tint=0;
+            if(d.idx==0)for(const auto& fx:game.fx)if(fx.id&&effectDefs[fx.id].kind==KindDamage&&!(fx.ticks<180&&(fx.ticks/8)%2))tint=rgba(effectDefs[fx.id].color,unsigned(70+30*((game.ticks/10)%2)));
+            drawActor(p.sheet,p.anim,f,p.facing,p.x,p.y,alpha,p.hurt>8?90:0,tint);
+            // Ground glow under the hero for every active effect (colour of the effect), shield ring for defence.
+            if(d.idx==0){int k=0;for(const auto& fx:game.fx)if(fx.id&&!(fx.ticks<180&&(fx.ticks/8)%2)){
+                unsigned a=unsigned(120+60*((game.ticks/14+k)%2));float rx=9+k*2,ry=3+k*.6f;++k;
+                for(int q=0;q<28;++q){float an=q/28.f*6.2832f;renderer.pixel(int(p.x+cosf(an)*rx)-cx,int(p.y+1+sinf(an)*ry)-cy,rgba(effectDefs[fx.id].color,a));}}}
+            if(d.idx==0)for(const auto& fx:game.fx)if(fx.id&&effectDefs[fx.id].visual==1&&!(fx.ticks<180&&(fx.ticks/8)%2)){
+                unsigned a=unsigned(110+50*((game.ticks/12)%2));
+                for(int k=0;k<36;++k){float an=k/36.f*6.2832f;if(k%3==2)continue;
+                    renderer.pixel(int(p.x+cosf(an)*11)-cx,int(p.y-11+sinf(an)*15)-cy,rgba(effectDefs[fx.id].color,a));}
+            }
             break;}
         case 2:{const Npc& c=npcs[d.idx];drawActor(c.sheet,c.anim,loopFrame(c.anim,c.animTime),c.facing,c.x,c.y);break;}
         case 3:{const Animal& a=animals[d.idx];drawActor(a.sheet,a.anim,loopFrame(a.anim,a.animTime),a.facing,a.x,a.y);break;}
@@ -865,11 +1015,15 @@ void render(){
             unsigned alpha=e.state==Death&&e.timer<60?unsigned(e.timer*4):255;
             uint32_t tint=e.type==Bear&&e.state==Telegraph&&(game.ticks/4)%2?rgba(0xe06a3f,90):0;
             int sheet=enemySheet[e.type];
+            if(e.type==Rider&&e.illusions)for(int k=1;k<3;++k)if(e.illusions&(1<<k)){const Player& L0=me();
+                drawActor(sheet,e.anim,f,heading(L0.x-e.px[k],L0.y-e.py[k]),e.px[k],e.py[k],unsigned(150+40*((game.ticks/6+k)%2)),0,rgba(0xa35cc0,110),false);}
             drawActor(sheet,e.anim,f,e.facing,e.x,e.y,alpha,e.hitFlash>4?110:0,tint);
+            if(e.type==Rider&&e.illusions&&(game.ticks/20)%3==0)renderer.pixel(int(e.x)-renderer.camX+3,int(e.y)-renderer.camY-34,rgba(0xfff6c8));
             break;}
         case 5:{const Pickup& k=pickups[d.idx];int bob=(k.bob/12)%2;
             static const int icon[ItemCount+1]={0,art::I_SWORD,art::I_SPEAR,art::I_BOW,art::I_ARROWS,art::I_KIT,art::I_TOOL,art::I_TORCH,art::I_PAGE,art::I_HERB,art::I_QUIVER,art::I_OCHRE,art::I_FLUTE,art::I_CRYSTAL,art::I_NECKLACE,
-                art::I_TABLET,art::I_EMBER,art::I_MOULD,art::I_SEAL,art::I_BRACELET};
+                art::I_TABLET,art::I_EMBER,art::I_MOULD,art::I_SEAL,art::I_BRACELET,
+                art::I_HERBBIG,art::I_STRENGTH,art::I_GUARD,art::I_SWIFT,art::I_COAL,art::I_CURD};
             renderer.sprite(art::X_SHADOW_0,int(k.x),int(k.y));
             renderer.sprite(icon[k.item],int(k.x),int(k.y)-bob-1);
             if((k.bob/20)%3==0)renderer.pixel(int(k.x)+3-cx,int(k.y)-14-cy,rgba(0xfff2c4));
@@ -896,7 +1050,8 @@ void render(){
         else if(c.bubble&&(game.focusKind!=1||&npcs[game.focusId]!=&c))renderer.sprite(c.bubble==2?art::X_BUBBLE_QUEST:art::X_BUBBLE_TALK,int(c.x)+6,int(c.y)-28-((game.ticks/20)%2));
     }
     for(const auto& e:enemies)if(e.type==Keeper&&e.active&&e.enabled&&e.hp>0)drawKeeperTelegraphs(e);
-    for(const auto& e:enemies)if(e.type!=Keeper&&e.active&&e.enabled&&e.hp>0&&(e.showBar||e.alerted)){
+    for(const auto& e:enemies)if(e.type==Rider&&e.active&&e.enabled&&e.hp>0)drawRiderTelegraphs(e);
+    for(const auto& e:enemies)if(!isBoss(e.type)&&e.active&&e.enabled&&e.hp>0&&(e.showBar||e.alerted)){
         int w=e.type==Bear?30:16;drawBar(int(e.x),int(e.y)-(e.type==Bear?44:e.type==Wolf?24:32),w,e.hp,enemySpecs[e.type].health,rgba(e.type==Bear?0xe06a3f:0xb8442b));
         if(e.state==Telegraph||(e.attack.active&&e.attack.age<enemySpecs[e.type].windup))renderer.sprite(art::X_BUBBLE_ALERT,int(e.x),int(e.y)-(e.type==Bear?46:34));
     }
@@ -938,6 +1093,7 @@ void render(){
         }
         for(const auto& q:projectiles)if(q.active&&q.fire)renderer.lightAdd(int(q.x),int(q.y),34,int(220*boost),int(110*boost),int(40*boost));
         for(const auto& e:enemies)if(e.active&&e.enabled&&e.type==Keeper&&e.hp>0)renderer.lightAdd(int(e.x),int(e.y)-26,96,int(230*boost),int(120*boost),int(50*boost));
+        for(const auto& e:enemies)if(e.active&&e.enabled&&e.type==Rider&&e.hp>0)renderer.lightAdd(int(e.x),int(e.y)-30,72,int(220*boost),int(180*boost),int(90*boost));
         if(dark){
             for(const auto& p:players)if(p.active){
                 bool torch=game.torch&&area().dark;
@@ -948,7 +1104,7 @@ void render(){
         renderer.lightApply();
     }
     if(game.fogCur>0){uint32_t c=rgba(0x341a45,game.fogCur/3);renderer.rect(0,0,Width,Height,c);}
-    for(const auto& e:enemies)if(e.type==Keeper&&e.active&&e.enabled&&e.hp>0&&e.alerted)drawBossBar(e);
+    for(const auto& e:enemies)if(isBoss(e.type)&&e.active&&e.enabled&&e.hp>0&&e.alerted)drawBossBar(e);
     // Vignette and hurt flash.
     for(int i=0;i<14;++i){
         uint32_t c=game.hurtFlash?rgba(0x8a2c1f,(14-i)*game.hurtFlash):rgba(0x0b1416,(14-i)*4);
@@ -995,6 +1151,7 @@ int tj_state(int field){
         case 25:return g.focusKind;case 26:return g.focusId;case 27:return p.holdTicks;case 28:return p.holdNeed;case 29:return int(g.camX);
         case 30:return int(g.camY);case 31:return g.platesMask;case 32:return g.kills;case 33:return p.moving;case 34:return p.running;
         case 35:return tj::areaIndex();case 36:return g.triggerFired;case 37:return g.cinematic;case 38:return p.maxhp;case 39:return g.staticPicked;
+        case 40:return g.useCooldown;case 41:return tj::effectSum(tj::KindDamage);case 42:return tj::effectSum(tj::KindDefense);case 43:return tj::effectSum(tj::KindSpeed);
         default:return -1;
     }
 }
@@ -1020,9 +1177,22 @@ int tj_use(int item){
     auto& g=tj::game;auto& p=tj::me();
     if(item<1||item>tj::ItemCount||g.inv.counts[item-1]<=0||p.hp<=0||p.down||p.attack.active)return 0;
     if(item<=3)return tj_equip(item-1);
-    int heal=item==tj::IKit?45:item==tj::IHerb?20:0;
-    if(heal&&p.hp<p.maxhp){p.hp+=heal;if(p.hp>p.maxhp)p.hp=p.maxhp;--g.inv.counts[item-1];return 1;}
+    for(const auto& c:tj::consumables)if(c.item==item){
+        if(g.useCooldown)return -2;                         // too soon after the previous consumable
+        if(c.heal&&!c.effect&&p.hp>=p.maxhp)return -3;      // healing at full health would waste the item
+        int healed=0;
+        if(c.heal){int before=p.hp;p.hp+=c.heal;if(p.hp>p.maxhp)p.hp=p.maxhp;healed=p.hp-before;
+            for(int i=0;i<16;++i)tj::particle(p.x+(tj::frand()-.5f)*14,p.y-2-tj::frand()*18,(tj::frand()-.5f)*.5f,-.6f-tj::frand()*.6f,26,0,tj::rgba(0x8fe36b));}
+        if(c.effect)tj::applyEffect(c.effect);
+        --g.inv.counts[item-1];g.useCooldown=tj::UseCooldown;tj::emit(tj::EV_USED,item,healed);
+        return 1;
+    }
     return 0;
+}
+// Active effects for the HUD: field 0 id, 1 ticks left, 2 full duration, 3 kind, 4 magnitude.
+int tj_effect(int slot,int field){
+    if(slot<0||slot>=tj::MaxEffects)return -1;const auto& f=tj::game.fx[slot];if(!f.id)return field==0?0:-1;const auto& d=tj::effectDefs[f.id];
+    switch(field){case 0:return f.id;case 1:return f.ticks;case 2:return d.duration;case 3:return d.kind;case 4:return d.magnitude;default:return -1;}
 }
 int tj_projectile(int index,int field){
     if(index<0||index>=tj::MaxProjectiles)return -1;const auto& p=tj::projectiles[index];
@@ -1032,7 +1202,7 @@ int tj_enemy(int index,int field){
     if(index<0||index>=tj::EnemyCount)return -1;const auto& e=tj::enemies[index];
     switch(field){case 0:return e.hp;case 1:return e.state;case 2:return int(e.x*1000);case 3:return int(e.y*1000);case 4:return e.type;
         case 5:return e.attack.cooldown;case 6:return e.active&&e.enabled;case 7:return e.facing;case 8:return e.anim;case 9:return e.animTime;
-        case 10:return e.attack.active?e.attack.age:-1;case 11:return e.group;case 12:return e.alerted;case 13:return e.target;case 14:return e.phase;case 15:return e.special;default:return -1;}
+        case 10:return e.attack.active?e.attack.age:-1;case 11:return e.group;case 12:return e.alerted;case 13:return e.target;case 14:return e.phase;case 15:return e.special;case 16:return e.illusions;default:return -1;}
 }
 int tj_enemy_count(){ return tj::EnemyCount; }
 // Network client: apply the host snapshot of one enemy.
@@ -1068,6 +1238,7 @@ void tj_respawn(int loseLife){
     auto& p=tj::me();auto& g=tj::game;
     if(loseLife&&g.lives>0)--g.lives;
     if(!g.lives){g.gameover=1;return;}
+    tj::clearEffects();
     p.dead=0;p.down=0;p.hp=p.maxhp;p.invuln=150;p.x=g.checkX;p.y=g.checkY;p.attack=tj::Attack{};
     g.zone=tj::zoneAt(p.x,p.y);
     for(auto& e:tj::enemies)if(e.hp>0){e.x=e.homeX;e.y=e.homeY;e.alerted=0;e.state=tj::Idle;e.attack.active=false;}

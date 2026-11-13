@@ -4,8 +4,9 @@ import './style.css';
 import {decodePNG, browserInflate} from './png.js';
 import {ATLAS_RECTS} from './gen/atlas.js';
 import {UI, ITEMS, ITEM_ICONS, INTERACT_LABEL, getLang, setLang} from './i18n.js';
-import {loadLevel, levelFromURL, localPassed} from './levels.js';
+import {loadLevel, levelFromURL, localPassed, TEMP_UNLOCK_ALL, LEVEL_IDS} from './levels.js';
 import {ALL_EPOCHS} from './campaign.js';
+import {EFFECTS, CONSUMABLES, BELT_ORDER, QUICK_HEAL, HINTS} from './effects.js';
 import {sfx, music, ambience, toggleAudioMute, isAudioMuted, unlockAudio} from './audio.js';
 import {createParty, makeCode, MAX_PARTY} from './net.js';
 import {db, rpc as rpcNamed} from '../api.js';
@@ -29,7 +30,7 @@ const levelQS = (extra = '') => { const q = [LV?.id > 1 ? 'level=' + LV.id : '',
 const W = 480, H = 320, RESULTS_KEY = 'tarikh.rpg.results';
 let SAVE_KEY = 'tarikh.rpg.v3';
 const SFX_NAMES = ['step_grass', 'step_dirt', 'step_water', 'step_cave', 'sword', 'spear', 'bow', 'arrow_hit', 'enemy_hurt', 'enemy_die', 'howl', 'growl', 'roar', 'swipe', 'shout', 'pickup', 'splash', 'hooves', 'block', 'down', 'revive', 'impact', 'bowstring'];
-const EV = {SFX: 1, INTERACT: 2, TRIGGER: 3, ENEMY_DIED: 4, PICKUP: 5, HURT: 6, DOWN: 7, DEAD: 8, REVIVED: 9, ZONE: 10, ENEMY_HIT: 11, PEER_HIT: 12, REVIVE_PEER: 13, PLATES: 14, ALERT: 15, HOLD: 16, NOAMMO: 17};
+const EV = {SFX: 1, INTERACT: 2, TRIGGER: 3, ENEMY_DIED: 4, PICKUP: 5, HURT: 6, DOWN: 7, DEAD: 8, REVIVED: 9, ZONE: 10, ENEMY_HIT: 11, PEER_HIT: 12, REVIVE_PEER: 13, PLATES: 14, ALERT: 15, HOLD: 16, NOAMMO: 17, EFFECT: 18, USED: 19};
 const NAMES = {
   kk: {page1: 'Жарқыраған үзінді', track1: 'Із', track2: 'Сынған жебе', track3: 'Сүйреткен із', track4: 'Қорамсақ', toolpile: 'Шақпақтың құралдары', firepit: 'Ошақ', thicket: 'Қалың бұта',
     cachebush: 'Бұта', cache: 'Жасырын қойма', rope: 'Арқан', boulder: 'Үлкен тас', lever: 'Бөрене-тұтқа', cavemouth: 'Суретті үңгір', caveexit: 'Шығу', petro1: 'Жартас суреті', petro2: 'Жартас суреті',
@@ -58,6 +59,7 @@ document.querySelector('#rpg-app').innerHTML = `
       <div class="hud" id="hud">
         <div class="hud-tl">
           <div class="hp"><span class="hp-icon">♥</span><div class="hp-track"><div id="hp-fill"></div><span id="hp-text"></span></div><span id="lives" class="lives"></span></div>
+          <div id="buffs" class="buffs" aria-live="polite"></div>
           <div id="allies" class="allies"></div>
         </div>
         <div class="hud-tr" id="tracker"><small id="zone-name"></small><b id="obj-title"></b><span id="obj-detail"></span>
@@ -65,6 +67,7 @@ document.querySelector('#rpg-app').innerHTML = `
         <div class="hotbar" id="hotbar">
           <div class="slots" id="slots"></div>
           <div class="ammo"><span id="ammo-icon"></span><b id="arrows">0</b></div>
+          <div class="belt" id="belt"></div>
           <span class="sep"></span>
           <button id="b-inv" class="hb"></button><button id="b-save" class="hb"></button><button id="b-load" class="hb"></button>
           <button id="b-road" class="hb"></button><button id="b-help" class="hb"></button>
@@ -303,6 +306,13 @@ async function trial(def) {
   if (lines?.length) await say(lines);
   return {ok, fresh: true};
 }
+// Story decision (not a trial, never scored): returns the chosen option index.
+function choose(def) {
+  return new Promise(resolve => {
+    openPanel(`<p class="eyebrow">${esc(def.title)}</p><h2>${esc(def.question)}</h2><div class="opts" data-choice>${def.options.map((o, i) => `<button data-ch="${i}">${esc(o)}</button>`).join('')}</div><p class="note">${esc(lang === 'ru' ? 'Решение повлияет на дальнейшие события.' : 'Шешімің оқиғаның әрі қарай өрбуіне әсер етеді.')}</p>`, 'quiz');
+    $('panel-card').querySelectorAll('[data-ch]').forEach(btn => btn.onclick = () => { panelResolve = null; closePanel(); sfx('dialog'); resolve(+btn.dataset.ch); });
+  });
+}
 const quiz = n => {
   const q = HISTORICAL_QUIZZES[n];
   return trial({...q, question: q.question});
@@ -341,12 +351,12 @@ function inventory() {
     const type = E.tj_item_info(item, 0), [name, desc] = ITEMS[lang][item];
     const sel = type === 0 && E.tj_state(13) === item - 1;
     const act = type === 0 ? `<button data-use="${item}" ${sel ? 'disabled' : ''}>${esc(sel ? t('equipped') : t('equip'))}</button>`
-      : type === 2 ? `<button data-use="${item}" ${E.tj_state(8) >= 100 ? 'disabled' : ''}>${esc(t('use'))}</button>`
+      : type === 2 ? `<button data-use="${item}" ${CONSUMABLES[item]?.heal && !CONSUMABLES[item]?.effect && E.tj_state(8) >= E.tj_state(38) ? 'disabled' : ''}>${esc(t('use'))}</button>`
       : item === IT.arrows && party.size > 1 ? `<button data-give="1">${esc(t('give'))}</button>` : '';
     rows.push(`<article class="inv">${iconHTML(ITEM_ICONS[item])}<div><b>${esc(name)} <span>× ${n}</span></b><p>${esc(desc)}</p></div>${act}</article>`);
   }
   openPanel(`<p class="eyebrow">${esc(t('journal'))}</p><h2>${esc(t('inventory'))}</h2><small>${esc(t('invHint'))}</small><div class="inv-list">${rows.join('')}</div><button class="primary" data-close>${esc(t('close'))}</button>`, 'inventory');
-  $('panel-card').querySelectorAll('[data-use]').forEach(b => b.onclick = () => { if (E.tj_use(+b.dataset.use)) sfx('pickup'); updateHud(true); inventory(); });
+  $('panel-card').querySelectorAll('[data-use]').forEach(b => b.onclick = () => { useItem(+b.dataset.use); inventory(); });
   $('panel-card').querySelectorAll('[data-give]').forEach(b => b.onclick = () => { giveArrows(); inventory(); });
 }
 function help() {
@@ -359,7 +369,7 @@ function pauseMenu() {
   $('pm-help').onclick = help;
 }
 function roadmap() {
-  openPanel(`<p class="eyebrow">TARIKH JOLY</p><h2>${lang === 'ru' ? 'Карта эпох' : 'Дәуірлер картасы'}</h2><div class="epochs">${ALL_EPOCHS.map(e => { const open = e.id === 1 || (e.id === 2 && (localPassed(1) || levelPassedOf(1))); const playable = open && e.id <= 2;
+  openPanel(`<p class="eyebrow">TARIKH JOLY</p><h2>${lang === 'ru' ? 'Карта эпох' : 'Дәуірлер картасы'}</h2><div class="epochs">${ALL_EPOCHS.map(e => { const open = e.id === 1 || TEMP_UNLOCK_ALL || localPassed(e.id - 1) || levelPassedOf(e.id - 1); const playable = open && LEVEL_IDS.includes(e.id);
     return `<article class="${e.id === LV.id ? 'on' : ''}"><small>MAP ${String(e.id).padStart(2, '0')} · ${esc(e.badge)}</small><b>${esc(e.title)}</b><span>${esc(e.period)}</span>${playable && e.id !== LV.id ? `<a class="go" href="/rpg.html${e.id > 1 ? '?level=' + e.id : ''}">${lang === 'ru' ? 'Играть' : 'Ойнау'} →</a>` : !playable ? `<em>${esc(t('mapLocked'))}</em>` : ''}</article>`; }).join('')}</div><button class="primary" data-close>${esc(t('close'))}</button>`, 'wide');
 }
 // ---------------------------------------------------------------- level result (100 / pass 90)
@@ -418,7 +428,7 @@ async function complete() {
     openPanel(`<p class="eyebrow">${esc(t('complete'))}</p><h2>${esc(t('completeSub'))}</h2>${scoreBlock(score, passed, extra)}${resultsHTML()}
       <div class="row">${passed ? `<button class="primary" id="go-camp">${esc(LV.passLabel ? L(LV.passLabel) : t('toCamp'))}</button>` : `<button class="primary" id="retry-epoch">${esc(t('retryEpoch'))}</button>`}
       <button id="open-journal">${esc(t('chronicle'))}</button>${passed ? `<button data-close>${esc(t('stay'))}</button>` : ''}</div>`, 'complete');
-    $('go-camp')?.addEventListener('click', () => { closePanel(); if (LV.passLabel) roadmap(); else quest.interact('homegate'); });
+    $('go-camp')?.addEventListener('click', () => { closePanel(); if (LV.next) G.gotoLevel(LV.next); else if (LV.passLabel) roadmap(); else quest.interact('homegate'); });
     $('retry-epoch')?.addEventListener('click', () => { closePanel(); retryEpoch(); });
     $('open-journal').onclick = () => journal(show);
   };
@@ -454,6 +464,7 @@ function timerText() {
 // MAP02+ opens only after the previous epoch is passed: a local journey (practice) or the server's unlock (official).
 const levelPassedOf = id => { try { return JSON.parse(localStorage.getItem('tarikh.official.unlocked') || '[]').includes(id + 1); } catch { return false; } };
 async function levelUnlocked(id) {
+  if (TEMP_UNLOCK_ALL) return true;
   if (localPassed(id - 1) || levelPassedOf(id - 1)) return true;
   try {
     if (db && (await currentUser(db))) {
@@ -620,13 +631,66 @@ async function travel(x, y) {
   autosave();
 }
 
+// ---------------------------------------------------------------- consumables & timed effects (shared by every epoch)
+const beltItems = () => BELT_ORDER.filter(i => E.tj_item_count(i) > 0);
+function useItem(item) {
+  if (!E || cine || dialogBusy || (panelOpen && !$('panel-card').querySelector('[data-use]'))) return 0;
+  const r = E.tj_use(item);
+  if (r === -2) toast(lang === 'ru' ? 'Слишком рано — подожди мгновение.' : 'Әлі ерте — сәл күт.', 'warn');
+  else if (r === -3) toast(lang === 'ru' ? 'Здоровье и так полное.' : 'Денсаулық онсыз да толық.');
+  else if (r <= 0) toast(lang === 'ru' ? 'Сейчас нельзя использовать.' : 'Қазір қолдануға болмайды.', 'warn');
+  updateHud(true); renderBuffs();
+  return r;
+}
+function useBeltSlot(i) { const item = beltItems()[i]; if (item) useItem(item); }
+function quickHeal() {
+  const item = QUICK_HEAL.find(i => E.tj_item_count(i) > 0);
+  if (!item) { toast(lang === 'ru' ? 'Нечем лечиться.' : 'Емделетін зат жоқ.', 'warn'); return; }
+  useItem(item);
+}
+function renderBelt() {
+  const items = beltItems(), hp = E.tj_state(8), max = E.tj_state(38);
+  $('belt').innerHTML = items.map((item, i) => {
+    const c = CONSUMABLES[item], full = c.heal && !c.effect && hp >= max;
+    return `<button data-belt="${item}" class="${full ? 'dim' : ''}" title="${esc(ITEMS[lang][item][0])} — ${esc(ITEMS[lang][item][1])}"><kbd>${i + 4}</kbd>${iconHTML(ITEM_ICONS[item])}<b>${E.tj_item_count(item)}</b></button>`;
+  }).join('');
+  $('belt').hidden = !items.length;
+  $('belt').querySelectorAll('[data-belt]').forEach(b => b.onclick = () => { useItem(+b.dataset.belt); canvas.focus({preventScroll: true}); });
+}
+let buffsKey = '';
+function renderBuffs() {
+  if (!E) return;
+  const list = [];
+  for (let s = 0; s < 4; s++) { const id = E.tj_effect(s, 0); if (id > 0) list.push({id, left: Math.ceil(E.tj_effect(s, 1) / 60)}); }
+  const key = list.map(f => f.id + ':' + f.left).join(',') + lang;
+  if (key === buffsKey) return;
+  buffsKey = key;
+  $('buffs').innerHTML = list.map(f => { const d = EFFECTS[f.id];
+    return `<span class="buff${f.left <= 3 ? ' ending' : ''}" style="--c:${d.color}" title="${esc(L(d.note))}"><i>${d.icon}</i>${esc(L(d))} <b>${f.left}s</b></span>`; }).join('');
+}
+function onEffect(id, state) {
+  const d = EFFECTS[id]; if (!d) return;
+  if (state === 1) { toast(`${d.icon} ${L(d)}: ${L(d.note)}`, 'good'); sfx('secret'); }
+  else if (state === 2) toast(`${d.icon} ${L(d)} — ${lang === 'ru' ? 'время обновлено' : 'уақыты жаңарды'}`);
+  else { toast(`${d.icon} ${L(d)} — ${lang === 'ru' ? 'эффект закончился' : 'әсері бітті'}`); sfx('dialog'); }
+  buffsKey = ''; renderBuffs();
+}
+// First pickup of a heal / a buff: a one-time hint, so the player learns the system step by step.
+function pickupHint(item) {
+  const c = CONSUMABLES[item]; if (!c) return;
+  const kind = c.effect && !c.heal ? 'buff' : 'heal', tag = 'hint-' + kind;
+  if (G.local.seen.includes(tag)) return;
+  G.local.seen.push(tag);
+  setTimeout(() => toast(L(HINTS[kind]), 'hint'), 700);
+}
+
 // ---------------------------------------------------------------- HUD
 function updateHud(force) {
   if (!E) return;
   const hp = E.tj_state(8), lives = E.tj_state(9), weapon = E.tj_state(13), arrows = E.tj_state(14), zone = E.tj_state(2);
   const stage = questStage(G.flags), q = QUESTS[stage][lang] || QUESTS[stage].kk;
   const allies = party.size > 1 ? [...party.peers.values()].map(p => `${p.slot}:${p.hp}:${p.down}`).join(',') : '';
-  const key = [hp, lives, weapon, arrows, zone, stage, lang, Object.keys(G.flags.quiz).length, party.size, E.tj_item_count(2), E.tj_item_count(3), secretsFound(G.flags), allies, isAudioMuted(), !!official?.active].join('|');
+  const key = [hp, lives, weapon, arrows, zone, stage, lang, Object.keys(G.flags.quiz).length, party.size, E.tj_item_count(2), E.tj_item_count(3), BELT_ORDER.map(i => E.tj_item_count(i)).join(','), secretsFound(G.flags), allies, isAudioMuted(), !!official?.active].join('|');
   if (key === hudKey && !force) return;
   hudKey = key;
   $('hp-fill').style.width = Math.max(0, hp) + '%';
@@ -640,6 +704,7 @@ function updateHud(force) {
     return `<button data-weapon="${i}" class="${weapon === i ? 'on' : ''}" ${has ? '' : 'disabled'} title="${esc(t('weapon')[i])}"><kbd>${i + 1}</kbd>${iconHTML(n)}</button>`;
   }).join('');
   $('slots').querySelectorAll('[data-weapon]').forEach(b => b.onclick = () => equip(+b.dataset.weapon));
+  renderBelt();
   $('zone-name').textContent = ZONE_NAMES[lang][zone] || '';
   $('obj-title').textContent = q[0]; $('obj-detail').textContent = q[1];
   $('s-score').textContent = timerText() + (official?.active ? (lang === 'ru' ? ' · офиц.' : ' · ресми') : '');
@@ -675,7 +740,7 @@ function banner(text) {
   const b = $('banner'); b.textContent = text; b.classList.add('on');
   clearTimeout(bannerTimer); bannerTimer = setTimeout(() => b.classList.remove('on'), 2600);
 }
-const TILE_RGB = ['3d6a3b', '7a7d44', '77593b', 'b49c68', '1d5a76', '4aa0a8', '5e504a', '2f383a', '120a18', '7c6b60', '3e3633', '7a5a40', 'a08a66', '2c2426', '120c10'].map(h => [0, 2, 4].map(i => parseInt(h.slice(i, i + 2), 16)));
+const TILE_RGB = ['3d6a3b', '7a7d44', '77593b', 'b49c68', '1d5a76', '4aa0a8', '5e504a', '2f383a', '120a18', '7c6b60', '3e3633', '7a5a40', 'a08a66', '2c2426', '120c10', '4f6e45', '6b4a2c', '2a1d14', 'c9cdd2'].map(h => [0, 2, 4].map(i => parseInt(h.slice(i, i + 2), 16)));
 function buildMinimap(areaIdx) {
   const a = Object.values(MAP.areas)[areaIdx];
   const w = a[2] - a[0], h = a[3] - a[1];
@@ -724,7 +789,9 @@ function handleEvents() {
       }
       case EV.TRIGGER: quest.trigger(MAP.triggers[a]); break;
       case EV.ENEMY_DIED: quest.enemyDied(a, b); break;
-      case EV.PICKUP: toast(`${t('got')}: ${ITEMS[lang][a][0]} ×${b}`); updateHud(true); break;
+      case EV.PICKUP: toast(`${t('got')}: ${ITEMS[lang][a][0]} ×${b}`); updateHud(true); pickupHint(a); break;
+      case EV.EFFECT: onEffect(a, b); break;
+      case EV.USED: if (b > 0) toast(`+${b} ❤`, 'good'); sfx('pickup'); updateHud(true); renderBuffs(); break;
       case EV.HURT: sfx('hurt'); break;
       case EV.DOWN: toast(t('downed'), 'warn'); break;
       case EV.DEAD: onDeath(); break;
@@ -783,7 +850,7 @@ function loop(now) {
   ctx.putImageData(frame, 0, 0);
   updateHud(); updatePrompt();
   if ((now / 100 | 0) % 2 === 0) drawMinimap(now);
-  if ((now / 250 | 0) !== ambTick) { ambTick = now / 250 | 0; ambienceTick(); $('s-score').textContent = timerText() + (official?.active ? (lang === 'ru' ? ' · офиц.' : ' · ресми') : ''); }
+  if ((now / 250 | 0) !== ambTick) { ambTick = now / 250 | 0; ambienceTick(); renderBuffs(); $('s-score').textContent = timerText() + (official?.active ? (lang === 'ru' ? ' · офиц.' : ' · ресми') : ''); }
   netTick(now);
   if (now - lastSave > 60000 && !cine && !panelOpen) autosave();
 }
@@ -793,13 +860,15 @@ window.addEventListener('keydown', e => {
   unlockAudio();
   if (e.ctrlKey || e.metaKey || e.altKey || !E) return;
   if (document.activeElement?.tagName === 'INPUT') return;
-  if (e.code === 'Escape') { e.preventDefault(); if (cine) skipCutscene(); else if (panelOpen) closePanel(); else if (!dialogBusy) pauseMenu(); return; }
+  if (e.code === 'Escape') { e.preventDefault(); if (cine) skipCutscene(); else if (panelOpen) { if (!$('panel-card').querySelector('[data-choice],[data-trial]')) closePanel(); } else if (!dialogBusy) pauseMenu(); return; }
   if (!$('dlg').hidden && ['KeyE', 'Space', 'Enter'].includes(e.code)) { e.preventDefault(); if (!e.repeat) advanceDialog(); return; }
   if (panelOpen || cine || dialogBusy) return;
   if (e.code === 'KeyI' && !e.repeat) { e.preventDefault(); inventory(); return; }
   if (e.code === 'KeyM' && !e.repeat) { mini.classList.toggle('hidden'); return; }
   if (e.code === 'KeyG' && !e.repeat && party.size > 1) { giveArrows(); return; }
   if (/^Digit[123]$/.test(e.code)) { e.preventDefault(); if (!e.repeat) equip(+e.code.at(-1) - 1); return; }
+  if (/^Digit[4-9]$/.test(e.code)) { e.preventDefault(); if (!e.repeat) useBeltSlot(+e.code.at(-1) - 4); return; }
+  if (e.code === 'KeyQ' && !e.repeat) { e.preventDefault(); quickHeal(); return; }
   if (keyBits[e.code]) { e.preventDefault(); held.add(e.code); input(); }
 });
 window.addEventListener('keyup', e => { if (keyBits[e.code]) { held.delete(e.code); input(); } });
@@ -867,7 +936,7 @@ async function boot() {
     E.tj_init();
     frame = new ImageData(new Uint8ClampedArray(E.memory.buffer, E.tj_pixels(), W * H * 4), W, H);
     Object.assign(G, {
-      say, quiz, bonusTrial, chamber, journal, levelPassed, results, complete, travel, toast, changed, heroPos, save: s => save(s),
+      say, quiz, choose, bonusTrial, chamber, journal, levelPassed, results, complete, travel, toast, changed, heroPos, save: s => save(s),
       cine: (id, fn) => playCutscene(id, fn), sfx, gotoLevel: n => { save(true); location.href = '/rpg.html' + (n > 1 ? '?level=' + n : ''); }, spawnFx: (p, type, n) => E.tj_spawn_fx(type, p[0], p[1], n),
     });
     quest = createQuest(G);
@@ -891,7 +960,7 @@ async function boot() {
     musicForZone(true);
     // Debug/QA handle (used by scripts/check-rpg-browser.mjs).
     const step = n => { for (let i = 0; i < n; i++) { E.tj_tick(); handleEvents(); } E.tj_render(); ctx.putImageData(frame, 0, 0); updateHud(); updatePrompt(); drawMinimap(performance.now()); };
-    if (import.meta.env.DEV) window.__tj = {LV, E, G, party, quest, retryEpoch, results, get official() { return official; }, save, load, newGame, skipCutscene, closePanel, advanceDialog, travel, step, inventory, coopPanel, startParty, leaveParty,
+    if (import.meta.env.DEV) window.__tj = {useItem, quickHeal, renderBuffs, LV, E, G, party, quest, retryEpoch, results, get official() { return official; }, save, load, newGame, skipCutscene, closePanel, advanceDialog, travel, step, inventory, coopPanel, startParty, leaveParty,
       get panelOpen() { return panelOpen; }, get cine() { return cine?.id || null; }, get dialog() { return !$('dlg').hidden; }};
   } catch (err) {
     console.error(err);

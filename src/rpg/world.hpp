@@ -6,7 +6,9 @@
 #ifndef TJ_LEVEL
 #define TJ_LEVEL 1
 #endif
-#if TJ_LEVEL == 2
+#if TJ_LEVEL == 3
+#include "gen/map03.hpp"
+#elif TJ_LEVEL == 2
 #include "gen/map02.hpp"
 #else
 #include "gen/map01.hpp"

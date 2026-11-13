@@ -5,10 +5,10 @@ from .core import *
 T = 16
 # Terrain ids must match src/rpg/world.hpp (generated enum mirrors this list).
 TERRAINS = ['grass', 'steppe', 'dirt', 'sand', 'water', 'shallow', 'rock', 'cave', 'cavewall', 'camp',
-            'ash', 'clay', 'pave', 'deep', 'deepwall']
+            'ash', 'clay', 'pave', 'deep', 'deepwall', 'meadow', 'timber', 'logwall', 'snowrock']
 # Blend priority: higher priority terrain bleeds over lower neighbours.
-PRIORITY = {'water': 0, 'shallow': 1, 'cave': 1, 'deep': 1, 'sand': 2, 'ash': 2, 'dirt': 3, 'camp': 3, 'clay': 3, 'steppe': 4, 'grass': 5, 'pave': 6}
-SOLID = {'water', 'rock', 'cavewall', 'deepwall'}
+PRIORITY = {'water': 0, 'shallow': 1, 'cave': 1, 'deep': 1, 'sand': 2, 'ash': 2, 'dirt': 3, 'camp': 3, 'clay': 3, 'steppe': 4, 'grass': 5, 'meadow': 5, 'pave': 6, 'timber': 1}
+SOLID = {'water', 'rock', 'cavewall', 'deepwall', 'logwall', 'snowrock'}
 
 def pnoise(x, y, period, cells, seed):
     """Periodic value noise: tiles seamlessly every `period` pixels."""
@@ -77,10 +77,28 @@ def texture(kind, variant, frame=0):
                 v = .25 + n1 * .25 + (n2 - .5) * .2
                 p.set(x, y, tone('ink', v + .2, x, y))
                 if abs(pnoise(x, y, 16, 4, 77 + variant) - .5) < .025: p.set(x, y, c('fire', 1, 200))
+            elif kind == 'meadow':   # Zhetysu foothill meadow: lush, bluish green
+                v = .45 + n1 * .3 + (n2 - .5) * .14
+                p.set(x, y, tone('green2', v * .62 + .22, x, y))
+            elif kind == 'timber':   # larch planks of the tomb chamber floor
+                v = .4 + (n2 - .5) * .25 - (.25 if (y % 5) == 0 else 0) - (.1 if (x + (y // 5) * 7) % 13 == 0 else 0)
+                p.set(x, y, tone('wood', v * .7 + .05, x, y))
+            elif kind == 'logwall':
+                p.set(x, y, tone('wood', (.18 + n1 * .2) * .6, x, y))
+            elif kind == 'snowrock':
+                v = .55 + n1 * .3 + (n2 - .5) * .2
+                p.set(x, y, tone('grey', v * .6 + .35, x, y) if n1 > .42 else tone('stone', v * .5 + .2, x, y))
             elif kind == 'deepwall':
                 v = .2 + n1 * .25
                 p.set(x, y, tone('bear', v * .4 + .02, x, y))
     # Decorative details per terrain.
+    if kind == 'meadow':
+        for _ in range(5 + variant):
+            x, y = rnd.randrange(1, 15), rnd.randrange(3, 15)
+            p.set(x, y, c('green2', 4)); p.set(x, y - 1, c('grass', 5))
+        if variant >= 2:   # red tulips and white edelweiss of the foothills
+            p.set(4, 6, c('flower', 1)); p.set(5, 6, c('flower', 2)); p.set(4, 7, c('green2', 3))
+            p.set(11, 11, c('grey', 5)); p.set(12, 11, c('sand', 5))
     if kind in ('grass', 'steppe'):
         ramp = 'grass' if kind == 'grass' else 'steppe'
         for _ in range(5 + variant):
@@ -152,6 +170,26 @@ def fringe(kind, mask_dir, over_water=False, seed=0):
                            [(depth, i + 1)] if mask_dir == 'w' else [(T - 1 - depth, i + 1)] if mask_dir == 'e' else []):
                 if noise2(x, y, 5) > .4:
                     p.set(x, y, c(ramp, 3))
+    return img
+
+def log_face(variant):
+    """Stacked larch logs of the tomb chamber wall."""
+    img = new(T, T); p = Px(img)
+    for y in range(T):
+        r = y % 8
+        for x in range(T):
+            v = .62 - abs(r - 3.5) / 6 + (pnoise(x, y, 16, 8, 31 + variant) - .5) * .2
+            p.set(x, y, tone('wood', v, x, y))
+        if r == 7: p.hline(0, T - 1, y, c('wood', 0))
+    p.ellipse(3 + variant * 4, 4, 1.5, 1.5, c('wood', 4))
+    return img
+
+def snow_face(variant):
+    img = rock_face(variant)
+    p = Px(img)
+    for x in range(T):
+        h = 2 + int(pnoise(x, 0, 16, 4, 41 + variant) * 4)
+        for y in range(h): p.set(x, y, c('grey', 5) if y < h - 1 else c('grey', 4))
     return img
 
 def rock_face(variant, cave=False, deep=False):

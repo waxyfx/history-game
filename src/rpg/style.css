@@ -176,3 +176,23 @@ html, body { height: 100%; overflow: hidden; background: #050909; }
 .epochs a.go { color: var(--gold); font-size: .75em; font-weight: 700; text-decoration: none; margin-top: .2em; }
 .epochs a.go:hover { text-decoration: underline; }
 .panel-card a.button { display: inline-block; padding: .55em 1.1em; border-radius: .5em; background: var(--gold); color: #1b1408; font-weight: 700; text-decoration: none; }
+
+/* Consumable belt (keys 4–9, Q = quick heal) and active effects under the health bar */
+.belt { display: flex; gap: .3em; pointer-events: auto; }
+.belt[hidden] { display: none; }
+.belt button { position: relative; width: 2.6em; height: 2.6em; padding: 0; background: #0b1416d9; border: 1px solid #8fd36b55; border-radius: .45em; display: grid; place-items: center; }
+.belt button:hover { border-color: #8fd36b; }
+.belt button.dim { opacity: .55; }
+.belt kbd { position: absolute; left: -.2em; top: -.35em; font-size: .55em; padding: .1em .3em; }
+.belt b { position: absolute; right: .15em; bottom: 0; font-size: .62em; text-shadow: 0 1px 2px #000; }
+.belt .icon { transform: scale(calc(var(--s) * .28)); }
+.buffs { display: flex; flex-wrap: wrap; gap: .25em; margin: .25em 0; max-width: 18em; }
+.buffs:empty { display: none; }
+.buff { display: inline-flex; align-items: center; gap: .3em; font-size: .7em; padding: .15em .5em .15em .3em; border-radius: 1em; background: #0b1416d9;
+  border: 1px solid var(--c); color: var(--ink); box-shadow: 0 0 .5em color-mix(in srgb, var(--c) 40%, transparent); }
+.buff i { font-style: normal; }
+.buff b { color: var(--c); font-variant-numeric: tabular-nums; }
+.buff.ending { animation: buff-blink .5s steps(2) infinite; }
+@keyframes buff-blink { 50% { opacity: .45; } }
+.toast.good { border-color: #8fd36b; }
+.toast.hint { border-color: var(--gold); max-width: 28em; }

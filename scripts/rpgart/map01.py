@@ -363,9 +363,15 @@ def emit():
     LV.zone_area = [0, 0, 0, 0, 0, 1, 2]
     LV.zone_fx = [0, 0, 0, 1, 0, 2, 0]
     LV.enemy_sheets = {0: 'WOLF', 1: 'STRANGER', 2: 'ARCHER', 3: 'BEAR'}
-    # item ids: 4 arrows, 5 kit, 9 herbs
+    # item ids: 4 arrows, 5 kit, 9 herbs; shared consumables 20 big herb, 21 strength, 22 guard, 23 swift.
+    # New entries are appended so the pickup bits of existing saves keep their meaning.
     LV.pickups = [(9, 2, 9, 45), (4, 6, 62.5, 50), (9, 1, 70, 61), (5, 1, 27, 22), (4, 8, 84, 26),
-                  (9, 2, 30, 97), (4, 6, 37, 92), (9, 2, 66, 29), (4, 5, 104, 40), (9, 1, 18, 24)]
+                  (9, 2, 30, 97), (4, 6, 37, 92), (9, 2, 66, 29), (4, 5, 104, 40), (9, 1, 18, 24),
+                  (21, 1, 86, 30),   # strength: on the path from the last track to the strangers' camp
+                  (22, 1, 28, 102),  # guard: cave entrance, before the bear
+                  (23, 1, 95, 26),   # swift: exploration, the far edge of the ravine
+                  (20, 1, 9, 82),    # big herb: secret chamber behind the crack
+                  (9, 1, 40, 47)]    # small herb on the road out of the settlement
     LV.spawn = (12, 53.5)
     LV.write()
 

@@ -4,12 +4,12 @@ import * as S from './story02.js';
 import * as Q from './quest02.js';
 import {makePersistence} from './persistence.js';
 
-// 24 header words + 19 items + 13 enemies × 2.
-export const SAVE_WORDS_L2 = 24 + 19 + 13 * 2;
+// 24 header words + 25 items + 13 enemies × 2 + 4 effect slots × 2; 69-word saves (19 items, no effects) stay loadable.
+export const SAVE_WORDS_L2 = 24 + 25 + 13 * 2 + 8, PREV_SAVE_WORDS_L2 = 24 + 19 + 13 * 2;
 export const persistence = makePersistence({
   quizIds: Object.values(S.HISTORICAL_QUIZZES).map(q => q.id),
   sets: {talked: S.WITNESSES, tracks: Object.values(S.CLUES), petro: [1, 2, 3, 4]},
-  grants: ['kit', 'bracelet', 'mould', 'seal', 'tablet', 'ember', 'page'], words: [SAVE_WORDS_L2]});
+  grants: ['kit', 'bracelet', 'mould', 'seal', 'tablet', 'ember', 'page'], words: [SAVE_WORDS_L2, PREV_SAVE_WORDS_L2]});
 
 const fireAt = (x, y, tx, ty) => Math.max(0, 1 - Math.hypot(x - tx * 16, y - ty * 16) / 150);
 export default {
@@ -21,7 +21,7 @@ export default {
   scoreOf: Q.scoreOf, secretsFound: Q.secretsFound, pageLines: Q.pageLines, pageTotal: Q.PAGE_TOTAL, restoreSnapshot: persistence.restoreSnapshot,
   begin: quest => quest.start(),
   back: {label: {kk: 'Ауылға оралу', ru: 'Ауылға оралу'}, x: 51, y: 34},
-  passLabel: {kk: 'Дәуірлер картасы', ru: 'Карта эпох'},
+  passLabel: {kk: 'Сақ дәуіріне өту →', ru: 'В эпоху саков →'}, next: 3,
   UI: {
     chapter: {kk: 'MAP 02 · ҚОЛА ДӘУІРІ'}, complete: {kk: 'MAP 02 АЯҚТАЛДЫ'}, completeSub: {kk: 'Шежіренің 2-парағы қалпына келді'},
     stay: {kk: 'Қола дәуірінде қалу'},

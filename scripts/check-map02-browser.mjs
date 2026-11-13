@@ -9,6 +9,7 @@ import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import assert from 'node:assert/strict';
 import {setTimeout as delay} from 'node:timers/promises';
+import {TEMP_UNLOCK_ALL} from '../src/rpg/levels.js';
 
 const base = process.argv[2] || 'http://127.0.0.1:5173';
 const candidates = process.env.BROWSER_EXE ? [process.env.BROWSER_EXE] : ['C:/Program Files/Google/Chrome/Application/chrome.exe', 'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe', '/usr/bin/google-chrome', '/usr/bin/chromium'];
@@ -84,9 +85,11 @@ try {
   assert(port, 'Browser launch failed');
   // 0. Lock: MAP02 is closed until MAP01 is passed (no local pass, signed out).
   const a = await open(base + '/rpg.html?level=2');
-  await a.wait(`document.querySelector('#panel-card')?.textContent.includes('MAP 01')`);
-  assert(!(await a.js('!!window.__tj')), 'locked level does not start the game');
-  await a.shot('map02-00-locked');
+  if (!TEMP_UNLOCK_ALL) {   // the lock is temporarily lifted for QA (src/rpg/levels.js)
+    await a.wait(`document.querySelector('#panel-card')?.textContent.includes('MAP 01')`);
+    assert(!(await a.js('!!window.__tj')), 'locked level does not start the game');
+    await a.shot('map02-00-locked');
+  } else await a.wait('window.__tj && __tj.E');
   await a.js(`localStorage.setItem('tarikh.introLang', 'kk'); localStorage.setItem('tarikh.rpg.results', JSON.stringify([{map: 1, t0: 1, at: '2026-01-01', score: 92, passed: true, party: 1}])); 1`);
   await a.nav(base + '/rpg.html?level=2&new=1');
   await a.wait('window.__tj && __tj.E && __tj.LV.id === 2');

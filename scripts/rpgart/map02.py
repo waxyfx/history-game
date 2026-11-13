@@ -232,7 +232,12 @@ def emit():
                       (6, 44, 84, 5), (5, 39, 79.5, 6), (5, 49, 79.5, 6)])
     L.enemy_sheets = {0: 'WOLF', 1: 'RAIDER', 2: 'RAIDER', 3: 'BEAR', 4: 'SHADE', 5: 'WRAITH', 6: 'KEEPER'}
     L.pickups = [(4, 6, 18, 49), (9, 2, 26, 22), (4, 8, 82, 38), (9, 1, 60, 41), (5, 1, 94, 50), (4, 6, 46, 15),
-                 (9, 2, 22, 100), (4, 8, 40, 98), (5, 1, 33, 86), (9, 2, 48, 92)]
+                 (9, 2, 22, 100), (4, 8, 40, 98), (5, 1, 33, 86), (9, 2, 48, 92),
+                 (21, 1, 18, 40),   # strength infusion at the ford, before the raiders
+                 (25, 2, 27, 44),   # dried curd in the dwellings
+                 (24, 1, 82, 33),   # forge coal by the charcoal heap
+                 (24, 1, 65, 55.5), # forge coal in the hidden workshop (secret)
+                 (22, 1, 27, 86)]   # guard infusion in the tablet chamber, before the keeper
     L.area('world', 0, 0, 100, 68)
     L.area('under', 0, 70, 56, 108, dark=(46, 34, 40), outdoor=False)
     L.zone_area = [0, 0, 0, 0, 0, 0, 0, 0, 1]
