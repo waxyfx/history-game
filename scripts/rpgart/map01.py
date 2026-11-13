@@ -12,9 +12,11 @@ from rpgart import world as W
 
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 MW, MH, TS = 112, 108, 16
-T = {k: i for i, k in enumerate(W.TERRAINS)}
-grid = [[T['steppe']] * MW for _ in range(MH)]
-zone = [[0] * MW for _ in range(MH)]
+from rpgart.levelgen import Level
+LV = Level('map01', MW, MH)
+T = LV.T
+grid = LV.grid
+zone = LV.zone
 rnd = random.Random(2087)
 
 AREAS = {  # name: (x0, y0, x1, y1) in tiles, inclusive-exclusive
@@ -23,40 +25,19 @@ AREAS = {  # name: (x0, y0, x1, y1) in tiles, inclusive-exclusive
     'camp': (54, 73, 98, 102),
 }
 
-# Object kinds: name -> (sprite base, frames, anim, collider half w, half h, flags)
-# anim: 0 static, 1 wind sway, 2 loop (fire/glow), 3 loop slow. flags: 1 decal, 2 light, 4 tall (fades near player)
-KINDS = [
-    ('poplar', 'O_POPLAR_0', 2, 0, 4, 3, 4), ('birch', 'O_BIRCH_0', 2, 0, 3, 2, 4), ('willow', 'O_WILLOW', 1, 0, 4, 3, 4),
-    ('bush', 'O_BUSH_0', 3, 0, 7, 4, 0), ('tallgrass', 'O_TALLGRASS_0', 4, 1, 0, 0, 0), ('feather', 'O_FEATHER_0', 4, 1, 0, 0, 0),
-    ('reeds', 'O_REEDS_0', 4, 1, 0, 0, 0), ('tulips', 'O_TULIPS_0', 3, 0, 0, 0, 1), ('rock', 'O_ROCK_0', 4, 0, 0, 0, 0),
-    ('crock', 'O_CROCK_0', 4, 0, 0, 0, 0), ('log', 'O_LOG', 1, 0, 12, 3, 0), ('tusk', 'O_TUSK', 1, 0, 0, 0, 1),
-    ('skull', 'O_SKULL', 1, 0, 0, 0, 1), ('ribs', 'O_RIBS', 1, 0, 0, 0, 1), ('track', 'O_TRACK_PAW', 4, 0, 0, 0, 1),
-    ('scar', 'O_SCAR', 1, 0, 0, 0, 1), ('tent', 'O_TENT_0', 2, 0, 20, 7, 0), ('hut', 'O_HUT', 1, 0, 24, 6, 0),
-    ('firepit', 'O_FIREPIT', 1, 0, 8, 4, 2), ('rack', 'O_RACK', 1, 0, 15, 3, 0), ('meatrack', 'O_MEATRACK', 1, 0, 10, 3, 0),
-    ('toolpile', 'O_TOOLPILE', 1, 0, 0, 0, 1), ('storage', 'O_STORAGE', 1, 0, 9, 4, 0), ('hidemat', 'O_HIDEMAT', 1, 0, 0, 0, 1),
-    ('spearrack', 'O_SPEARRACK', 1, 0, 10, 3, 0), ('basket', 'O_BASKET', 1, 0, 4, 3, 0), ('windbreak', 'O_WINDBREAK', 1, 0, 16, 3, 0),
-    ('post', 'O_POST', 1, 0, 3, 3, 0), ('totem', 'O_TOTEM', 1, 0, 4, 3, 0), ('cavemouth', 'O_CAVEMOUTH', 1, 0, 0, 0, 0),
-    ('boulder', 'O_BOULDER', 1, 0, 22, 8, 0), ('plate', 'O_PLATE_0', 2, 0, 0, 0, 1), ('lever', 'O_LEVER', 1, 0, 4, 3, 0),
-    ('crack', 'O_CRACK', 1, 0, 0, 0, 0), ('stalag', 'O_STALAG_0', 2, 0, 4, 3, 0), ('crystal', 'O_CRYSTAL', 1, 2, 3, 2, 2),
-    ('page', 'O_PAGE_0', 4, 2, 0, 0, 2), ('petro', 'O_PETRO_0', 5, 0, 18, 4, 0), ('gate', 'O_GATE_0', 4, 2, 0, 0, 2),
-    ('ctent', 'O_CTENT', 1, 0, 20, 6, 0), ('holo', 'O_HOLO_0', 2, 3, 9, 4, 2), ('cfire', 'O_FIREPIT', 1, 0, 8, 4, 2),
-]
-KIND = {k[0]: i for i, k in enumerate(KINDS)}
-objects = []   # (kind, x, y, variant, tag)
-TAGS = ['none']
-def tag(name):
-    if name not in TAGS:
-        TAGS.append(name)
-    return TAGS.index(name)
+objects = LV.objects   # (kind, x, y, variant, tag)
+TAGS = LV.tags
+def tag(name, hidden=False):
+    return LV.tag(name, hidden)
 def obj(kind, x, y, variant=0, t=0):
-    objects.append((KIND[kind], int(x), int(y), variant, t))
+    LV.obj(kind, x, y, variant, t)
 
-interacts = []  # (key, x, y, radius, tag)
+interacts = LV.interacts  # (key, x, y, radius, tag)
 def interact(key, x, y, r=22, t=0):
-    interacts.append((key, int(x), int(y), r, t))
-triggers = []   # (key, x0, y0, x1, y1) in pixels
+    LV.interact(key, x, y, r, t)
+triggers = LV.triggers   # (key, x0, y0, x1, y1) in pixels
 def trigger(key, x0, y0, x1, y1):
-    triggers.append((key, int(x0 * TS), int(y0 * TS), int(x1 * TS), int(y1 * TS)))
+    LV.trigger(key, x0, y0, x1, y1)
 
 def setr(x, y, t):
     if 0 <= x < MW and 0 <= y < MH:
@@ -314,11 +295,10 @@ def scatter():
                          ('hidemat', 70, 89, 0), ('birch', 60, 92, 0), ('birch', 92, 93, 1), ('rock', 62, 79, 2), ('rock', 90, 78, 1)):
         obj(k, x * TS, y * TS, v)
     obj('gate', 76 * TS, 79.6 * TS, 0, tag('campgate'))
-    obj('gate', 25 * TS, 83.5 * TS, 0, tag('homegate'))
+    obj('gate', 25 * TS, 83.5 * TS, 0, tag('homegate', hidden=True))
 
 def emit():
     build_world(); build_cave(); build_camp(); scatter()
-    objects.sort(key=lambda o: o[2])
     # Interactables
     interact('page1', 15 * TS, 50 * TS, 24, tag('page1'))
     for i, (x, y) in enumerate(((61.5, 48.3), (72, 45.2), (80.5, 41.5), (85, 36.5))):
@@ -354,9 +334,9 @@ def emit():
     # NPCs: key, sheet, x, y, waypoints [(x, y, wait, anim)]
     npcs = [
         ('elder', 'ELDER', 33, 39.5, [(33, 39.5, 360, 'idle'), (34.5, 39.6, 200, 'talk'), (42, 41.5, 220, 'idle'), (33, 39.5, 300, 'idle')]),
-        ('crafter', 'CRAFTER', 37.2, 40.6, [(37.2, 40.6, 520, 'work'), (39.2, 41.2, 140, 'idle'), (37.2, 40.6, 520, 'work')]),
+        ('crafter', 'CRAFTER', 37.2, 40.6, [(37.2, 40.6, 520, 'work', 2), (39.2, 41.2, 140, 'idle'), (37.2, 40.6, 520, 'work', 2)]),
         ('cook', 'COOK', 29, 42.5, [(29, 42.5, 420, 'work'), (24, 40.5, 160, 'work'), (27.2, 44, 300, 'work')]),
-        ('scraper', 'SCRAPER', 35, 39, [(35, 39, 480, 'work'), (31.2, 43, 260, 'talk'), (35, 39, 480, 'work')]),
+        ('scraper', 'SCRAPER', 35, 39, [(35, 39, 480, 'work', 0), (31.2, 43, 260, 'talk'), (35, 39, 480, 'work', 0)]),
         ('child', 'CHILD', 30, 38, [(30, 38, 120, 'idle'), (24, 44, 60, 'idle'), (36, 46, 100, 'idle'), (41, 38, 60, 'idle'), (30, 38, 140, 'talk')]),
         ('hunter', 'HUNTER', 89.2, 21.6, [(89.2, 21.6, 600, 'sit')]),
         ('dana', 'DANA', 70, 89, [(70, 89, 400, 'idle'), (74, 88, 200, 'idle')]),
@@ -372,61 +352,22 @@ def emit():
         ('cavemouth', 25 * TS, 104.5 * TS, 5), ('caveexit', 102 * TS, 10.2 * TS, 4),
         ('homegate', 76 * TS, 82.5 * TS, 6), ('campback', 30 * TS, 43.2 * TS, 1)]
 
-    lines = ['// Generated by scripts/rpgart/map01.py - do not edit by hand.', '#pragma once', 'namespace tj { namespace map01 {',
-             f'constexpr int MapW={MW}, MapH={MH};',
-             'enum TerrainId { ' + ', '.join('TR_' + t.upper() for t in W.TERRAINS) + ', TerrainCount };']
-    terr = ''.join(''.join(chr(48 + grid[y][x]) for x in range(MW)) for y in range(MH))
-    zon = ''.join(''.join(chr(48 + zone[y][x]) for x in range(MW)) for y in range(MH))
-    lines.append('constexpr const char terrain[]=')
-    for y in range(MH): lines.append('  "' + terr[y * MW:(y + 1) * MW] + '"')
-    lines.append(';')
-    lines.append('constexpr const char zones[]=')
-    for y in range(MH): lines.append('  "' + zon[y * MW:(y + 1) * MW] + '"')
-    lines.append(';')
-    lines.append('struct Area { short x0,y0,x1,y1; };')
-    lines.append('constexpr Area areas[]={' + ','.join('{%d,%d,%d,%d}' % (a[0] * TS, a[1] * TS, a[2] * TS, a[3] * TS) for a in AREAS.values()) + '};')
-    lines.append('constexpr int areaOfZone[7]={0,0,0,0,0,1,2};')
-    lines.append('enum KindId { ' + ', '.join('K_' + k[0].upper() for k in KINDS) + ', KindCount };')
-    lines.append('struct Kind { short sprite,frames,anim,hw,hh,flags; };')
-    lines.append('constexpr Kind kinds[KindCount]={' + ','.join('{art::%s,%d,%d,%d,%d,%d}' % (k[1], k[2], k[3], k[4], k[5], k[6]) for k in KINDS) + '};')
-    lines.append('enum TagId { ' + ', '.join('TAG_' + t.upper() for t in TAGS) + ', TagCount };')
-    lines.append('struct Obj { unsigned char kind,variant,tag; short x,y; };')
-    lines.append(f'constexpr int ObjCount={len(objects)};')
-    lines.append('constexpr Obj objs[ObjCount]={' + ','.join('{%d,%d,%d,%d,%d}' % (o[0], o[3], o[4], o[1], o[2]) for o in objects) + '};')
-    lines.append('struct IaDef { short x,y,r; unsigned char tag; };')
-    lines.append('enum InteractId { ' + ', '.join('IA_' + i[0].upper() for i in interacts) + ', InteractCount };')
-    lines.append('constexpr IaDef interacts[InteractCount]={' + ','.join('{%d,%d,%d,%d}' % (i[1], i[2], i[3], i[4]) for i in interacts) + '};')
-    lines.append('struct Trigger { short x0,y0,x1,y1; };')
-    lines.append('enum TriggerId { ' + ', '.join('TG_' + t[0].upper() for t in triggers) + ', TriggerCount };')
-    lines.append('constexpr Trigger triggers[TriggerCount]={' + ','.join('{%d,%d,%d,%d}' % t[1:] for t in triggers) + '};')
-    lines.append('struct Way { short x,y,wait; unsigned char anim; };')
-    lines.append('struct NpcDef { unsigned char sheet,ways; short x,y; Way way[5]; };')
-    lines.append('enum NpcId { ' + ', '.join('NPC_' + n[0].upper() for n in npcs) + ', NpcCount };')
-    rows = []
     for key, sheet, x, y, ways in npcs:
-        wl = ','.join('{%d,%d,%d,art::A_%s}' % (wx * TS, wy * TS, wt, a.upper()) for wx, wy, wt, a in ways)
-        rows.append('{art::SH_%s,%d,%d,%d,{%s}}' % (sheet, len(ways), x * TS, y * TS, wl))
-    lines.append('constexpr NpcDef npcDefs[NpcCount]={' + ','.join(rows) + '};')
-    lines.append('struct AnimalDef { unsigned char sheet; short x,y; };')
-    lines.append(f'constexpr int AnimalCount={len(animals)};')
-    lines.append('constexpr AnimalDef animalDefs[AnimalCount]={' + ','.join('{art::SH_%s,%d,%d}' % (s, x * TS, y * TS) for s, x, y in animals) + '};')
-    lines.append('struct EnemyDef { unsigned char type,group; short x,y; };')
-    lines.append(f'constexpr int EnemyCount={len(enemies)};')
-    lines.append('constexpr EnemyDef enemyDefs[EnemyCount]={' + ','.join('{%d,%d,%d,%d}' % (t, g, x * TS, y * TS) for t, x, y, g in enemies) + '};')
-    lines.append('struct Teleport { short x,y,zone; };')
-    lines.append('constexpr Teleport teleports[]={' + ','.join('{%d,%d,%d}' % (t[1], t[2], t[3]) for t in teleports) + '};')
-    lines.append(f'constexpr int SpawnX={12 * TS}, SpawnY={int(53.5 * TS)};')
-    lines.append('}}')
-    with open(os.path.join(ROOT, 'src/rpg/gen/map01.hpp'), 'w', encoding='utf-8') as f:
-        f.write('\n'.join(lines) + '\n')
-    meta = dict(size=[MW, MH], tile=TS, areas=AREAS, interacts=[i[0] for i in interacts], triggers=[t[0] for t in triggers],
-                npcs=[n[0] for n in npcs], tags=TAGS, teleports=[t[0] for t in teleports],
-                enemies=[dict(type=t, group=g) for t, x, y, g in enemies],
-                interactPos={i[0]: [i[1], i[2]] for i in interacts}, npcPos={n[0]: [n[2] * TS, n[3] * TS] for n in npcs})
-    with open(os.path.join(ROOT, 'src/rpg/gen/map01.js'), 'w', encoding='utf-8') as f:
-        f.write('// Generated by scripts/rpgart/map01.py - do not edit by hand.\n')
-        f.write('export const MAP01 = ' + json.dumps(meta, ensure_ascii=False, separators=(',', ':')) + ';\n')
-    print(f'map {MW}x{MH}: {len(objects)} objects, {len(interacts)} interactables, {len(triggers)} triggers')
+        LV.npc(key, sheet, x, y, ways, inactive=key in ('dana', 'erlan'), runner=key == 'child')
+    LV.animals.extend(animals)
+    LV.enemies.extend(enemies)
+    LV.teleports = [t[0] for t in teleports]
+    LV.area('world', *AREAS['world'])
+    LV.area('cave', *AREAS['cave'], dark=(52, 58, 72), outdoor=False)
+    LV.area('camp', *AREAS['camp'])
+    LV.zone_area = [0, 0, 0, 0, 0, 1, 2]
+    LV.zone_fx = [0, 0, 0, 1, 0, 2, 0]
+    LV.enemy_sheets = {0: 'WOLF', 1: 'STRANGER', 2: 'ARCHER', 3: 'BEAR'}
+    # item ids: 4 arrows, 5 kit, 9 herbs
+    LV.pickups = [(9, 2, 9, 45), (4, 6, 62.5, 50), (9, 1, 70, 61), (5, 1, 27, 22), (4, 8, 84, 26),
+                  (9, 2, 30, 97), (4, 6, 37, 92), (9, 2, 66, 29), (4, 5, 104, 40), (9, 1, 18, 24)]
+    LV.spawn = (12, 53.5)
+    LV.write()
 
 if __name__ == '__main__':
     emit()

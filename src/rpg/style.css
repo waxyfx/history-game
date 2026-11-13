@@ -173,3 +173,6 @@ html, body { height: 100%; overflow: hidden; background: #050909; }
 .journal-list article { border: 1px solid #ffffff1a; border-left-width: 4px; border-radius: .5em; padding: .4em .7em; background: #ffffff06; }
 .journal-list article.ok { border-left-color: #6fcf7f; } .journal-list article.no { border-left-color: #e06a3f; } .journal-list article.unplayed { opacity: .6; }
 .journal-list p { margin: .2em 0; font-size: .86em; } .journal-list .why { color: var(--gold2); }
+.epochs a.go { color: var(--gold); font-size: .75em; font-weight: 700; text-decoration: none; margin-top: .2em; }
+.epochs a.go:hover { text-decoration: underline; }
+.panel-card a.button { display: inline-block; padding: .55em 1.1em; border-radius: .5em; background: var(--gold); color: #1b1408; font-weight: 700; text-decoration: none; }

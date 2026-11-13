@@ -8,21 +8,24 @@ constexpr WeaponSpec weapons[]={{26,6,20,26,16},{30,10,30,44,7},{24,14,26,200,0}
 struct Vec { float x,y; };
 constexpr Vec directions[]={{0,-1},{.70710678f,-.70710678f},{1,0},{.70710678f,.70710678f},
     {0,1},{-.70710678f,.70710678f},{-1,0},{-.70710678f,-.70710678f}};
-enum EnemyType { Wolf, Stranger, Archer, Bear, EnemyTypeCount };
+enum EnemyType { Wolf, Stranger, Archer, Bear, Shade, Wraith, Keeper, EnemyTypeCount };
 enum EnemyState { Idle, Patrol, Chase, Attacking, Hurt, Death, Circle, Retreat, Roar, Charge, Stunned, Telegraph };
 struct EnemySpec { int health,damage,windup,recovery; float speed,detection,range; };
 constexpr EnemySpec enemySpecs[EnemyTypeCount]={
     {48,9,16,54,1.25f,112,17},   // wolf: fast pack hunter, circles then lunges
     {72,15,22,62,.82f,104,30},   // stranger with spear
     {56,11,32,84,.78f,150,128},  // stranger archer keeps distance
-    {280,24,28,70,.62f,128,28}}; // cave bear: roar, charge, swipe
+    {280,24,28,70,.62f,128,28},  // cave bear: roar, charge, swipe
+    {64,14,16,50,1.05f,124,22},  // shade-touched warrior: lunging cut
+    {42,12,30,72,.72f,150,118},  // ash wraith: floats, throws fire bolts
+    {640,22,36,50,.58f,170,34}}; // boss: distorted keeper of the sacred fire
 struct Attack {
     int age=0,weapon=0,facing=4,cooldown=0;
     bool active=false,connected=false;
     float x=0,y=0;
 };
 struct Projectile {
-    bool active=false,cosmetic=false;
+    bool active=false,cosmetic=false,fire=false;
     int owner=-1,damage=0,facing=0; // owner: <0 player slot -(slot+1), >=0 enemy index
     float x=0,y=0,dx=0,dy=0,remaining=0;
 };

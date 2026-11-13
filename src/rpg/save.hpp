@@ -31,14 +31,16 @@ int restore(int length) {
     const auto* w=saveWords;
     if(length<16||length>int(sizeof(saveWords))||length%4||w[0]!=SaveMagic)return -1;
     if(w[1]!=SaveVersion)return -2;
-    if(length!=SaveCount*4||w[2]!=uint32_t(SaveCount)||w[3]!=saveChecksum(SaveCount))return -1;
+    // Accept the current layout and the MAP01 layout written before the item list grew (14 items).
+    int nItems=int(w[2])-24-EnemyCount*2;
+    if((nItems!=ItemCount&&nItems!=LegacyItemCount)||length!=int(w[2])*4||w[3]!=saveChecksum(int(w[2])))return -1;
     float x=w[4]/1000.f,y=w[5]/1000.f;
     if(w[4]>=uint32_t(MapW*Tile*1000)||w[5]>=uint32_t(MapH*Tile*1000)||w[6]>=uint32_t(ZoneCount)||w[7]>100||w[8]>3||w[9]>2||w[11]>7)return -1;
     if(w[10]<1||w[10]>=(1u<<ZoneCount)||(w[7]==0)!=(w[8]==0))return -1;
     if(blockedFeet(x,y))return -1;
-    for(int i=0;i<ItemCount;++i)if(w[24+i]>uint32_t(items[i].limit))return -1;
+    for(int i=0;i<nItems;++i)if(w[24+i]>uint32_t(items[i].limit))return -1;
     if(w[24]!=1)return -1; // the sword is never lost
-    for(int i=0;i<EnemyCount;++i)if(w[24+ItemCount+i*2]>uint32_t(enemySpecs[enemyDefs[i].type].health))return -1;
+    for(int i=0;i<EnemyCount;++i)if(w[24+nItems+i*2]>uint32_t(enemySpecs[enemyDefs[i].type].health))return -1;
     // Validation passed: rebuild the world, then apply the saved state.
     int paused=game.paused,netRole=game.netRole,party=game.partySize,sheet=players[0].sheet;
     reset();
@@ -51,8 +53,8 @@ int restore(int length) {
     for(int i=0;i<InteractCount&&i<32;++i)world.iaEnabled[i]=(w[14]>>i)&1;
     game.triggerFired=w[15];game.triggerArmed=w[16];game.groups=w[17];game.torch=w[18];
     game.checkX=w[19];game.checkY=w[20];game.kills=w[21];game.completedTasks=w[22];game.storyEvents=w[23];
-    for(int i=0;i<ItemCount;++i)game.inv.counts[i]=w[24+i];
-    for(int i=0;i<EnemyCount;++i){auto& e=enemies[i];e.hp=w[24+ItemCount+i*2];e.active=e.hp>0;e.alerted=0;}
+    for(int i=0;i<ItemCount;++i)game.inv.counts[i]=i<nItems?w[24+i]:0;
+    for(int i=0;i<EnemyCount;++i){auto& e=enemies[i];e.hp=w[24+nItems+i*2];e.active=e.hp>0;e.alerted=0;}
     game.gameover=!game.lives;p.invuln=60;
     if(!p.hp)p.hp=p.maxhp;
     snapCamera();

@@ -15,13 +15,19 @@ const names=['init','atlas','atlas_size','atlas_ready','input','tick','render','
   'cinematic','camera','shake','light','light_now','fog','torch','shadow','pose','face','walk_to','tag','ia','trigger_arm','npc','npc_set',
   'npc_goto','npc_routine','npc_flags','npc_face','spawn_fx','spawn_item','save_buffer','save','load'].map(n=>'_tj_'+n);
 const testing=process.argv.includes('--test');
+// One engine, one binary per epoch: -DTJ_LEVEL selects the generated level header.
+const levelArg=process.argv.find(a=>a.startsWith('--level='));
+const levels=testing?[1]:levelArg?[+levelArg.slice(8)]:[1,2];
 if(testing){await mkdir('tests/fixtures',{recursive:true});names.push('_fixture_player','_fixture_enemy','_fixture_hp','_fixture_arc');}
-// 24 MiB fixed memory: 9 MiB sprite atlas + framebuffer, light buffer and map data.
-const args=[emcc,testing?'tests/rpg-fixture.cpp':'src/rpg/engine.cpp','-std=c++17','-O2','-Wall','-Wextra','-Werror',
-    '--no-entry','-sSTANDALONE_WASM=1','-sFILESYSTEM=0','-sINITIAL_MEMORY=25165824',
+// 32 MiB fixed memory: ~15 MiB shared sprite atlas + framebuffer, light buffer and map data.
+for(const level of levels){
+const out=testing?'tests/fixtures/rpg-fixture.wasm':level===1?'public/engine/rpg/tarikh-rpg.wasm':`public/engine/rpg/tarikh-rpg-${level}.wasm`;
+const args=[emcc,testing?'tests/rpg-fixture.cpp':'src/rpg/engine.cpp','-DTJ_LEVEL='+level,'-std=c++17','-O2','-Wall','-Wextra','-Werror',
+    '--no-entry','-sSTANDALONE_WASM=1','-sFILESYSTEM=0','-sINITIAL_MEMORY=33554432',
     '-sSTACK_SIZE=131072','-sALLOW_MEMORY_GROWTH=0','-sEXPORTED_FUNCTIONS='+JSON.stringify(names),
-    '-o',testing?'tests/fixtures/rpg-fixture.wasm':'public/engine/rpg/tarikh-rpg.wasm'];
+    '-o',out];
 const result=spawnSync(python,args,{stdio:'inherit',env:{...process.env,EM_CONFIG:process.env.EM_CONFIG||resolve(sdk,'.emscripten')}});
 if(result.error)throw result.error;
 if(result.status)process.exit(result.status);
-console.log('Built '+(testing?'tests/fixtures/rpg-fixture.wasm':'public/engine/rpg/tarikh-rpg.wasm'));
+console.log('Built '+out);
+}

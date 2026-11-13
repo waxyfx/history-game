@@ -16,7 +16,8 @@ export function makeCode() {
   return s;
 }
 
-export function createParty(code, {name, onMessage, onMembers, onRefused}) {
+export function createParty(code, {name, onMessage, onMembers, onRefused, scope = 1}) {
+  const room = (scope > 1 ? scope + '-' : '') + code;
   const me = {id: rid(), name: String(name || '').slice(0, 24), joined: Date.now()};
   let members = [me], closed = false, channel = null, bc = null, hb = 0;
   const seen = new Map(); // BroadcastChannel presence: id -> {member, last}
@@ -45,7 +46,7 @@ export function createParty(code, {name, onMessage, onMembers, onRefused}) {
   }
 
   if (transport === 'supabase') {
-    channel = db.channel('tj-party-' + code, {config: {broadcast: {self: false}, presence: {key: me.id}}});
+    channel = db.channel('tj-party-' + room, {config: {broadcast: {self: false}, presence: {key: me.id}}});
     channel.on('broadcast', {event: 'm'}, ({payload}) => receive(payload));
     channel.on('presence', {event: 'sync'}, () => {
       const state = channel.presenceState();
@@ -55,7 +56,7 @@ export function createParty(code, {name, onMessage, onMembers, onRefused}) {
     });
     channel.subscribe(status => { if (status === 'SUBSCRIBED') channel.track(me); });
   } else {
-    bc = new BroadcastChannel('tj-party-' + code);
+    bc = new BroadcastChannel('tj-party-' + room);
     bc.onmessage = e => {
       const msg = e.data;
       if (msg?.type === 'hello' || msg?.type === 'bye') {

@@ -9,7 +9,7 @@ Outputs:
 import math, os, sys, struct, zlib
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from rpgart.core import *
-from rpgart import world as W, chars as C
+from rpgart import world as W, chars as C, chars2 as C2, bronze as B
 
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -125,12 +125,14 @@ def icon(kind):
     return outline(img), (8, 15)
 
 # ------------------------------------------------------------ registry
+FRINGES = ('grass', 'steppe', 'dirt', 'sand', 'camp', 'shallow', 'ash', 'clay', 'pave')
+WATER_FRINGES = ('grass', 'steppe', 'dirt', 'sand')
 def register():
     for k in W.TERRAINS:
         for v in range(4):
             add(f'T_{k}_{v}', (W.texture(k, v, frame=v if k in ('water', 'shallow') else 0), (0, 0)))
     DIRS = ['n', 'e', 's', 'w', 'ne', 'se', 'sw', 'nw']
-    for k in ('grass', 'steppe', 'dirt', 'sand', 'camp', 'shallow'):
+    for k in FRINGES:
         for d in DIRS:
             add(f'F_{k}_{d}', (W.fringe(k, d, False, seed=len(k)), (0, 0)))
     for k in ('grass', 'steppe', 'dirt', 'sand'):
@@ -139,6 +141,8 @@ def register():
     for v in range(3):
         add(f'FACE_rock_{v}', (W.rock_face(v), (0, 0)))
         add(f'FACE_cave_{v}', (W.rock_face(v, cave=True), (0, 0)))
+    for v in range(3):
+        add(f'FACE_deep_{v}', (W.rock_face(v, deep=True), (0, 0)))
     # Props
     for v in range(2): add(f'O_poplar_{v}', W.tree_poplar(v))
     for v in range(2): add(f'O_birch_{v}', W.tree_birch(v))
@@ -187,10 +191,41 @@ def register():
     for f in range(3): add(f'X_ring_{f}', fx_ring(f))
     for k in ('sword', 'spear', 'bow', 'arrows', 'kit', 'herb', 'tool', 'page', 'quiver', 'ochre', 'flute', 'crystal', 'torch', 'necklace'):
         add(f'I_{k}', icon(k))
+    # ---- MAP02 (bronze age)
+    for v in range(2): add(f'O_dugout_{v}', B.dugout(v))
+    for f in range(4): add(f'O_furnace_{f}', B.furnace(f))
+    add('O_furnacecold', B.furnace(0, cold=True)); add('O_anvil', B.anvil()); add('O_bellows', B.bellows())
+    add('O_mould', B.mould()); add('O_crucible', B.crucible())
+    for k in ('charcoal', 'ore', 'slag'): add(f'O_{k}', B.heap(k))
+    add('O_toolrack', B.toolrack())
+    for v in range(3): add(f'O_jar_{v}', B.jar(v))
+    add('O_grainpit', B.grainpit()); add('O_quern', B.quern())
+    for v in range(2): add(f'O_fence_{v}', B.fence(v))
+    for v in range(2): add(f'O_hearth_{v}', B.hearth(v))
+    for f in range(4): add(f'O_hearthfire_{f}', B.hearthfire(f))
+    for v in range(2): add(f'O_menhir_{v}', B.menhir(v))
+    for v in range(3): add(f'O_pgstone_{v}', B.pgstone(v))
+    add('O_cist', B.cist()); add('O_mausoleum', B.mausoleum()); add('O_kurgan', B.kurgan())
+    for f in range(4): add(f'O_torch_{f}', B.torch(f))
+    add('O_beam', B.beam())
+    for v in range(4): add(f'O_mural_{v}', B.mural(v))
+    for f in range(3): add(f'O_ember_{f}', B.ember(f))
+    for v in range(2): add(f'O_pillar_{v}', B.pillar(v))
+    for f in range(2): add(f'O_tablet_{f}', B.tablet(f))
+    for v in range(2): add(f'O_trapdoor_{v}', B.trapdoor(v))
+    add('O_stairs', B.stairs()); add('O_ashpile', B.ashpile()); add('O_symbol', B.symbol()); add('O_altar', B.altar())
+    for v in range(2): add(f'O_deadtree_{v}', B.deadtree(v))
+    add('O_brazier', B.brazier()); add('O_sheaf', B.sheaf())
+    for f in range(2): add(f'X_firebolt_{f}', B.firebolt(f))
+    for k in ('tablet', 'ember', 'mould', 'seal', 'bracelet'): add(f'I_{k}', B.icon(k))
     for n in C.PORTRAITS:
         add(f'P_{n}', (C.portrait(n), (0, 0)))
 
 HUMAN_SHEETS = {
+    'smith': ['idle', 'walk', 'talk', 'work'], 'matriarch': ['idle', 'walk', 'talk'], 'guard': ['idle', 'walk', 'talk', 'spear'],
+    'shepherd': ['idle', 'walk', 'run', 'talk'], 'grainkeeper': ['idle', 'walk', 'talk', 'work'], 'villager': ['idle', 'walk', 'talk', 'work'],
+    'villagerw': ['idle', 'walk', 'talk', 'work'], 'shade': ['idle', 'walk', 'run', 'sword', 'hurt', 'death'],
+    'raider': ['idle', 'walk', 'run', 'spear', 'bow', 'hurt', 'death'],
     'aibar': ['idle', 'walk', 'run', 'sword', 'spear', 'bow', 'hurt', 'death', 'interact', 'revive', 'victory'],
     'dana': ['idle', 'walk', 'run', 'sword', 'spear', 'bow', 'hurt', 'death', 'interact', 'revive', 'victory'],
     'erlan': ['idle', 'walk', 'run', 'sword', 'spear', 'bow', 'hurt', 'death', 'interact', 'revive', 'victory'],
@@ -204,6 +239,7 @@ HUMAN_SHEETS = {
     'archer': ['idle', 'walk', 'run', 'bow', 'hurt', 'death'],
 }
 ANIMAL_SHEETS = {
+    'cow': ['idle', 'walk', 'run', 'graze'], 'sheep': ['idle', 'walk', 'run', 'graze'],
     'wolf': ['idle', 'walk', 'run', 'bite', 'hurt', 'death', 'howl'],
     'saiga': ['idle', 'walk', 'run', 'graze', 'hurt', 'death'],
     'bear': ['idle', 'walk', 'charge', 'swipe', 'roar', 'hurt', 'death'],
@@ -256,6 +292,15 @@ def main():
                     img.alpha_composite(C.animal_frame(sp, v, a, f), (f * cell, vi * cell))
             blocks.append((('S', sp, a), img))
         sheet_meta[sp] = dict(cell=cell, views=3, anchor=(cell // 2, cell - 3), anims=anims)
+    for name, (cell, fn, anims) in C2.CUSTOM.items():
+        for a in anims:
+            n = C.FRAMES[a]
+            img = new(n * cell, 3 * cell)
+            for vi, v in enumerate(C.ANIMAL_VIEWS):
+                for f in range(n):
+                    img.alpha_composite(fn(v, a, f), (f * cell, vi * cell))
+            blocks.append((('S', name, a), img))
+        sheet_meta[name] = dict(cell=cell, views=3, anchor=(cell // 2, cell - 4), anims=anims)
     items = [(('P', i), s[1].width, s[1].height) for i, s in enumerate(sprites)] + [(b[0], b[1].width, b[1].height) for b in blocks]
     WIDTH = 2048
     pos, height = pack(items, WIDTH)
@@ -297,6 +342,18 @@ def main():
         rows.append('  {%d,%d,%d,%d,{%s}}' % (m['cell'], m['views'], m['anchor'][0], m['anchor'][1], ','.join(bl)))
     lines.append(',\n'.join(rows) + '};')
     lines.append('constexpr const char* terrainNames[]={' + ','.join('"%s"' % t for t in W.TERRAINS) + '};')
+    # Terrain rules shared by every level (drawTerrain / collisions in the engine).
+    idx = {n: i for i, (n, _, _) in enumerate(sprites)}
+    face = {'rock': ('FACE_rock_0', 2), 'cavewall': ('FACE_cave_0', 2), 'deepwall': ('FACE_deep_0', 1)}
+    lines.append('constexpr unsigned char terrainPriority[]={' + ','.join(str(W.PRIORITY.get(t, 9)) for t in W.TERRAINS) + '};')
+    lines.append('constexpr unsigned char terrainSolid[]={' + ','.join('1' if t in W.SOLID else '0' for t in W.TERRAINS) + '};')
+    lines.append('constexpr short terrainBase[]={' + ','.join(str(idx[f'T_{t}_0']) for t in W.TERRAINS) + '};')
+    lines.append('constexpr short terrainFace[]={' + ','.join(str(idx[face[t][0]]) if t in face else '-1' for t in W.TERRAINS) + '};')
+    lines.append('constexpr unsigned char terrainFaceStride[]={' + ','.join(str(face[t][1]) if t in face else '0' for t in W.TERRAINS) + '};')
+    lines.append('constexpr short fringeBase[]={' + ','.join(str(idx[f'F_{t}_n']) if t in FRINGES else '-1' for t in W.TERRAINS) + '};')
+    lines.append('constexpr short fringeWaterBase[]={' + ','.join(str(idx[f'FW_{t}_n']) if t in WATER_FRINGES else '-1' for t in W.TERRAINS) + '};')
+    lines.append('constexpr unsigned char terrainWet[]={' + ','.join('1' if t in ('water', 'shallow') else '0' for t in W.TERRAINS) + '};')
+    lines.append('constexpr unsigned char terrainAnimated[]={' + ','.join('1' if t in ('water', 'shallow') else '0' for t in W.TERRAINS) + '};')
     lines.append('}}')
     with open(os.path.join(ROOT, 'src/rpg/gen/atlas.hpp'), 'w', encoding='utf-8') as f:
         f.write('\n'.join(lines) + '\n')

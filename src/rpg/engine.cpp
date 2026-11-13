@@ -42,7 +42,8 @@ struct Npc {
 struct Animal { bool active=true; int sheet; float x,y,hx,hy,vx=0,vy=0; int facing=2,anim=art::A_IDLE,animTime=0,timer=0,flee=0; };
 struct Enemy {
     bool active=true,enabled=true;
-    int type=0,group=0,hp=0,state=Idle,facing=4,timer=0,anim=art::A_IDLE,animTime=0,target=-1,alerted=0,seed=0,hitFlash=0,showBar=0;
+    int type=0,group=0,hp=0,state=Idle,facing=4,timer=0,anim=art::A_IDLE,animTime=0,target=-1,alerted=0,seed=0,hitFlash=0,showBar=0,phase=1,special=0;
+    float px[3]{},py[3]{};
     float x=0,y=0,homeX=0,homeY=0,dx=0,dy=0,nx=0,ny=0;
     Attack attack;
 };
@@ -50,11 +51,7 @@ struct Pickup { bool active=false; int item=0,qty=0,id=-1; float x=0,y=0; int bo
 struct Particle { float x,y,vx,vy; short life,max; uint8_t type; uint32_t color; };
 constexpr int MaxParticles=420, MaxPickups=40;
 
-struct PickupDef { short item,qty,x,y; };
-constexpr PickupDef pickupDefs[]={
-    {IHerb,2,9*16,45*16},{IArrows,6,62*16+8,50*16},{IHerb,1,70*16,61*16},{IKit,1,27*16,22*16},{IArrows,8,84*16,26*16},
-    {IHerb,2,30*16,97*16},{IArrows,6,37*16,92*16},{IHerb,2,66*16,29*16},{IArrows,5,104*16,40*16},{IHerb,1,18*16,24*16}};
-constexpr int PickupDefCount=sizeof(pickupDefs)/sizeof(pickupDefs[0]);
+// Pickups, NPC roles, areas, lights and enemy sheets are level data (gen/mapNN.hpp).
 
 struct Game {
     int ticks=0,zone=0,visited=1,lives=3,gameover=0,paused=0,control=1,cinematic=0,netRole=0,partySize=1;
@@ -62,7 +59,7 @@ struct Game {
     float camX=0,camY=0,camTX=0,camTY=0,camSpeed=2; int camMode=0,shake=0;
     int ambT[3]={200,200,200},amb[3]={200,200,200},worldAmb[3]={200,200,200};
     int fog=0,fogCur=0,torch=0;
-    int checkX=map01::SpawnX,checkY=map01::SpawnY;
+    int checkX=level::SpawnX,checkY=level::SpawnY;
     int focusKind=-1,focusId=-1;
     unsigned triggerFired=0,triggerArmed=0xffffffffu,staticPicked=0;
     int platesMask=0,groups=0x3,kills=0,lastPickup=0,alarm=0;
@@ -84,7 +81,7 @@ inline float frand(){ return (rng()&0xffff)/65535.f; }
 static unsigned hash2(unsigned x,unsigned y){unsigned n=x*374761393u+y*668265263u+17;n=(n^(n>>13))*1274126177u;return n^(n>>16);}
 
 Player& me(){ return players[0]; }
-int areaIndex(){ return areaOfZone[game.zone<0?0:game.zone>6?0:game.zone]; }
+int areaIndex(){ return areaOfZone[game.zone<0||game.zone>=ZoneCount?0:game.zone]; }
 const Area& area(){ return areas[areaIndex()]; }
 
 void sfx(int id,float x,float y){
@@ -102,7 +99,7 @@ void spawnPickup(int item,int qty,float x,float y,int id=-1){
 }
 void initActors(){
     for(int i=0;i<NpcCount;++i){Npc n;n.sheet=npcDefs[i].sheet;n.x=npcDefs[i].x;n.y=npcDefs[i].y;n.wait=npcDefs[i].way[0].wait;n.anim=npcDefs[i].way[0].anim;npcs[i]=n;}
-    npcs[NPC_DANA].active=false;npcs[NPC_ERLAN].active=false;
+    for(int i=0;i<NpcCount;++i)if(npcDefs[i].flags&1)npcs[i].active=false;
     for(int i=0;i<AnimalCount;++i){Animal a;a.sheet=animalDefs[i].sheet;a.x=a.hx=animalDefs[i].x;a.y=a.hy=animalDefs[i].y;a.timer=int(rng()%200);animals[i]=a;}
     for(int i=0;i<EnemyCount;++i){Enemy e;e.type=enemyDefs[i].type;e.group=enemyDefs[i].group;e.x=e.homeX=enemyDefs[i].x;e.y=e.homeY=enemyDefs[i].y;
         e.hp=enemySpecs[e.type].health;e.seed=i*7+3;e.nx=e.x;e.ny=e.y;e.timer=int(rng()%90);enemies[i]=e;}
@@ -121,9 +118,9 @@ void initCloud(){
 }
 
 // ------------------------------------------------------------------ combat helpers
-bool launch(int owner,float x,float y,int facing,int damage,bool cosmetic=false){
-    for(auto& p:projectiles)if(!p.active){auto d=directions[facing];
-        p.active=true;p.cosmetic=cosmetic;p.owner=owner;p.damage=damage;p.facing=facing;p.x=x+d.x*6;p.y=y+d.y*6;p.dx=d.x*4.2f;p.dy=d.y*4.2f;p.remaining=220;return true;}
+bool launch(int owner,float x,float y,int facing,int damage,bool cosmetic=false,bool fire=false){
+    for(auto& p:projectiles)if(!p.active){auto d=directions[facing];float sp=fire?2.6f:4.2f;
+        p.active=true;p.cosmetic=cosmetic;p.fire=fire;p.owner=owner;p.damage=damage;p.facing=facing;p.x=x+d.x*6;p.y=y+d.y*6;p.dx=d.x*sp;p.dy=d.y*sp;p.remaining=220;return true;}
     return false;
 }
 bool startAttack(Attack& a,int weapon,int facing,float x,float y){
@@ -135,6 +132,9 @@ void dropLoot(const Enemy& e){
     if(e.type==Wolf){ if(r<45)spawnPickup(IHerb,1,e.x,e.y); }
     else if(e.type==Stranger){ spawnPickup(IArrows,4,e.x,e.y); if(r<40)spawnPickup(IHerb,1,e.x+8,e.y+2); }
     else if(e.type==Archer){ spawnPickup(IArrows,7,e.x,e.y); }
+    else if(e.type==Shade){ if(r<50)spawnPickup(IHerb,1,e.x,e.y); for(int i=0;i<16;++i)particle(e.x,e.y-12,(frand()-.5f)*2,-frand()*2,40,0,rgba(0xa35cc0)); }
+    else if(e.type==Wraith){ if(r<40)spawnPickup(IArrows,4,e.x,e.y); }
+    else if(e.type==Keeper){ spawnPickup(IKit,1,e.x-10,e.y); spawnPickup(IArrows,10,e.x+10,e.y); }
     else if(e.type==Bear){ spawnPickup(IKit,1,e.x-8,e.y); spawnPickup(IArrows,8,e.x+8,e.y); }
 }
 void alertGroup(int group){ for(auto& e:enemies)if(e.group==group&&e.hp>0&&!e.alerted){e.alerted=1;emit(EV_ALERT,int(&e-enemies),e.type);} }
@@ -148,9 +148,9 @@ void hurtEnemy(Enemy& e,int damage,float fromX,float fromY){
     if(!blockedFeet(e.x+dx/len*kb,e.y,5,3))e.x+=dx/len*kb;
     if(!blockedFeet(e.x,e.y+dy/len*kb,5,3))e.y+=dy/len*kb;
     for(int i=0;i<5;++i)particle(e.x,e.y-8,(frand()-.5f)*2,-frand()*1.5f,18,0,rgba(0xf3d68b));
-    if(e.hp==0){e.state=Death;e.timer=150;e.attack.active=false;e.animTime=0;++game.kills;dropLoot(e);
+    if(e.hp==0){e.state=Death;e.timer=e.type==Keeper?200:150;e.attack.active=false;e.animTime=0;++game.kills;dropLoot(e);
         sfx(SFX_ENEMY_DIE,e.x,e.y);emit(EV_ENEMY_DIED,int(&e-enemies),e.type);}
-    else { if(e.type!=Bear||e.state!=Charge){e.state=Hurt;e.timer=12;e.attack.active=false;} sfx(SFX_ENEMY_HURT,e.x,e.y); }
+    else { if(e.type!=Keeper&&(e.type!=Bear||e.state!=Charge)){e.state=Hurt;e.timer=12;e.attack.active=false;} sfx(SFX_ENEMY_HURT,e.x,e.y); }
 }
 // Player-side hit on an enemy: the host applies it, a network client only predicts the flash.
 void playerHitsEnemy(int index,int damage,float fx,float fy){
@@ -363,13 +363,13 @@ void tickNpcs(){
         const auto& w=def.way[n.way];
         float wx=w.x-n.x,wy=w.y-n.y;
         if(wx*wx+wy*wy>2){
-            bool runner=i==NPC_CHILD;
+            bool runner=(npcDefs[i].flags&2)!=0;
             walkTo(n.x,n.y,n.facing,w.x,w.y,runner?1.2f:.55f);
             setAnim(n.anim,n.animTime,runner&&art::sheets[n.sheet].anim[art::A_RUN].x>=0?art::A_RUN:art::A_WALK);
         } else {
             int want=art::sheets[n.sheet].anim[w.anim].x>=0?w.anim:art::A_IDLE;
             setAnim(n.anim,n.animTime,want);
-            if(want==art::A_WORK)n.facing=i==NPC_CRAFTER?2:i==NPC_SCRAPER?0:n.facing;
+            if(w.facing>=0)n.facing=w.facing;
             if(--n.wait<=0){n.way=(n.way+1)%def.ways;n.wait=def.way[n.way].wait;}
         }
     }
@@ -438,14 +438,109 @@ int nearestPlayer(const Enemy& e,float& dist){
 void enemyResolveAttack(Enemy& e){
     const auto& spec=enemySpecs[e.type];
     if(e.type==Archer){launch(int(&e-enemies),e.x,e.y-8,e.attack.facing,spec.damage);sfx(SFX_BOW,e.x,e.y);return;}
-    float reach=e.type==Wolf?20:e.type==Bear?30:34,width=e.type==Bear?20:e.type==Wolf?12:8;
+    if(e.type==Wraith){launch(int(&e-enemies),e.x,e.y-14,e.attack.facing,spec.damage,false,true);sfx(SFX_BOWSTRING,e.x,e.y);return;}
+    float reach=e.type==Wolf?20:e.type==Bear?30:e.type==Shade?26:34,width=e.type==Bear?20:e.type==Wolf||e.type==Shade?12:8;
     sfx(e.type==Wolf?SFX_GROWL:e.type==Bear?SFX_SWIPE:SFX_SPEAR,e.x,e.y);
     auto d=directions[e.attack.facing];
     for(int s=0;s<MaxPlayers;++s){auto& p=players[s];if(!p.active||p.hp<=0||p.down)continue;
         float dx=p.x-e.x,dy=p.y-e.y,fw=dx*d.x+dy*d.y,side=dx*d.y-dy*d.x;
         if(fw>-4&&fw<reach&&fabsf(side)<width)hitPlayer(s,spec.damage);}
 }
+// ------------------------------------------------------------------ boss: «Бұрмаланған от сақшысы»
+// Three phases (100-66-33%). Attacks are always telegraphed on the ground first:
+//   slam   - red ring around the boss, then a shockwave (close range)
+//   breath - a cone toward the target, then a stream of fire (mid range)
+//   pillars (phase 3) - three circles under the players, then columns of fire
+// Phase 2 wakes two ash wraiths (the group after the boss's group).
+int bossIndex=-1;
+void keeperHitArea(float cx,float cy,float r,int dmg){
+    for(int s=0;s<MaxPlayers;++s){auto& p=players[s];if(!p.active||p.hp<=0||p.down)continue;
+        float dx=p.x-cx,dy=(p.y-cy)*1.3f;if(dx*dx+dy*dy<r*r)hitPlayer(s,dmg);}
+}
+bool inCone(const Enemy& e,float px,float py,float len,float cosHalf){
+    auto d=directions[e.facing];float dx=px-e.x,dy=py-(e.y-8),l=sqrtf(dx*dx+dy*dy)+.01f;
+    return l<len&&(dx*d.x+dy*d.y)/l>cosHalf;
+}
+void tickKeeper(Enemy& e){
+    const auto& spec=enemySpecs[e.type];
+    bossIndex=int(&e-enemies);
+    if(e.state==Death){ if(e.timer>0)--e.timer;
+        if(e.timer%6==0&&e.timer>60)for(int i=0;i<6;++i)particle(e.x+(frand()-.5f)*40,e.y-10-frand()*30,(frand()-.5f)*1.5f,-frand()*1.5f,40,0,rgba(frand()<.5f?0xffb347:0x8a8a8a));
+        if(!e.timer)e.active=false; setAnim(e.anim,e.animTime,art::A_DEATH); return; }
+    if(game.cinematic){setAnim(e.anim,e.animTime,art::A_IDLE);return;}
+    float dist;int target=nearestPlayer(e,dist);
+    if(target<0){ setAnim(e.anim,e.animTime,art::A_IDLE); e.special=0; return; }
+    const Player& p=players[target];
+    float dx=p.x-e.x,dy=p.y-e.y;
+    int maxhp=spec.health,phase=e.hp*3>maxhp*2?1:e.hp*3>maxhp?2:3;
+    if(!e.alerted){e.alerted=1;alertGroup(e.group);e.state=Roar;e.timer=90;game.shake=24;sfx(SFX_ROAR,e.x,e.y);}
+    if(phase>e.phase){e.phase=phase;e.state=Roar;e.timer=70;e.special=0;game.shake=20;sfx(SFX_ROAR,e.x,e.y);
+        for(int i=0;i<24;++i)particle(e.x,e.y-20,(frand()-.5f)*3,(frand()-.5f)*3,40,0,rgba(0xffb347));}
+    if(e.state==Roar){ setAnim(e.anim,e.animTime,art::A_ROAR); if(--e.timer<=0){e.state=Chase;e.attack.cooldown=40;} return; }
+    float speed=spec.speed*(phase==3?1.35f:1.f);
+    int tele=phase==3?30:40;
+    switch(e.special){
+    case 1: // slam telegraph -> impact
+        setAnim(e.anim,e.animTime,art::A_SWIPE);
+        if(--e.timer<=0){keeperHitArea(e.x,e.y,54,spec.damage+2);game.shake=16;sfx(SFX_IMPACT,e.x,e.y);
+            for(int i=0;i<36;++i){float a=i/36.f*6.283f;particle(e.x+cosf(a)*20,e.y+sinf(a)*12,cosf(a)*2.2f,sinf(a)*1.4f,26,2);}
+            e.special=0;e.attack.cooldown=phase==3?50:70;}
+        return;
+    case 2: // breath telegraph
+        setAnim(e.anim,e.animTime,art::A_ROAR);
+        if(--e.timer<=0){e.special=3;e.timer=54;}
+        return;
+    case 3: // fire stream
+        setAnim(e.anim,e.animTime,art::A_ROAR);
+        if(e.timer%3==0){auto d=directions[e.facing];for(int i=0;i<3;++i)particle(e.x+d.x*12,e.y-12+d.y*8,d.x*(3+frand()*2)+(frand()-.5f),d.y*(3+frand()*2)+(frand()-.5f),26,0,rgba(frand()<.5f?0xffd24a:0xe0621f));}
+        if(e.timer%9==0)for(int s=0;s<MaxPlayers;++s){auto& q=players[s];if(q.active&&q.hp>0&&!q.down&&inCone(e,q.x,q.y,96,.82f))hitPlayer(s,7);}
+        if(--e.timer<=0){e.special=0;e.attack.cooldown=phase==3?40:60;}
+        return;
+    case 4: // fire pillars telegraph -> eruption
+        setAnim(e.anim,e.animTime,art::A_CHARGE);
+        if(--e.timer<=0){for(int k=0;k<3;++k){keeperHitArea(e.px[k],e.py[k],20,20);for(int i=0;i<14;++i)particle(e.px[k]+(frand()-.5f)*14,e.py[k],(frand()-.5f)*.6f,-1.5f-frand()*2,30,0,rgba(0xffb347));}
+            game.shake=10;sfx(SFX_IMPACT,e.x,e.y);e.special=0;e.attack.cooldown=60;}
+        return;
+    }
+    if(e.attack.cooldown)--e.attack.cooldown;
+    e.facing=heading(dx,dy);
+    if(!e.attack.cooldown){
+        if(phase==3&&dist>40&&(e.seed++%3)==0){e.special=4;e.timer=50;
+            for(int k=0;k<3;++k){const Player& q=players[k<MaxPlayers&&players[k].active?k:target];e.px[k]=q.x+(k==0?0:(frand()-.5f)*60);e.py[k]=q.y+(k==0?0:(frand()-.5f)*40);}
+            sfx(SFX_ROAR,e.x,e.y);return;}
+        if(dist<52){e.special=1;e.timer=tele;sfx(SFX_GROWL,e.x,e.y);return;}
+        if(dist<140){e.special=2;e.timer=tele-6;sfx(SFX_ROAR,e.x,e.y);return;}
+    }
+    if(dist>30){walkEnemy(e,p.x,p.y,speed);setAnim(e.anim,e.animTime,art::A_WALK);}
+    else setAnim(e.anim,e.animTime,art::A_IDLE);
+}
+void drawKeeperTelegraphs(const Enemy& e){
+    int cx=int(e.x)-renderer.camX,cy=int(e.y)-renderer.camY;
+    unsigned pulse=120+unsigned(60*sinf(game.ticks*.4f));
+    uint32_t red=rgba(0xe0421f,pulse),core=rgba(0xffb347,pulse/2);
+    if(e.special==1){ // ring
+        for(int i=0;i<96;++i){float a=i/96.f*6.283f;renderer.pixel(cx+int(cosf(a)*54),cy+int(sinf(a)*41),red);renderer.pixel(cx+int(cosf(a)*53),cy+int(sinf(a)*40),red);}
+        int r=54*(40-e.timer)/40;for(int i=0;i<64;++i){float a=i/64.f*6.283f;renderer.pixel(cx+int(cosf(a)*r),cy+int(sinf(a)*r*.76f),core);}
+    }
+    if(e.special==2||e.special==3){ // cone
+        auto d=directions[e.facing];
+        for(int l=10;l<96;l+=4)for(int k=-l*6/10;k<=l*6/10;k+=3){
+            float px=d.x*l-d.y*k,py=d.y*l+d.x*k;
+            renderer.pixel(cx+int(px),cy-8+int(py),e.special==2?red:rgba(0xffd24a,60));}
+    }
+    if(e.special==4)for(int k=0;k<3;++k){int pxk=int(e.px[k])-renderer.camX,pyk=int(e.py[k])-renderer.camY;
+        for(int i=0;i<40;++i){float a=i/40.f*6.283f;renderer.pixel(pxk+int(cosf(a)*20),pyk+int(sinf(a)*15),red);}
+        renderer.ellipse(pxk,pyk,20*(50-e.timer)/50,15*(50-e.timer)/50,rgba(0xe0421f,50));}
+}
+void drawBossBar(const Enemy& e){
+    int w=260,x=(Width-w)/2,y=Height-30;
+    renderer.rect(x-2,y-2,w+4,9,rgba(0x120f14,220));
+    renderer.rect(x,y,w,5,rgba(0x3a1210,230));
+    renderer.rect(x,y,w*e.hp/enemySpecs[e.type].health,5,rgba(e.phase==3?0xffd24a:e.phase==2?0xf59a2a:0xe0621f));
+    for(int k=1;k<3;++k)renderer.rect(x+w*k/3,y-1,1,7,rgba(0xfff2c4,160));
+}
 void tickEnemy(Enemy& e){
+    if(e.type==Keeper&&e.state!=Hurt){ ++e.animTime;if(e.hitFlash)--e.hitFlash;if(e.showBar)--e.showBar; tickKeeper(e); return; }
     const auto& spec=enemySpecs[e.type];auto& a=e.attack;
     ++e.animTime;
     if(e.hitFlash)--e.hitFlash;
@@ -458,10 +553,10 @@ void tickEnemy(Enemy& e){
         if(e.timer%10==0)particle(e.x+(frand()-.5f)*12,e.y-30,0,-.3f,20,0,rgba(0xfff2c4)); return; }
     if(a.active){
         ++a.age;
-        if(e.type==Wolf&&a.age<spec.windup){ auto d=directions[a.facing]; if(a.age>spec.windup-8)moveEnemy(e,d.x*2.2f,d.y*2.2f); }
+        if((e.type==Wolf||e.type==Shade)&&a.age<spec.windup){ auto d=directions[a.facing]; if(a.age>spec.windup-8)moveEnemy(e,d.x*2.2f,d.y*2.2f); }
         if(a.age==spec.windup)enemyResolveAttack(e);
         if(a.age>=spec.windup+12){a.active=false;e.state=e.type==Wolf?Circle:Chase;e.timer=40+int(rng()%40);}
-        setAnim(e.anim,e.animTime,e.type==Wolf?art::A_BITE:e.type==Bear?art::A_SWIPE:e.type==Archer?art::A_BOW:art::A_SPEAR);
+        setAnim(e.anim,e.animTime,e.type==Wolf?art::A_BITE:e.type==Bear?art::A_SWIPE:e.type==Archer?art::A_BOW:e.type==Shade?art::A_SWORD:e.type==Wraith?art::A_ROAR:art::A_SPEAR);
         return;
     }
     float dist;int target=nearestPlayer(e,dist);
@@ -502,7 +597,7 @@ void tickEnemy(Enemy& e){
         if(dist>46&&dist<150&&e.timer<=0&&!a.cooldown){e.state=Telegraph;e.timer=34;e.facing=heading(dx,dy);return;}
         if(e.timer>0)--e.timer;
     }
-    if(e.type==Archer){
+    if(e.type==Archer||e.type==Wraith){
         e.facing=heading(dx,dy);
         if(dist<56){ walkEnemy(e,e.x-dx,e.y-dy,spec.speed); e.facing=heading(dx,dy); setAnim(e.anim,e.animTime,art::A_RUN); return; }
         if(dist<=spec.range&&!a.cooldown){startAttack(a,Bow,e.facing,e.x,e.y);a.cooldown=spec.windup+spec.recovery;e.state=Attacking;return;}
@@ -530,7 +625,7 @@ void tickEnemy(Enemy& e){
 }
 void tickEnemies(){
     for(auto& e:enemies){
-        e.enabled=(game.groups>>e.group)&1;
+        e.enabled=((game.groups>>e.group)&1)||(bossIndex>=0&&enemies[bossIndex].hp>0&&enemies[bossIndex].phase>=2&&e.group==enemies[bossIndex].group+1);
         if(!e.active||!e.enabled)continue;
         if(game.netRole==1){ // Network client: smooth towards the host snapshot.
             ++e.animTime;if(e.hitFlash)--e.hitFlash;if(e.showBar)--e.showBar;
@@ -578,20 +673,26 @@ void tickPickups(){
 void tickWorldFx(){
     // Plates: co-op mechanism, any player standing on a plate presses it.
     int mask=0;
-    for(int i=0;i<ObjCount;++i){const Obj& o=objs[i];if(o.kind!=K_PLATE||world.hiddenTag[o.tag])continue;
-        for(const auto& p:players)if(p.active&&p.hp>0&&fabsf(p.x-o.x)<9&&fabsf(p.y-o.y)<7)mask|=o.tag==TAG_PLATE1?1:2;}
-    world.variant[TAG_PLATE1]=mask&1;world.variant[TAG_PLATE2]=(mask>>1)&1;
+    for(int i=0,bit=0;i<ObjCount;++i){const Obj& o=objs[i];if(!(kinds[o.kind].flags&F_PLATE))continue;
+        bool on=false;
+        if(!world.hiddenTag[o.tag])for(const auto& p:players)if(p.active&&p.hp>0&&fabsf(p.x-o.x)<9&&fabsf(p.y-o.y)<7)on=true;
+        if(on)mask|=1<<bit;
+        if(o.tag)world.variant[o.tag]=on;
+        ++bit;}
     if(mask!=game.platesMask){game.platesMask=mask;emit(EV_PLATES,mask);}
     // Ambient particles in view.
     int ax=int(game.camX),ay=int(game.camY);
-    bool overworld=areaIndex()==0;
+    bool overworld=area().outdoor;
     bool dusk=game.amb[2]>game.amb[0]||game.amb[0]<170;
     if(overworld&&game.ticks%5==0)particle(ax+frand()*Width,ay+frand()*Height,.25f+frand()*.3f,-.05f,140,dusk?5:0,dusk?rgba(0xf6f0a0,0):rgba(0xfff2c4,150));
-    if(game.zone==3&&game.ticks%23==0)particle(ax+frand()*Width,ay-4,.3f,.35f,300,4);
-    if(areaIndex()==1&&game.ticks%9==0)particle(ax+frand()*Width,ay+frand()*Height,0,.12f,120,0,rgba(0x86c8c0,120));
+    int fx=zoneFx[game.zone<ZoneCount?game.zone:0];
+    if((fx&1)&&game.ticks%23==0)particle(ax+frand()*Width,ay-4,.3f,.35f,300,4);
+    if((fx&2)&&game.ticks%9==0)particle(ax+frand()*Width,ay+frand()*Height,0,.12f,120,0,rgba(0x86c8c0,120));
+    if((fx&4)&&game.ticks%4==0)particle(ax+frand()*Width,ay-2,.15f+frand()*.2f,.22f+frand()*.15f,260,0,rgba(0xa8a39a,140));
+    if((fx&8)&&game.ticks%5==0)particle(ax+frand()*Width,ay+Height+2,(frand()-.5f)*.3f,-.4f-frand()*.3f,220,0,rgba(0xffb347,190));
     if(game.fogCur>20&&game.ticks%3==0)particle(ax+frand()*Width,ay+frand()*Height,.2f+frand()*.2f,-.02f,160,6);
     for(int i=0;i<ObjCount;++i){const Obj& o=objs[i];
-        if((o.kind!=K_FIREPIT&&o.kind!=K_CFIRE)||o.x<ax-40||o.x>ax+Width+40||o.y<ay-40||o.y>ay+Height+60)continue;
+        if(!(kinds[o.kind].flags&F_FLICKER)||(o.tag&&world.hiddenTag[o.tag])||o.x<ax-40||o.x>ax+Width+40||o.y<ay-40||o.y>ay+Height+60)continue;
         if((game.ticks+i*7)%14==0)particle(o.x+(frand()-.5f)*6,o.y-14,.15f+(frand()-.5f)*.2f,-.45f,90,1);
         if((game.ticks+i*3)%7==0)particle(o.x+(frand()-.5f)*6,o.y-10,(frand()-.5f)*.4f,-.8f-frand()*.4f,40,0,rgba(0xffb347));
     }
@@ -624,7 +725,8 @@ void tick(){
     if(game.interactCooldown)--game.interactCooldown;
     if(game.hurtFlash)--game.hurtFlash;
     if(game.shake)--game.shake;
-    for(int k=0;k<3;++k){int target=areaIndex()==1?(k==2?72:k==1?58:52):game.ambT[k];if(game.amb[k]<target)++game.amb[k];else if(game.amb[k]>target)--game.amb[k];}
+    const Area& ar_=area();
+    for(int k=0;k<3;++k){int target=ar_.dark?(k==0?ar_.r:k==1?ar_.g:ar_.b):game.ambT[k];if(game.amb[k]<target)++game.amb[k];else if(game.amb[k]>target)--game.amb[k];}
     if(game.fogCur<game.fog)game.fogCur+=2;else if(game.fogCur>game.fog)game.fogCur-=2;
     Player& p=me();
     if(!game.gameover){
@@ -655,37 +757,35 @@ int loopFrame(int anim,int time){int n=art::animFrames[anim];int f=time/animFram
 void drawTerrain(){
     int cx=int(game.camX),cy=int(game.camY);
     int tx0=cx/Tile,ty0=cy/Tile,tx1=(cx+Width)/Tile,ty1=(cy+Height)/Tile;
-    static const int fringeIdx[TerrainCount]={0,1,2,3,-1,5,-1,-1,-1,4};
-    static const int fwIdx[TerrainCount]={0,1,2,3,-1,-1,-1,-1,-1,-1};
     static const int ndx[8]={0,1,0,-1,1,1,-1,-1},ndy[8]={-1,0,1,0,-1,1,1,-1};
     for(int ty=ty0;ty<=ty1;++ty)for(int tx=tx0;tx<=tx1;++tx){
         int t=terrainAt(tx,ty);unsigned h=hash2(tx,ty);
-        int v=(t==Water||t==Shallow)?int((h+game.ticks/18)&3):int(h&3);
+        int v=art::terrainAnimated[t]?int((h+game.ticks/18)&3):int(h&3);
         if((t==Grass||t==Steppe)&&(h>>8)%5)v=h%2; // calmer base: decorated variants are rarer
-        renderer.tile(art::T_GRASS_0+t*4+v,tx*Tile,ty*Tile);
-        if(t==Rock||t==CaveWall)continue;
-        int p=priority[t];
+        renderer.tile(art::terrainBase[t]+v,tx*Tile,ty*Tile);
+        if(isWall(t))continue;
+        int p=priority(t);
         // Bleed higher-priority neighbours over this tile, lowest first.
-        for(int pr=p+1;pr<=5;++pr)for(int d=0;d<8;++d){
-            int nt=terrainAt(tx+ndx[d],ty+ndy[d]);if(priority[nt]!=pr)continue;
+        for(int pr=p+1;pr<=8;++pr)for(int d=0;d<8;++d){
+            int nt=terrainAt(tx+ndx[d],ty+ndy[d]);if(priority(nt)!=pr||isWall(nt))continue;
             if(d>=4){int a=terrainAt(tx+ndx[d],ty),b=terrainAt(tx,ty+ndy[d]);if(a==nt||b==nt)continue;}
-            int idx=(t==Water||t==Shallow)&&fwIdx[nt]>=0?art::FW_GRASS_N+fwIdx[nt]*8+d:fringeIdx[nt]>=0?art::F_GRASS_N+fringeIdx[nt]*8+d:-1;
+            int idx=art::terrainWet[t]&&art::fringeWaterBase[nt]>=0?art::fringeWaterBase[nt]+d:art::fringeBase[nt]>=0?art::fringeBase[nt]+d:-1;
             if(idx>=0)renderer.tile(idx,tx*Tile,ty*Tile);
         }
     }
     // Cliff faces (2.5D): drawn where a wall tile meets open ground to the south.
     for(int ty=ty0-1;ty<=ty1;++ty)for(int tx=tx0;tx<=tx1;++tx){
-        int t=terrainAt(tx,ty);if(t!=Rock&&t!=CaveWall)continue;
+        int t=terrainAt(tx,ty);if(!isWall(t))continue;
         int s=terrainAt(tx,ty+1),n=terrainAt(tx,ty-1),w=terrainAt(tx-1,ty),e=terrainAt(tx+1,ty);
         int sx=tx*Tile-int(game.camX),sy=ty*Tile-int(game.camY);
-        bool cave=t==CaveWall;
-        if(s!=Rock&&s!=CaveWall){
-            renderer.tile((cave?art::FACE_CAVE_0:art::FACE_ROCK_0)+int(hash2(tx,ty)%3)*2,tx*Tile,ty*Tile);
+        bool dim=t!=Rock;
+        if(!isWall(s)){
+            renderer.tile(art::terrainFace[t]+int(hash2(tx,ty)%3)*art::terrainFaceStride[t],tx*Tile,ty*Tile);
             renderer.rect(sx,sy+Tile,Tile,3,rgba(0x0b1a1c,90));renderer.rect(sx,sy+Tile+3,Tile,2,rgba(0x0b1a1c,45));
         }
-        if(n!=Rock&&n!=CaveWall)renderer.rect(sx,sy,Tile,1,rgba(cave?0x6f6a80:0xe8d6b0,cave?90:150));
-        if(w!=Rock&&w!=CaveWall)renderer.rect(sx,sy,1,Tile,rgba(0x120f14,120));
-        if(e!=Rock&&e!=CaveWall)renderer.rect(sx+Tile-1,sy,1,Tile,rgba(0x120f14,120));
+        if(!isWall(n))renderer.rect(sx,sy,Tile,1,rgba(dim?0x6f6a80:0xe8d6b0,dim?90:150));
+        if(!isWall(w))renderer.rect(sx,sy,1,Tile,rgba(0x120f14,120));
+        if(!isWall(e))renderer.rect(sx+Tile-1,sy,1,Tile,rgba(0x120f14,120));
     }
 }
 int objSprite(const Obj& o,int i){
@@ -749,7 +849,7 @@ void render(){
         case 0:{const Obj& o=objs[d.idx];const Kind& kd=kinds[o.kind];int id=objSprite(o,d.idx);unsigned alpha=255;
             if(kd.flags&4){const auto& s=art::spr[id];if(L.y<o.y-2&&L.y>o.y-s.ay&&L.x>o.x-s.ax+4&&L.x<o.x-s.ax+s.w-4)alpha=150;}
             renderer.sprite(id,o.x,o.y,(o.variant&1)&&kd.anim==1,alpha);
-            if(o.kind==K_FIREPIT||o.kind==K_CFIRE)renderer.sprite(art::O_FLAME_0+((game.ticks/6+d.idx)&3),o.x,o.y-2);
+            if(kd.flags&F_FLAME)renderer.sprite(art::O_FLAME_0+((game.ticks/6+d.idx)&3),o.x,o.y-2);
             break;}
         case 1:{const Player& p=players[d.idx];
             int f=d.idx==0?playerFrame(p):p.netFrame;
@@ -764,16 +864,17 @@ void render(){
             else f=loopFrame(e.anim,e.animTime);
             unsigned alpha=e.state==Death&&e.timer<60?unsigned(e.timer*4):255;
             uint32_t tint=e.type==Bear&&e.state==Telegraph&&(game.ticks/4)%2?rgba(0xe06a3f,90):0;
-            int sheet=e.type==Wolf?art::SH_WOLF:e.type==Stranger?art::SH_STRANGER:e.type==Archer?art::SH_ARCHER:art::SH_BEAR;
+            int sheet=enemySheet[e.type];
             drawActor(sheet,e.anim,f,e.facing,e.x,e.y,alpha,e.hitFlash>4?110:0,tint);
             break;}
         case 5:{const Pickup& k=pickups[d.idx];int bob=(k.bob/12)%2;
-            static const int icon[ItemCount+1]={0,art::I_SWORD,art::I_SPEAR,art::I_BOW,art::I_ARROWS,art::I_KIT,art::I_TOOL,art::I_TORCH,art::I_PAGE,art::I_HERB,art::I_QUIVER,art::I_OCHRE,art::I_FLUTE,art::I_CRYSTAL,art::I_NECKLACE};
+            static const int icon[ItemCount+1]={0,art::I_SWORD,art::I_SPEAR,art::I_BOW,art::I_ARROWS,art::I_KIT,art::I_TOOL,art::I_TORCH,art::I_PAGE,art::I_HERB,art::I_QUIVER,art::I_OCHRE,art::I_FLUTE,art::I_CRYSTAL,art::I_NECKLACE,
+                art::I_TABLET,art::I_EMBER,art::I_MOULD,art::I_SEAL,art::I_BRACELET};
             renderer.sprite(art::X_SHADOW_0,int(k.x),int(k.y));
             renderer.sprite(icon[k.item],int(k.x),int(k.y)-bob-1);
             if((k.bob/20)%3==0)renderer.pixel(int(k.x)+3-cx,int(k.y)-14-cy,rgba(0xfff2c4));
             break;}
-        case 6:{const Projectile& p=projectiles[d.idx];renderer.sprite(art::X_ARROW_0+p.facing,int(p.x),int(p.y));break;}
+        case 6:{const Projectile& p=projectiles[d.idx];if(p.fire)renderer.sprite(art::X_FIREBOLT_0+((game.ticks/5)&1),int(p.x),int(p.y));else renderer.sprite(art::X_ARROW_0+p.facing,int(p.x),int(p.y));break;}
         case 7:{int f=(game.ticks/7)&3;renderer.sprite(art::Z_SHADOW_0+f,game.shadowX,game.shadowY,false,unsigned(game.shadowAlpha));break;}
         }
     }
@@ -794,7 +895,8 @@ void render(){
         if(c.alert)renderer.sprite(art::X_BUBBLE_ALERT,int(c.x)+6,int(c.y)-28);
         else if(c.bubble&&(game.focusKind!=1||&npcs[game.focusId]!=&c))renderer.sprite(c.bubble==2?art::X_BUBBLE_QUEST:art::X_BUBBLE_TALK,int(c.x)+6,int(c.y)-28-((game.ticks/20)%2));
     }
-    for(const auto& e:enemies)if(e.active&&e.enabled&&e.hp>0&&(e.showBar||e.alerted)){
+    for(const auto& e:enemies)if(e.type==Keeper&&e.active&&e.enabled&&e.hp>0)drawKeeperTelegraphs(e);
+    for(const auto& e:enemies)if(e.type!=Keeper&&e.active&&e.enabled&&e.hp>0&&(e.showBar||e.alerted)){
         int w=e.type==Bear?30:16;drawBar(int(e.x),int(e.y)-(e.type==Bear?44:e.type==Wolf?24:32),w,e.hp,enemySpecs[e.type].health,rgba(e.type==Bear?0xe06a3f:0xb8442b));
         if(e.state==Telegraph||(e.attack.active&&e.attack.age<enemySpecs[e.type].windup))renderer.sprite(art::X_BUBBLE_ALERT,int(e.x),int(e.y)-(e.type==Bear?46:34));
     }
@@ -810,7 +912,7 @@ void render(){
     // Lighting.
     int ar=game.amb[0],ag=game.amb[1],ab=game.amb[2];
     bool dark=ar<190||ag<190||ab<190;
-    bool overworld=areaIndex()==0;
+    bool overworld=area().outdoor;
     if(dark||overworld){
         renderer.lightBegin(ar,ag,ab);
         if(overworld&&ar>=180){
@@ -828,15 +930,17 @@ void render(){
             if(o.x<cx-120||o.x>cx+Width+120||o.y<cy-120||o.y>cy+Height+120)continue;
             if(o.tag&&world.hiddenTag[o.tag])continue;
             int fl=int(hash2(game.ticks/5,i)%9);
-            if(o.kind==K_FIREPIT||o.kind==K_CFIRE)renderer.lightAdd(o.x,o.y-8,int((78+fl)*(dark?1:.6f)),int(250*boost),int(150*boost),int(60*boost));
-            else if(o.kind==K_PAGE)renderer.lightAdd(o.x,o.y-6,44,int(200*boost),int(170*boost),int(70*boost));
-            else if(o.kind==K_CRYSTAL)renderer.lightAdd(o.x,o.y-6,30,int(120*boost),int(50*boost),int(170*boost));
-            else if(o.kind==K_GATE)renderer.lightAdd(o.x,o.y-26,70,int(60*boost),int(190*boost),int(200*boost));
-            else if(o.kind==K_HOLO)renderer.lightAdd(o.x,o.y-10,34,int(50*boost),int(160*boost),int(170*boost));
+            const Kind& kd=kinds[o.kind];
+            if(!(kd.flags&F_LIGHT))continue;
+            int rad=kd.lrad;
+            if(kd.flags&F_FLICKER)rad=int((rad+fl)*(dark?1:.6f));
+            renderer.lightAdd(o.x,o.y-kd.ly,rad,int(kd.lr*boost),int(kd.lg*boost),int(kd.lb*boost));
         }
+        for(const auto& q:projectiles)if(q.active&&q.fire)renderer.lightAdd(int(q.x),int(q.y),34,int(220*boost),int(110*boost),int(40*boost));
+        for(const auto& e:enemies)if(e.active&&e.enabled&&e.type==Keeper&&e.hp>0)renderer.lightAdd(int(e.x),int(e.y)-26,96,int(230*boost),int(120*boost),int(50*boost));
         if(dark){
             for(const auto& p:players)if(p.active){
-                bool torch=game.torch&&areaIndex()==1;
+                bool torch=game.torch&&area().dark;
                 renderer.lightAdd(int(p.x),int(p.y)-10,torch?104+int(hash2(game.ticks/6,7)%7):30,torch?220:50,torch?150:120,torch?80:120);
             }
             if(game.shadowAlpha>0)renderer.lightAdd(game.shadowX,game.shadowY-20,40,70,20,110);
@@ -844,6 +948,7 @@ void render(){
         renderer.lightApply();
     }
     if(game.fogCur>0){uint32_t c=rgba(0x341a45,game.fogCur/3);renderer.rect(0,0,Width,Height,c);}
+    for(const auto& e:enemies)if(e.type==Keeper&&e.active&&e.enabled&&e.hp>0&&e.alerted)drawBossBar(e);
     // Vignette and hurt flash.
     for(int i=0;i<14;++i){
         uint32_t c=game.hurtFlash?rgba(0x8a2c1f,(14-i)*game.hurtFlash):rgba(0x0b1416,(14-i)*4);
@@ -854,7 +959,7 @@ void render(){
 void reset(){
     game=Game{};
     for(auto& p:players)p=Player{};
-    Player& p=me();p.active=true;p.x=p.tx=map01::SpawnX;p.y=p.ty=map01::SpawnY;p.facing=3;
+    Player& p=me();p.active=true;p.x=p.tx=level::SpawnX;p.y=p.ty=level::SpawnY;p.facing=3;
     for(auto& q:projectiles)q.active=false;
     for(auto& q:particles)q.life=0;
     initWorld();initActors();
@@ -927,7 +1032,7 @@ int tj_enemy(int index,int field){
     if(index<0||index>=tj::EnemyCount)return -1;const auto& e=tj::enemies[index];
     switch(field){case 0:return e.hp;case 1:return e.state;case 2:return int(e.x*1000);case 3:return int(e.y*1000);case 4:return e.type;
         case 5:return e.attack.cooldown;case 6:return e.active&&e.enabled;case 7:return e.facing;case 8:return e.anim;case 9:return e.animTime;
-        case 10:return e.attack.active?e.attack.age:-1;case 11:return e.group;case 12:return e.alerted;case 13:return e.target;default:return -1;}
+        case 10:return e.attack.active?e.attack.age:-1;case 11:return e.group;case 12:return e.alerted;case 13:return e.target;case 14:return e.phase;case 15:return e.special;default:return -1;}
 }
 int tj_enemy_count(){ return tj::EnemyCount; }
 // Network client: apply the host snapshot of one enemy.

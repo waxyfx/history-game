@@ -218,7 +218,10 @@ export function createQuest(G) {
         await G.travel(...P(76, 83));
         if (!B.camp) { set('camp'); if (G.party() === 1) await G.cine('camp', cutCamp); }
         return;
-      case 'campgate': return G.say(G.levelPassed() ? D.campgateOpen : D.campgateLocked);
+      case 'campgate':
+        if (!G.levelPassed()) return G.say(D.campgateLocked);
+        await G.say(D.campgateOpen);
+        return G.gotoLevel?.(2);
       case 'holo': return G.results();
     }
   }

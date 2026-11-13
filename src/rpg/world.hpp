@@ -1,16 +1,23 @@
 #pragma once
 #include <math.h>
 #include "renderer.hpp"
+// One engine, many epochs: the build selects the generated level header (scripts/rpgart/mapNN.py).
+// Everything level-specific (terrain, zones, areas, props, lights, NPCs, enemies, pickups) is data.
+#ifndef TJ_LEVEL
+#define TJ_LEVEL 1
+#endif
+#if TJ_LEVEL == 2
+#include "gen/map02.hpp"
+#else
 #include "gen/map01.hpp"
-// MAP01 world: generated tile grid (scripts/rpgart/map01.py), static props with tags,
-// collision queries and the zone / area lookup. Reusable for later epochs: only
-// the generated map header changes.
+#endif
 namespace tj {
-using namespace map01;
-constexpr int ZoneCount=7; // 0 arrival, 1 settlement, 2 hunting grounds, 3 forest, 4 ravine, 5 secret cave, 6 camp
+using namespace level;
+// Kind flags (scripts/rpgart/levelgen.py)
+enum KindFlag { F_DECAL=1, F_LIGHT=2, F_TALL=4, F_COVER=8, F_FLAME=16, F_PLATE=32, F_TALLBOX=64, F_FLICKER=128 };
 enum Terrain { Grass=TR_GRASS, Steppe=TR_STEPPE, Dirt=TR_DIRT, Sand=TR_SAND, Water=TR_WATER, Shallow=TR_SHALLOW,
                Rock=TR_ROCK, Cave=TR_CAVE, CaveWall=TR_CAVEWALL, Camp=TR_CAMP };
-constexpr int priority[TerrainCount]={5,4,3,2,0,1,9,1,9,3};
+inline int priority(int t){ return art::terrainPriority[t]; }
 
 struct World {
     uint8_t hiddenTag[TagCount]{};   // 1: tagged props hidden (and not solid)
@@ -25,34 +32,28 @@ World world;
 
 inline int terrainAt(int tx,int ty){ if(tx<0||ty<0||tx>=MapW||ty>=MapH)return Rock; return terrain[ty*MapW+tx]-'0'; }
 inline int zoneAt(float x,float y){ int tx=int(x)/Tile,ty=int(y)/Tile; if(tx<0||ty<0||tx>=MapW||ty>=MapH)return 0; return zones[ty*MapW+tx]-'0'; }
-inline bool solidTerrain(int t){ return t==Water||t==Rock||t==CaveWall; }
-// Colliders are per kind; rocks scale with their size variant.
-inline void collider(const Obj& o,int& hw,int& hh){
-    if(o.kind==K_ROCK||o.kind==K_CROCK){static const int w[4]={0,7,13,22},h[4]={0,4,5,8};int v=o.variant&3;hw=w[v];hh=h[v];return;}
-    hw=kinds[o.kind].hw;hh=kinds[o.kind].hh;
-}
-inline bool objectSolid(const Obj& o){ int hw,hh;collider(o,hw,hh); return hw>0&&!(o.tag&&world.hiddenTag[o.tag]); }
+inline bool solidTerrain(int t){ return art::terrainSolid[t]; }
+inline bool isWall(int t){ return art::terrainFace[t]>=0; }
+inline void collider(const Obj& o,int& hw,int& hh){ hw=o.hw;hh=o.hh; }
+inline bool objectSolid(const Obj& o){ return o.hw>0&&!(o.tag&&world.hiddenTag[o.tag]); }
 
 void initWorld() {
     world=World{};
     // Collision buckets: 8x8 tile cells holding the props whose collider touches them.
     int bw=MapW/8+1,bh=MapH/8+1;
-    uint16_t counts[(MapW/8+1)*(MapH/8+1)]{};
+    static uint16_t counts[(MapW/8+1)*(MapH/8+1)];
+    for(auto& c:counts)c=0;
     for(int i=0;i<ObjCount;++i){int b=(objs[i].y/Tile/8)*bw+objs[i].x/Tile/8; if(b>=0&&b<bw*bh)++counts[b];}
     int acc=0;for(int b=0;b<bw*bh;++b){world.bucketStart[b]=acc;acc+=counts[b];counts[b]=0;}
     world.bucketStart[bw*bh]=acc;
     for(int i=0;i<ObjCount;++i){int b=(objs[i].y/Tile/8)*bw+objs[i].x/Tile/8; if(b>=0&&b<bw*bh)world.bucketItems[world.bucketStart[b]+counts[b]++]=i;}
     for(int i=0;i<ObjCount;++i){
-        int k=objs[i].kind;
-        if(k==K_TALLGRASS||k==K_FEATHER||k==K_REEDS){
-            int tx=objs[i].x/Tile,ty=objs[i].y/Tile;
-            for(int dy=-1;dy<=0;++dy)for(int dx=-1;dx<=0;++dx){int x=tx+dx+((objs[i].x%Tile)>=8),y=ty+dy+1;if(x>=0&&y>=0&&x<MapW&&y<MapH)world.cover[y*MapW+x]=1;}
-        }
+        if(!(kinds[objs[i].kind].flags&F_COVER))continue;
+        int tx=objs[i].x/Tile,ty=objs[i].y/Tile;
+        for(int dy=-1;dy<=0;++dy)for(int dx=-1;dx<=0;++dx){int x=tx+dx+((objs[i].x%Tile)>=8),y=ty+dy+1;if(x>=0&&y>=0&&x<MapW&&y<MapH)world.cover[y*MapW+x]=1;}
     }
-    for(int i=0;i<InteractCount;++i)world.iaEnabled[i]=0;
     // Story-gated props start hidden; JS reveals them through tj_tag().
-    world.hiddenTag[TAG_HOMEGATE]=1;
-    world.hiddenTag[TAG_PAGE2]=0;
+    for(int t=0;t<TagCount;++t)world.hiddenTag[t]=tagHidden[t];
 }
 
 template<class F> void forObjectsNear(float x,float y,int radiusTiles,F f) {
@@ -68,9 +69,9 @@ bool solidAt(float px,float py) {
     if(px<0||py<0||px>=MapW*Tile||py>=MapH*Tile)return true;
     if(solidTerrain(terrainAt(int(px)/Tile,int(py)/Tile)))return true;
     bool hit=false;
-    forObjectsNear(px,py,3,[&](int i){const Obj& o=objs[i];if(hit||!objectSolid(o))return;int hw,hh;collider(o,hw,hh);
-        if(o.kind==K_TENT||o.kind==K_HUT||o.kind==K_CTENT){if(px>o.x-hw&&px<o.x+hw&&py>o.y-hh*3&&py<o.y+2)hit=true;return;}
-        if(fabsf(px-o.x)<hw&&fabsf(py-o.y)<hh)hit=true;});
+    forObjectsNear(px,py,3,[&](int i){const Obj& o=objs[i];if(hit||!objectSolid(o))return;
+        if(kinds[o.kind].flags&F_TALLBOX){if(px>o.x-o.hw&&px<o.x+o.hw&&py>o.y-o.hh*3&&py<o.y+2)hit=true;return;}
+        if(fabsf(px-o.x)<o.hw&&fabsf(py-o.y)<o.hh)hit=true;});
     return hit;
 }
 // Feet box (8x6) used by every walking actor.
@@ -81,8 +82,8 @@ bool blockedFeet(float px,float py,int hw=4,int hh=3) {
         if(solidTerrain(terrainAt(x/Tile,y/Tile)))return true;
     }
     bool hit=false;
-    forObjectsNear(px,py,3,[&](int i){const Obj& o=objs[i];if(hit||!objectSolid(o))return;int ow,oh;collider(o,ow,oh);
-        if(fabsf(px-o.x)<ow+hw&&fabsf(py-o.y)<oh+hh)hit=true;});
+    forObjectsNear(px,py,3,[&](int i){const Obj& o=objs[i];if(hit||!objectSolid(o))return;
+        if(fabsf(px-o.x)<o.hw+hw&&fabsf(py-o.y)<o.hh+hh)hit=true;});
     return hit;
 }
 bool lineClear(float x,float y,float tx,float ty) {

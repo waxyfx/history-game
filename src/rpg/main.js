@@ -1,20 +1,33 @@
-// MAP01 page: boots the C++/WASM engine, uploads the sprite atlas, runs the fixed-step loop and
+// RPG page (MAP01, MAP02 …): boots the C++/WASM engine, uploads the sprite atlas, runs the fixed-step loop and
 // owns the DOM UI (HUD, dialogue, quizzes, inventory, minimap), story flow, audio and co-op glue.
 import './style.css';
 import {decodePNG, browserInflate} from './png.js';
 import {ATLAS_RECTS} from './gen/atlas.js';
-import {MAP01} from './gen/map01.js';
 import {UI, ITEMS, ITEM_ICONS, INTERACT_LABEL, getLang, setLang} from './i18n.js';
-import {SPEAKERS, ZONE_NAMES, QUESTS, HISTORICAL_QUIZZES, BONUS_QUIZ, BONUS_META, CHAMBER_FAIL, TRIAL_LEVELS, MAIN_QUIZ_ORDER, SECRETS, DIALOGUES} from './story.js';
+import {loadLevel, levelFromURL, localPassed} from './levels.js';
 import {ALL_EPOCHS} from './campaign.js';
 import {sfx, music, ambience, toggleAudioMute, isAudioMuted, unlockAudio} from './audio.js';
 import {createParty, makeCode, MAX_PARTY} from './net.js';
-import {restoreSnapshot} from './persistence.js';
-import {db, rpc} from '../api.js';
+import {db, rpc as rpcNamed} from '../api.js';
+// Official-run RPCs are written with positional arguments (as in the SQL tests); Supabase needs named ones.
+const RPC_PARAMS = {level_start_run: ['p_level', 'p_mode', 'p_session'], level_submit_answer: ['p_run', 'p_quiz', 'p_choice', 'p_request'],
+  level_finish_run: ['p_run', 'p_request'], level_abandon_run: ['p_run']};
+const rpc = (name, args) => rpcNamed(name, Array.isArray(args) ? Object.fromEntries((RPC_PARAMS[name] || []).map((k, i) => [k, args[i] ?? null])) : args || {});
 import {currentUser, createOfficialRun} from '../members.js';
-import {A, SH, TS, IT, newFlags, mergeFlags, applyWorld, createQuest, questStage, questTarget, scoreOf, secretsFound, pageLines, MAX_SCORE, PASS_SCORE} from './quest.js';
+import {SH, TS, IT, newFlags, mergeFlags, MAX_SCORE, PASS_SCORE} from './quest.js';
+// Level bindings (levels.js): content, world logic and save schema of the epoch being played.
+let LV, MAP, SPEAKERS, ZONE_NAMES, QUESTS, HISTORICAL_QUIZZES, BONUS_QUIZ, BONUS_META, CHAMBER_FAIL, TRIAL_LEVELS, MAIN_QUIZ_ORDER, SECRETS, DIALOGUES,
+  applyWorld, createQuest, questStage, questTarget, scoreOf, secretsFound, pageLines, restoreSnapshot;
+function bindLevel(lv) {
+  LV = lv;
+  ({MAP, SPEAKERS, ZONE_NAMES, QUESTS, HISTORICAL_QUIZZES, BONUS_QUIZ, BONUS_META, CHAMBER_FAIL, TRIAL_LEVELS, MAIN_QUIZ_ORDER, SECRETS, DIALOGUES,
+    applyWorld, createQuest, questStage, questTarget, scoreOf, secretsFound, pageLines, restoreSnapshot} = lv);
+  SAVE_KEY = lv.saveKey;
+}
+const levelQS = (extra = '') => { const q = [LV?.id > 1 ? 'level=' + LV.id : '', extra].filter(Boolean).join('&'); return q ? '?' + q : ''; };
 
-const W = 480, H = 320, SAVE_KEY = 'tarikh.rpg.v3', RESULTS_KEY = 'tarikh.rpg.results';
+const W = 480, H = 320, RESULTS_KEY = 'tarikh.rpg.results';
+let SAVE_KEY = 'tarikh.rpg.v3';
 const SFX_NAMES = ['step_grass', 'step_dirt', 'step_water', 'step_cave', 'sword', 'spear', 'bow', 'arrow_hit', 'enemy_hurt', 'enemy_die', 'howl', 'growl', 'roar', 'swipe', 'shout', 'pickup', 'splash', 'hooves', 'block', 'down', 'revive', 'impact', 'bowstring'];
 const EV = {SFX: 1, INTERACT: 2, TRIGGER: 3, ENEMY_DIED: 4, PICKUP: 5, HURT: 6, DOWN: 7, DEAD: 8, REVIVED: 9, ZONE: 10, ENEMY_HIT: 11, PEER_HIT: 12, REVIVE_PEER: 13, PLATES: 14, ALERT: 15, HOLD: 16, NOAMMO: 17};
 const NAMES = {
@@ -30,7 +43,7 @@ const HEROES = ['aibar', 'dana', 'erlan'];
 
 let lang = getLang();
 document.documentElement.lang = lang;
-const t = k => UI[lang][k] ?? UI.kk[k] ?? k;
+const t = k => (LV?.UI?.[k] && (LV.UI[k][lang] ?? LV.UI[k].kk)) ?? UI[lang][k] ?? UI.kk[k] ?? k; // level overrides first
 const L = o => o == null ? '' : typeof o === 'string' ? o : o[lang] ?? o.kk ?? '';
 const $ = id => document.getElementById(id);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'}[c]));
@@ -41,7 +54,7 @@ document.querySelector('#rpg-app').innerHTML = `
 <main class="rpg">
   <section class="stage">
     <div class="viewport" id="viewport">
-      <canvas id="world" width="${W}" height="${H}" tabindex="0" aria-label="MAP01"></canvas>
+      <canvas id="world" width="${W}" height="${H}" tabindex="0" aria-label="RPG"></canvas>
       <div class="hud" id="hud">
         <div class="hud-tl">
           <div class="hp"><span class="hp-icon">♥</span><div class="hp-track"><div id="hp-fill"></div><span id="hp-text"></span></div><span id="lives" class="lives"></span></div>
@@ -239,7 +252,7 @@ async function startOfficial(fresh) {
   official = null;
   try {
     if (!db || !(await currentUser(db))) return;
-    const run = createOfficialRun({rpc, level: 1}), session = new URLSearchParams(location.search).get('session');
+    const run = createOfficialRun({rpc, level: LV.id}), session = new URLSearchParams(location.search).get('session');
     const mode = session ? 'team' : 'solo';
     await run.start(mode, session);
     // A new journey must not inherit answers from an unfinished older attempt.
@@ -323,7 +336,7 @@ async function chamber() {
 }
 function inventory() {
   const rows = [];
-  for (let item = 1; item <= 14; item++) {
+  for (let item = 1; item < ITEMS[lang].length; item++) {
     const n = E.tj_item_count(item); if (n <= 0) continue;
     const type = E.tj_item_info(item, 0), [name, desc] = ITEMS[lang][item];
     const sel = type === 0 && E.tj_state(13) === item - 1;
@@ -346,7 +359,8 @@ function pauseMenu() {
   $('pm-help').onclick = help;
 }
 function roadmap() {
-  openPanel(`<p class="eyebrow">TARIKH JOLY</p><h2>${lang === 'ru' ? 'Карта эпох' : 'Дәуірлер картасы'}</h2><div class="epochs">${ALL_EPOCHS.map(e => `<article class="${e.id === 1 ? 'on' : ''}"><small>MAP ${String(e.id).padStart(2, '0')} · ${esc(e.badge)}</small><b>${esc(e.title)}</b><span>${esc(e.period)}</span>${e.id > 1 ? `<em>${esc(t('mapLocked'))}</em>` : ''}</article>`).join('')}</div><button class="primary" data-close>${esc(t('close'))}</button>`, 'wide');
+  openPanel(`<p class="eyebrow">TARIKH JOLY</p><h2>${lang === 'ru' ? 'Карта эпох' : 'Дәуірлер картасы'}</h2><div class="epochs">${ALL_EPOCHS.map(e => { const open = e.id === 1 || (e.id === 2 && (localPassed(1) || levelPassedOf(1))); const playable = open && e.id <= 2;
+    return `<article class="${e.id === LV.id ? 'on' : ''}"><small>MAP ${String(e.id).padStart(2, '0')} · ${esc(e.badge)}</small><b>${esc(e.title)}</b><span>${esc(e.period)}</span>${playable && e.id !== LV.id ? `<a class="go" href="/rpg.html${e.id > 1 ? '?level=' + e.id : ''}">${lang === 'ru' ? 'Играть' : 'Ойнау'} →</a>` : !playable ? `<em>${esc(t('mapLocked'))}</em>` : ''}</article>`; }).join('')}</div><button class="primary" data-close>${esc(t('close'))}</button>`, 'wide');
 }
 // ---------------------------------------------------------------- level result (100 / pass 90)
 const fmt = s => s == null ? '—' : `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
@@ -360,7 +374,7 @@ function scoreBlock(score, passed, extra = '') {
 function resultsHTML() {
   const f = G.flags, secs = Math.max(0, Math.round(((f.tEnd || Date.now()) - f.t0) / 1000));
   return `<div class="results">
-    <span><small>${esc(t('pageFull'))}</small><b>${pageLines(f)} / 4</b></span>
+    <span><small>${esc(t('pageFull'))}</small><b>${pageLines(f)} / ${LV.pageTotal}</b></span>
     <span><small>${esc(t('secrets'))}</small><b>${secretsFound(f)} / ${SECRETS.length}</b></span>
     <span><small>${esc(t('enemies'))}</small><b>${E.tj_state(32)}</b></span>
     <span><small>${esc(t('time'))}</small><b>${fmt(secs)}</b></span>
@@ -385,7 +399,7 @@ async function complete() {
   try { // Local history of completed journeys.
     const hist = JSON.parse(localStorage.getItem(RESULTS_KEY) || '[]');
     if (!hist.find(h => h.t0 === G.flags.t0)) {
-      hist.push({map: 1, t0: G.flags.t0, at: new Date().toISOString(), score: scoreOf(G.flags), passed: scoreOf(G.flags) >= PASS_SCORE, party: party.size});
+      hist.push({map: LV.id, t0: G.flags.t0, at: new Date().toISOString(), score: scoreOf(G.flags), passed: scoreOf(G.flags) >= PASS_SCORE, party: party.size});
       localStorage.setItem(RESULTS_KEY, JSON.stringify(hist.slice(-20)));
     }
   } catch {}
@@ -396,14 +410,15 @@ async function complete() {
     try {
       const r = await official.finish();
       lastOfficial = r; score = r.score; passed = r.passed;
+      if (r.next_level_unlocked) try { const u = new Set(JSON.parse(localStorage.getItem('tarikh.official.unlocked') || '[]')); u.add(r.next_level); localStorage.setItem('tarikh.official.unlocked', JSON.stringify([...u])); } catch {}
       extra = `<small class="official">${esc(t('officialSaved'))} · ${r.attempt_number}-${esc(t('attempt'))} · ${esc(t('time'))} ${fmt(r.duration_seconds)} · ${esc(t('total'))} ${fmt(r.competition_seconds)}</small>`;
     } catch (e) { extra = `<small class="official warn">${esc(t('officialFail'))}: ${esc(e.message)}</small>`; }
   }
   const show = () => {
     openPanel(`<p class="eyebrow">${esc(t('complete'))}</p><h2>${esc(t('completeSub'))}</h2>${scoreBlock(score, passed, extra)}${resultsHTML()}
-      <div class="row">${passed ? `<button class="primary" id="go-camp">${esc(t('toCamp'))}</button>` : `<button class="primary" id="retry-epoch">${esc(t('retryEpoch'))}</button>`}
+      <div class="row">${passed ? `<button class="primary" id="go-camp">${esc(LV.passLabel ? L(LV.passLabel) : t('toCamp'))}</button>` : `<button class="primary" id="retry-epoch">${esc(t('retryEpoch'))}</button>`}
       <button id="open-journal">${esc(t('chronicle'))}</button>${passed ? `<button data-close>${esc(t('stay'))}</button>` : ''}</div>`, 'complete');
-    $('go-camp')?.addEventListener('click', () => { closePanel(); quest.interact('homegate'); });
+    $('go-camp')?.addEventListener('click', () => { closePanel(); if (LV.passLabel) roadmap(); else quest.interact('homegate'); });
     $('retry-epoch')?.addEventListener('click', () => { closePanel(); retryEpoch(); });
     $('open-journal').onclick = () => journal(show);
   };
@@ -419,8 +434,8 @@ function retryEpoch() {
 }
 function results() {
   const score = lastOfficial ? lastOfficial.score : scoreOf(G.flags), passed = levelPassed();
-  openPanel(`<p class="eyebrow">${esc(t('results'))}</p><h2>${esc(t('completeSub'))}</h2>${scoreBlock(score, passed)}${resultsHTML()}<div class="row"><button id="back-stone">${esc(t('returnStone'))}</button><button id="open-journal">${esc(t('chronicle'))}</button>${passed ? '' : `<button id="retry-epoch">${esc(t('retryEpoch'))}</button>`}<button class="primary" data-close>${esc(t('close'))}</button></div>`, 'complete');
-  $('back-stone').onclick = () => { closePanel(); travel(30 * TS, 43.2 * TS); };
+  openPanel(`<p class="eyebrow">${esc(t('results'))}</p><h2>${esc(t('completeSub'))}</h2>${scoreBlock(score, passed)}${resultsHTML()}<div class="row"><button id="back-stone">${esc(L(LV.back.label))}</button><button id="open-journal">${esc(t('chronicle'))}</button>${passed ? '' : `<button id="retry-epoch">${esc(t('retryEpoch'))}</button>`}<button class="primary" data-close>${esc(t('close'))}</button></div>`, 'complete');
+  $('back-stone').onclick = () => { closePanel(); travel(LV.back.x * TS, LV.back.y * TS); };
   $('open-journal').onclick = () => journal(() => { closePanel(); results(); });
   $('retry-epoch')?.addEventListener('click', () => { closePanel(); retryEpoch(); });
   return panelDone();
@@ -435,6 +450,26 @@ function timerText() {
     return `⏱ ${fmt(Math.max(0, att))}${tot != null ? ` · ${t('total')} ${fmt(Math.max(0, tot))}` : ''}`;
   }
   return `⏱ ${fmt(Math.max(0, ((G.flags.tEnd || Date.now()) - G.flags.t0) / 1000))}`;
+}
+// MAP02+ opens only after the previous epoch is passed: a local journey (practice) or the server's unlock (official).
+const levelPassedOf = id => { try { return JSON.parse(localStorage.getItem('tarikh.official.unlocked') || '[]').includes(id + 1); } catch { return false; } };
+async function levelUnlocked(id) {
+  if (localPassed(id - 1) || levelPassedOf(id - 1)) return true;
+  try {
+    if (db && (await currentUser(db))) {
+      const p = await rpc('get_my_profile');
+      const list = p?.unlocked_levels || [];
+      try { localStorage.setItem('tarikh.official.unlocked', JSON.stringify(list)); } catch {}
+      return list.includes(id);
+    }
+  } catch (e) { console.warn(e); }
+  return false;
+}
+function lockedScreen() {
+  resize();
+  openPanel(`<p class="eyebrow">MAP ${String(LV.id).padStart(2, '0')} · ${esc(LV.title)}</p><h2>${esc(t('mapLocked'))}</h2>
+    <p>${esc(lang === 'ru' ? `Сначала пройди MAP ${String(LV.requires).padStart(2, '0')}: нужно набрать не меньше ${PASS_SCORE} / ${MAX_SCORE}.` : `Алдымен MAP ${String(LV.requires).padStart(2, '0')} деңгейінен өт: кемінде ${PASS_SCORE} / ${MAX_SCORE} жинау керек.`)}</p>
+    <div class="row"><a class="primary button" href="/rpg.html">MAP 01 →</a></div>`, 'quiz', false);
 }
 function gameOver() {
   openPanel(`<h2>${esc(t('gameOver'))}</h2><p>${esc(t('gameOverText'))}</p><div class="col"><button class="primary" id="go-load">${esc(t('continueSave'))}</button><button id="go-new">${esc(t('restart'))}</button></div>`);
@@ -457,6 +492,7 @@ function coopPanel() {
 function startParty(code) {
   leaveParty();
   party.net = createParty(code, {
+    scope: LV.id,
     name: 'chronicler',
     onMessage: onNet,
     onMembers: (list, mySlot) => {
@@ -477,7 +513,7 @@ function startParty(code) {
     },
     onRefused: () => { toast(t('full'), 'warn'); party.net = null; resetSolo(); },
   });
-  history.replaceState(null, '', '?party=' + code);
+  history.replaceState(null, '', location.pathname + levelQS('party=' + code));
 }
 function resetSolo() {
   for (const p of party.peers.values()) E.tj_peer_off(p.eslot);
@@ -488,7 +524,7 @@ function leaveParty() {
   if (!party.net) return;
   party.net.leave(); party.net = null;
   resetSolo();
-  history.replaceState(null, '', location.pathname);
+  history.replaceState(null, '', location.pathname + levelQS());
 }
 function peerByMemberSlot(slot) { for (const p of party.peers.values()) if (p.slot === slot) return p; return null; }
 function memberSlotOfEngine(eslot) { for (const p of party.peers.values()) if (p.eslot === eslot) return p.slot; return -1; }
@@ -569,7 +605,7 @@ function newGame() {
   G.flags = newFlags(); G.local = {granted: [], attempts: {}, seen: [], crystal: 0}; G.armed = null; G.forceNpc = true;
   E.tj_party(party.size, party.host ? 0 : 1); E.tj_hero(SH[HEROES[party.slot]] ?? 0);
   applyWorld(G); lastZone = -1; updateHud(true);
-  if (party.slot === 0) { $('fade').style.transition = 'none'; $('fade').style.opacity = 1; setTimeout(() => quest.interact('page1'), 200); }
+  if (party.slot === 0) { $('fade').style.transition = 'none'; $('fade').style.opacity = 1; setTimeout(() => LV.begin(quest), 200); }
   else $('fade').style.opacity = 0;
 }
 function changed() { flagsDirty = true; updateHud(true); }
@@ -588,7 +624,7 @@ async function travel(x, y) {
 function updateHud(force) {
   if (!E) return;
   const hp = E.tj_state(8), lives = E.tj_state(9), weapon = E.tj_state(13), arrows = E.tj_state(14), zone = E.tj_state(2);
-  const stage = questStage(G.flags), q = QUESTS[stage][lang];
+  const stage = questStage(G.flags), q = QUESTS[stage][lang] || QUESTS[stage].kk;
   const allies = party.size > 1 ? [...party.peers.values()].map(p => `${p.slot}:${p.hp}:${p.down}`).join(',') : '';
   const key = [hp, lives, weapon, arrows, zone, stage, lang, Object.keys(G.flags.quiz).length, party.size, E.tj_item_count(2), E.tj_item_count(3), secretsFound(G.flags), allies, isAudioMuted(), !!official?.active].join('|');
   if (key === hudKey && !force) return;
@@ -608,7 +644,7 @@ function updateHud(force) {
   $('obj-title').textContent = q[0]; $('obj-detail').textContent = q[1];
   $('s-score').textContent = timerText() + (official?.active ? (lang === 'ru' ? ' · офиц.' : ' · ресми') : '');
   $('s-secrets').textContent = `${t('secrets')} ${secretsFound(G.flags)}/${SECRETS.length}`;
-  $('s-quiz').textContent = `${t('trials')} ${MAIN_QUIZ_ORDER.filter(n => G.flags.quiz[HISTORICAL_QUIZZES[n].id]).length}/5`;
+  $('s-quiz').textContent = `${t('trials')} ${MAIN_QUIZ_ORDER.filter(n => G.flags.quiz[HISTORICAL_QUIZZES[n].id]).length}/${MAIN_QUIZ_ORDER.length}`;
   $('b-inv').innerHTML = `<kbd>I</kbd> ${esc(t('inventory'))}`; $('b-save').textContent = '💾 ' + t('save'); $('b-load').textContent = '📂 ' + t('load');
   $('b-help').textContent = '?'; $('b-help').title = t('helpTitle'); $('b-road').textContent = '🗺 ' + (lang === 'ru' ? 'Эпохи' : 'Дәуірлер');
   $('lang-btn').textContent = t('lang'); $('audio-btn').textContent = isAudioMuted() ? '🔇' : '🔊'; $('audio-btn').title = t('mute');
@@ -627,8 +663,8 @@ function updatePrompt() {
   const kind = E.tj_state(25), id = E.tj_state(26), el = $('prompt');
   if (kind < 0 || cine || dialogBusy || panelOpen) { el.hidden = true; return; }
   let text = '';
-  if (kind === 0) { const key = MAP01.interacts[id]; text = `${NAMES[lang][key] || key} · ${VERB[lang][INTERACT_LABEL[key] || 'examine']}`; }
-  else if (kind === 1) text = `${L(SPEAKERS[MAP01.npcs[id]])} · ${VERB[lang].talk}`;
+  if (kind === 0) { const key = MAP.interacts[id]; text = `${LV.NAMES?.[key] || NAMES[lang][key] || key} · ${VERB[lang][(LV.LABELS || INTERACT_LABEL)[key] || 'examine']}`; }
+  else if (kind === 1) text = `${L(SPEAKERS[MAP.npcs[id]])} · ${VERB[lang].talk}`;
   else if (kind === 2) text = VERB[lang].revive;
   const html = `<kbd>E</kbd> ${esc(text)}`;
   if (el.innerHTML !== html) el.innerHTML = html;
@@ -639,9 +675,9 @@ function banner(text) {
   const b = $('banner'); b.textContent = text; b.classList.add('on');
   clearTimeout(bannerTimer); bannerTimer = setTimeout(() => b.classList.remove('on'), 2600);
 }
-const TILE_RGB = ['3d6a3b', '7a7d44', '77593b', 'b49c68', '1d5a76', '4aa0a8', '5e504a', '2f383a', '120a18', '7c6b60'].map(h => [0, 2, 4].map(i => parseInt(h.slice(i, i + 2), 16)));
+const TILE_RGB = ['3d6a3b', '7a7d44', '77593b', 'b49c68', '1d5a76', '4aa0a8', '5e504a', '2f383a', '120a18', '7c6b60', '3e3633', '7a5a40', 'a08a66', '2c2426', '120c10'].map(h => [0, 2, 4].map(i => parseInt(h.slice(i, i + 2), 16)));
 function buildMinimap(areaIdx) {
-  const a = Object.values(MAP01.areas)[areaIdx];
+  const a = Object.values(MAP.areas)[areaIdx];
   const w = a[2] - a[0], h = a[3] - a[1];
   mini.width = w; mini.height = h;
   const img = mctx.createImageData(w, h);
@@ -654,16 +690,16 @@ function buildMinimap(areaIdx) {
 function drawMinimap(now) {
   const area = E.tj_state(35);
   if (area !== minimapArea) buildMinimap(area);
-  const a = Object.values(MAP01.areas)[area];
+  const a = Object.values(MAP.areas)[area];
   mctx.putImageData(miniBase, 0, 0);
   const dot = (px, py, col, r = 1) => { mctx.fillStyle = col; mctx.fillRect(Math.round(px / TS - a[0]) - r, Math.round(py / TS - a[1]) - r, r * 2 + 1, r * 2 + 1); };
-  for (let i = 0; i < MAP01.npcs.length; i++) if (E.tj_npc(i, 2)) dot(E.tj_npc(i, 0), E.tj_npc(i, 1), '#e2b45a', 0);
+  for (let i = 0; i < MAP.npcs.length; i++) if (E.tj_npc(i, 2)) dot(E.tj_npc(i, 0), E.tj_npc(i, 1), '#e2b45a', 0);
   for (let i = 0; i < E.tj_enemy_count(); i++) if (E.tj_enemy(i, 6) && E.tj_enemy(i, 0) > 0 && E.tj_enemy(i, 12)) dot(E.tj_enemy(i, 2) / 1000, E.tj_enemy(i, 3) / 1000, '#e06a3f', 0);
   const tg = questTarget(G.flags);
   if (tg && (now / 400 | 0) % 2) {
     let p = null;
     if (tg.npc != null && E.tj_npc(tg.npc, 2)) p = [E.tj_npc(tg.npc, 0), E.tj_npc(tg.npc, 1)];
-    else if (tg.ia != null) p = MAP01.interactPos[MAP01.interacts[tg.ia]];
+    else if (tg.ia != null) p = MAP.interactPos[MAP.interacts[tg.ia]];
     if (p) dot(p[0], p[1], '#fff2c4', 1);
   }
   const colors = ['#86cdbd', '#86a6c8', '#f0b878'];
@@ -683,10 +719,10 @@ function handleEvents() {
       case EV.INTERACT: {
         if (cine || dialogBusy || panelOpen) break;
         const hold = (b & 0x10000) !== 0, id = b & 0xffff;
-        if (a === 1) quest.talk(MAP01.npcs[id]); else quest.interact(MAP01.interacts[id], hold);
+        if (a === 1) quest.talk(MAP.npcs[id]); else quest.interact(MAP.interacts[id], hold);
         break;
       }
-      case EV.TRIGGER: quest.trigger(MAP01.triggers[a]); break;
+      case EV.TRIGGER: quest.trigger(MAP.triggers[a]); break;
       case EV.ENEMY_DIED: quest.enemyDied(a, b); break;
       case EV.PICKUP: toast(`${t('got')}: ${ITEMS[lang][a][0]} ×${b}`); updateHud(true); break;
       case EV.HURT: sfx('hurt'); break;
@@ -723,10 +759,11 @@ function onZone(z) {
 function musicForZone(force) {
   if (cine && !force) return;
   const z = E.tj_state(2);
-  music(z === 1 ? 'village' : z === 5 ? 'cave' : z === 6 ? 'camp' : z === 4 ? 'danger' : 'explore');
+  music(LV.music ? LV.music(z, G.flags) : z === 1 ? 'village' : z === 5 ? 'cave' : z === 6 ? 'camp' : z === 4 ? 'danger' : 'explore');
 }
 function ambienceTick() {
   const z = E.tj_state(2), [x, y] = heroPos();
+  if (LV.ambience) { ambience(LV.ambience(z, x, y, (a, b) => E.tj_tile(a, b), G.flags)); return; }
   const fire = Math.max(0, 1 - Math.hypot(x - 32 * TS, y - 41 * TS) / 140) + Math.max(0, 1 - Math.hypot(x - 85 * TS, y - 19.5 * TS) / 140);
   let river = 0;
   for (let dx = -6; dx <= 6; dx++) { const tt = E.tj_tile(Math.floor(x / TS) + dx, Math.floor(y / TS)); if (tt === 4 || tt === 5) river = Math.max(river, 1 - Math.abs(dx) / 7); }
@@ -809,8 +846,11 @@ new ResizeObserver(resize).observe(document.body);
 async function boot() {
   $('loading').textContent = t('loading');
   try {
+    bindLevel(await loadLevel(levelFromURL()));
+    document.title = `Tarikh Joly · ${LV.title}`;
+    if (LV.requires && !(await levelUnlocked(LV.id))) { $('loading').remove(); return lockedScreen(); }
     const [wasm, png] = await Promise.all([
-      fetch('/engine/rpg/tarikh-rpg.wasm').then(r => { if (!r.ok) throw new Error('WASM ' + r.status); return r.arrayBuffer(); }),
+      fetch(LV.wasm).then(r => { if (!r.ok) throw new Error('WASM ' + r.status); return r.arrayBuffer(); }),
       fetch('/art/rpg/atlas.png').then(r => { if (!r.ok) throw new Error('atlas ' + r.status); return r.arrayBuffer(); }),
     ]);
     const {instance} = await WebAssembly.instantiate(wasm, {});
@@ -828,16 +868,16 @@ async function boot() {
     frame = new ImageData(new Uint8ClampedArray(E.memory.buffer, E.tj_pixels(), W * H * 4), W, H);
     Object.assign(G, {
       say, quiz, bonusTrial, chamber, journal, levelPassed, results, complete, travel, toast, changed, heroPos, save: s => save(s),
-      cine: (id, fn) => playCutscene(id, fn), sfx, spawnFx: (p, type, n) => E.tj_spawn_fx(type, p[0], p[1], n),
+      cine: (id, fn) => playCutscene(id, fn), sfx, gotoLevel: n => { save(true); location.href = '/rpg.html' + (n > 1 ? '?level=' + n : ''); }, spawnFx: (p, type, n) => E.tj_spawn_fx(type, p[0], p[1], n),
     });
     quest = createQuest(G);
     $('loading').remove();
     resize();
     $('hotbar').addEventListener('pointerdown', e => e.stopPropagation());
     const params = new URLSearchParams(location.search);
-    if (params.has('new')) { // Started from the intro comic: a fresh journey into MAP01.
+    if (params.has('new')) { // Started from the intro comic: a fresh journey into MAP.
       try { const old = localStorage.getItem(SAVE_KEY); if (old) localStorage.setItem(SAVE_KEY + '.prev', old); localStorage.removeItem(SAVE_KEY); } catch {}
-      history.replaceState(null, '', location.pathname + (params.get('party') ? '?party=' + params.get('party') : ''));
+      history.replaceState(null, '', location.pathname + levelQS(params.get('party') ? 'party=' + params.get('party') : ''));
       newGame(); startOfficial(true);
     } else if (load(true)) { $('fade').style.opacity = 0; startOfficial(false); }
     else { newGame(); startOfficial(true); }
@@ -851,7 +891,7 @@ async function boot() {
     musicForZone(true);
     // Debug/QA handle (used by scripts/check-rpg-browser.mjs).
     const step = n => { for (let i = 0; i < n; i++) { E.tj_tick(); handleEvents(); } E.tj_render(); ctx.putImageData(frame, 0, 0); updateHud(); updatePrompt(); drawMinimap(performance.now()); };
-    if (import.meta.env.DEV) window.__tj = {E, G, party, quest, retryEpoch, results, get official() { return official; }, save, load, newGame, skipCutscene, closePanel, advanceDialog, travel, step, inventory, coopPanel, startParty, leaveParty,
+    if (import.meta.env.DEV) window.__tj = {LV, E, G, party, quest, retryEpoch, results, get official() { return official; }, save, load, newGame, skipCutscene, closePanel, advanceDialog, travel, step, inventory, coopPanel, startParty, leaveParty,
       get panelOpen() { return panelOpen; }, get cine() { return cine?.id || null; }, get dialog() { return !$('dlg').hidden; }};
   } catch (err) {
     console.error(err);

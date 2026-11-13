@@ -2,9 +2,11 @@
 namespace tj {
 // Item ids 1..ItemCount. Names/descriptions shown in the UI are localised in JS (src/rpg/i18n.js);
 // the Kazakh strings here are kept for the stable tj_item_text ABI.
-constexpr int ItemCount=14;
+constexpr int ItemCount=19;
+constexpr int LegacyItemCount=14; // MAP01 saves written before MAP02
 enum ItemType { WeaponItem,AmmoItem,ConsumableItem,HistoricalItem,KeyItem,ArtifactItem };
-enum ItemId { ISword=1,ISpear,IBow,IArrows,IKit,ITool,ITorch,IPage,IHerb,IQuiver,IOchre,IFlute,ICrystal,INecklace };
+enum ItemId { ISword=1,ISpear,IBow,IArrows,IKit,ITool,ITorch,IPage,IHerb,IQuiver,IOchre,IFlute,ICrystal,INecklace,
+              ITablet,IEmber,IMould,ISeal,IBracelet };
 struct ItemDef {const char* id;const char* name;const char* description;int type,limit;};
 constexpr ItemDef items[]={
  {"sword","Қылыш","Шежіре институтының жеңіл жүзі. Кең әрі жылдам соққы.",WeaponItem,1},
@@ -20,7 +22,12 @@ constexpr ItemDef items[]={
  {"ochre","Жосa","Жартас суретіне қолданылған қызыл бояу.",ArtifactItem,1},
  {"flute","Сүйек сыбызғы","Үңгірде жасырылған сүйек сыбызғы.",ArtifactItem,1},
  {"crystal","Бөтен кристалл","Бұл дәуірге жатпайтын күлгін сынық.",KeyItem,3},
- {"necklace","Тіс алқа","Аңшылардың сыйы — сенім белгісі.",ArtifactItem,1}
+ {"necklace","Тіс алқа","Аңшылардың сыйы — сенім белгісі.",ArtifactItem,1},
+ {"bronze-tablet","Қола тақтайша","Шежірешінің бейнесі қашалған қола тақтайша.",KeyItem,1},
+ {"sacred-ember","Қасиетті шоқ","Сақшыдан қайтарылған оттың шоғы.",KeyItem,1},
+ {"stone-mould","Тас қалып","Жасырын шеберханадан табылған құю қалыбы.",ArtifactItem,1},
+ {"institute-seal","Институт таңбасы","Тас бағанадан көшірілген бөтен таңба.",ArtifactItem,1},
+ {"bronze-bracelet","Қола білезік","Жоғалған тұрғынның сынған білезігі.",HistoricalItem,1}
 };
 struct Inventory {int counts[ItemCount]={1,0,0,0,1,0,0,0,0,0,0,0,0,0};};
 }
