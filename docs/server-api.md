@@ -37,3 +37,13 @@ RPC (authenticated):
 Повтор с тем же `p_request` и теми же параметрами возвращает сохранённый ответ (`duplicate:true`); другие параметры отвергаются. RLS: ученик видит только свои `level_runs`/`level_results`; teacher/admin — все результаты. Прямые INSERT/UPDATE/DELETE запрещены.
 
 Граница античита: сервер не принимает счёт от клиента и проверяет ответы, но не видит движение и бой — секреты и бой в официальный счёт не входят. Варианты ответов MAP01 присутствуют и в клиентском бандле (офлайн‑режим), поэтому знание ответов из кода не предотвращается.
+
+## Вход в админ-панель (логин + пароль)
+
+Кнопка «Әкімші» на главной открывает `/admin.html`, где `src/admin/gate.js` показывает форму входа.
+
+- **С Supabase (production):** настоящий вход Supabase Auth по email и паролю; затем сервер (`get_my_role`) должен вернуть `admin` или `teacher`, иначе выход. Создать аккаунт: Supabase → Authentication → Users → Add user (email + пароль; включён провайдер Email), затем в SQL Editor:
+  `insert into private.user_roles(user_id, role) select id, 'admin' from auth.users where email = 'admin@ваш-домен' on conflict (user_id) do update set role = 'admin';`
+  Чтобы входить логином `Admin`, задайте `VITE_ADMIN_EMAIL=admin@ваш-домен`. Используйте длинный пароль: простой пароль легко подобрать.
+- **Без Supabase, только `npm run dev`:** демо-вход из `.env.local` (`VITE_DEV_ADMIN_LOGIN`, `VITE_DEV_ADMIN_PASSWORD_SHA256` — SHA-256 пароля, не сам пароль). Этот путь вырезается из production-сборки и не даёт серверных прав: панель показывает демо-данные.
+- Браузерная проверка: `ADMIN_CHECK_LOGIN=... ADMIN_CHECK_PASSWORD=... node scripts/check-admin-browser.mjs <url>`.

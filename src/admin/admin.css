@@ -161,3 +161,19 @@ dialog.admin-modal h2 { font-size: 20px; font-weight: 600; margin-bottom: 16px; 
   aside.admin-sidebar { width: 100%; border-right: none; border-bottom: 1px solid var(--border); }
 }
 
+
+/* Sign-in gate (src/admin/gate.js) */
+.gate{min-height:100vh;display:grid;place-items:center;background:radial-gradient(900px 500px at 30% -10%,#1d3330,#0d1517 60%);padding:16px}
+.gate-card{width:min(380px,100%);display:flex;flex-direction:column;gap:12px;background:#132223;border:1px solid #2f4543;border-radius:12px;padding:24px;color:#e9e3cf;font-family:system-ui,sans-serif}
+.gate-card h1{margin:0 0 4px;font-size:22px}
+.gate-eyebrow{margin:0;color:#e2b45a;font-size:11px;letter-spacing:.16em;font-weight:700}
+.gate-card label{display:flex;flex-direction:column;gap:4px;font-size:13px;color:#a6b3a6}
+.gate-card input{background:#0b1416;border:1px solid #2f4543;border-radius:6px;padding:9px 10px;color:#f1ead6;font-size:15px}
+.gate-card input:focus{outline:2px solid #e2b45a;outline-offset:1px}
+.gate-card button{background:linear-gradient(#e2b45a,#b8862e);border:0;border-radius:6px;padding:10px;font-weight:800;color:#1a1208;cursor:pointer}
+.gate-card button:disabled{opacity:.5;cursor:default}
+.gate-error{min-height:1em;margin:0;color:#ff9b7a;font-size:13px}
+.gate-note{margin:0;font-size:12px;color:#a6b3a6;background:#0b1416;border-left:3px solid #e2b45a;padding:8px}
+.gate-back{color:#86cdbd;font-size:13px;text-decoration:none}
+.gate-session{position:fixed;right:12px;bottom:12px;z-index:50;display:flex;gap:8px;align-items:center;background:#132223;border:1px solid #2f4543;border-radius:8px;padding:6px 8px;color:#cedabe;font:12px system-ui}
+.gate-session button{background:#0b1416;border:1px solid #2f4543;color:#e9e3cf;border-radius:5px;padding:4px 8px;cursor:pointer}

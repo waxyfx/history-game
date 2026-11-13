@@ -82,6 +82,13 @@ try {
   await call('Page.enable');
   await call('Emulation.setDeviceMetricsOverride', { width: 1440, height: 900, deviceScaleFactor: 1, mobile: false });
   await call('Page.navigate', { url: base + '/admin.html' });
+  // admin.html is behind a sign-in gate (src/admin/gate.js). Credentials come from the environment,
+  // e.g. ADMIN_CHECK_LOGIN=Admin ADMIN_CHECK_PASSWORD=... with the local demo login from .env.local.
+  await wait('document.querySelector("#gate-form") !== null || document.querySelector("aside.admin-sidebar") !== null');
+  if (await js('document.querySelector("#gate-form") !== null')) {
+    assert(process.env.ADMIN_CHECK_LOGIN && process.env.ADMIN_CHECK_PASSWORD, 'Set ADMIN_CHECK_LOGIN and ADMIN_CHECK_PASSWORD for the admin sign-in gate');
+    await js(`document.getElementById('gate-login').value=${JSON.stringify(process.env.ADMIN_CHECK_LOGIN)};document.getElementById('gate-pass').value=${JSON.stringify(process.env.ADMIN_CHECK_PASSWORD)};document.getElementById('gate-form').requestSubmit()`);
+  }
 
   await wait('document.querySelector("aside.admin-sidebar") !== null');
   assert.equal(await js('document.querySelector("header.admin-topbar h1").textContent'), 'Басқару тақтасы (Dashboard)');
