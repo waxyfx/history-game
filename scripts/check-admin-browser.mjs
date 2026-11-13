@@ -108,6 +108,20 @@ try {
   assert.equal(await js('document.querySelector("header.admin-topbar h1").textContent'), 'Квиздер мен сұрақтарды басқару (CRUD)');
   assert(await js('document.querySelectorAll("table.admin-table tbody tr").length >= 5'));
 
+  // User-entered content must stay inert in text, attributes and action identifiers.
+  await js('document.querySelector("#add-quiz-btn").click()');
+  await js(
+    'document.querySelector("#q-id").value = "x\');window.__xss=1;//";' +
+    'document.querySelector("#q-task").value = "<img src=x onerror=window.__xss=1>";' +
+    'document.querySelector("#q-text").value = "<img src=x onerror=window.__xss=1>";' +
+    '[0,1,2,3].forEach(i=>document.querySelector("#q-opt-"+i).value="<svg onload=window.__xss=1>");' +
+    'document.querySelector("#q-exp").value = "<script>window.__xss=1</script>";' +
+    'document.querySelector("#quiz-form").dispatchEvent(new Event("submit",{cancelable:true}))'
+  );
+  assert.equal(await js('document.querySelectorAll(".admin-section img,.admin-section svg,.admin-section script").length'),0);
+  await js('Array.from(document.querySelectorAll("[data-delete-quiz]")).at(-1).click()');
+  assert.equal(await js('window.__xss || 0'),0);
+
   // 4. Navigate to Epochs
   await js('document.querySelector("button[data-tab=\'epochs\']").click()');
   await wait('document.querySelectorAll(".epoch-admin-card").length === 8');

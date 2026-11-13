@@ -851,7 +851,7 @@ async function boot() {
     musicForZone(true);
     // Debug/QA handle (used by scripts/check-rpg-browser.mjs).
     const step = n => { for (let i = 0; i < n; i++) { E.tj_tick(); handleEvents(); } E.tj_render(); ctx.putImageData(frame, 0, 0); updateHud(); updatePrompt(); drawMinimap(performance.now()); };
-    window.__tj = {E, G, party, quest, retryEpoch, results, get official() { return official; }, save, load, newGame, skipCutscene, closePanel, advanceDialog, travel, step, inventory, coopPanel, startParty, leaveParty,
+    if (import.meta.env.DEV) window.__tj = {E, G, party, quest, retryEpoch, results, get official() { return official; }, save, load, newGame, skipCutscene, closePanel, advanceDialog, travel, step, inventory, coopPanel, startParty, leaveParty,
       get panelOpen() { return panelOpen; }, get cine() { return cine?.id || null; }, get dialog() { return !$('dlg').hidden; }};
   } catch (err) {
     console.error(err);

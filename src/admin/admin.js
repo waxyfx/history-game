@@ -1,3 +1,4 @@
+import { escapeHtml } from './escape.js';
 import './admin.css';
 import { ALL_EPOCHS, ALL_EPOCH_QUIZZES } from '../rpg/campaign.js';
 import { HISTORICAL_QUIZZES } from '../rpg/story.js';
@@ -99,6 +100,7 @@ function renderApp() {
         </div>
       </header>
 
+      <p role="note" style="padding:12px 24px">ДЕМО: жасанды деректер. Өзгерістер тек осы бетте сақталады. Рөл таңдауы серверлік құқық бермейді.</p>
       <div class="admin-section">
         ${renderContent()}
       </div>
@@ -262,9 +264,9 @@ function renderDashboard() {
         <tbody>
           ${state.sessions.map(s => `
             <tr>
-              <td><strong>${s.title}</strong></td>
-              <td><code style="background:#0b1617;padding:2px 6px;border-radius:3px">${s.code}</code></td>
-              <td>${s.host}</td>
+              <td><strong>${escapeHtml(s.title)}</strong></td>
+              <td><code style="background:#0b1617;padding:2px 6px;border-radius:3px">${escapeHtml(s.code)}</code></td>
+              <td>${escapeHtml(s.host)}</td>
               <td>${s.members} оқушы</td>
               <td><span class="role-badge ${s.status === 'started' ? 'teacher' : s.status === 'lobby' ? 'admin' : 'player'}">${s.status === 'started' ? 'Ойналуда' : s.status === 'lobby' ? 'Күтуде' : 'Аяқталған'}</span></td>
             </tr>
@@ -279,7 +281,7 @@ function renderPlayers() {
   const filtered = state.players.filter(p => p.name.toLowerCase().includes(state.searchQuery.toLowerCase()));
   return `
     <div class="search-bar">
-      <input type="text" id="player-search" placeholder="Оқушының атын іздеу..." value="${state.searchQuery}" />
+      <input type="text" id="player-search" placeholder="Оқушының атын іздеу..." value="${escapeHtml(state.searchQuery)}" />
     </div>
     <div class="table-container">
       <table class="admin-table">
@@ -296,12 +298,12 @@ function renderPlayers() {
         <tbody>
           ${filtered.map(p => `
             <tr>
-              <td><strong>${p.name}</strong></td>
-              <td><span class="role-badge ${p.role}">${p.role}</span></td>
+              <td><strong>${escapeHtml(p.name)}</strong></td>
+              <td><span class="role-badge ${escapeHtml(p.role)}">${escapeHtml(p.role)}</span></td>
               <td>${p.runs} рет</td>
               <td><strong style="color:var(--gold-primary)">${p.score}</strong></td>
               <td>MAP 0${p.level}</td>
-              <td>${p.last_active}</td>
+              <td>${escapeHtml(p.last_active)}</td>
             </tr>
           `).join('')}
         </tbody>
@@ -379,9 +381,9 @@ function renderSessions() {
         <tbody>
           ${state.sessions.map(s => `
             <tr>
-              <td><strong>${s.title}</strong></td>
-              <td><code style="font-size:14px;background:#0b1617;padding:4px 8px;border-radius:4px;color:var(--gold-primary);font-weight:bold">${s.code}</code></td>
-              <td>${s.host}</td>
+              <td><strong>${escapeHtml(s.title)}</strong></td>
+              <td><code style="font-size:14px;background:#0b1617;padding:4px 8px;border-radius:4px;color:var(--gold-primary);font-weight:bold">${escapeHtml(s.code)}</code></td>
+              <td>${escapeHtml(s.host)}</td>
               <td>${s.members} қатысушы</td>
               <td><span class="role-badge ${s.status === 'started' ? 'teacher' : s.status === 'lobby' ? 'admin' : 'player'}">${s.status === 'started' ? 'Белсенді' : s.status === 'lobby' ? 'Күтуде' : 'Жабылған'}</span></td>
               <td>
@@ -452,13 +454,13 @@ function renderQuizzes() {
             <tr><td colspan="6" style="text-align:center;padding:24px;color:var(--text-muted)">Бұл дәуірге әзірге қосымша сұрақ қосылмаған. «Жаңа сұрақ қосу» түймесін басыңыз.</td></tr>
           ` : currentQuizzes.map(q => `
             <tr>
-              <td><strong style="color:var(--gold-primary)">${q.id}</strong><br><small style="color:var(--text-muted)">${q.task_id}</small></td>
-              <td style="max-width:280px;line-height:1.4">${q.question_text}</td>
-              <td><span style="color:var(--accent-green);font-weight:600">${q.options[q.correctIndex] || q.options[0]}</span></td>
-              <td style="max-width:260px;font-size:12px;color:var(--text-muted);line-height:1.4">${q.explanation}</td>
+              <td><strong style="color:var(--gold-primary)">${escapeHtml(q.id)}</strong><br><small style="color:var(--text-muted)">${escapeHtml(q.task_id)}</small></td>
+              <td style="max-width:280px;line-height:1.4">${escapeHtml(q.question_text)}</td>
+              <td><span style="color:var(--accent-green);font-weight:600">${escapeHtml(q.options[q.correctIndex] || q.options[0])}</span></td>
+              <td style="max-width:260px;font-size:12px;color:var(--text-muted);line-height:1.4">${escapeHtml(q.explanation)}</td>
               <td><span class="role-badge ${q.active ? 'teacher' : 'player'}">${q.active ? 'Белсенді' : 'Өшірулі'}</span></td>
               <td>
-                <button class="btn btn-danger" style="font-size:11px;padding:4px 8px" onclick="window.adminDeleteQuiz('${q.id}')">Өшіру</button>
+                <button class="btn btn-danger" style="font-size:11px;padding:4px 8px" data-delete-quiz="${escapeHtml(q.id)}">Өшіру</button>
               </td>
             </tr>
           `).join('')}
@@ -526,6 +528,9 @@ function renderAnalytics() {
 }
 
 function attachEvents() {
+  document.querySelectorAll('[data-delete-quiz]').forEach(button => {
+    button.onclick = () => window.adminDeleteQuiz(button.dataset.deleteQuiz);
+  });
   // Navigation tabs
   document.querySelectorAll('nav.admin-nav button').forEach(btn => {
     btn.onclick = () => {
