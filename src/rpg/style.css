@@ -196,3 +196,8 @@ html, body { height: 100%; overflow: hidden; background: #050909; }
 @keyframes buff-blink { 50% { opacity: .45; } }
 .toast.good { border-color: #8fd36b; }
 .toast.hint { border-color: var(--gold); max-width: 28em; }
+
+/* Mouse play: no cursor over the game world; it comes back over the hotbar, in dialogue choices and menus */
+.viewport.playing, .viewport.playing canvas { cursor: none; }
+.viewport.playing .hotbar, .viewport.playing .hotbar *, .viewport .skip, .viewport .panel, .viewport .panel * { cursor: auto; }
+.viewport.playing .hotbar button, .viewport.playing .hotbar a, .viewport .skip, .viewport .panel button { cursor: pointer; }

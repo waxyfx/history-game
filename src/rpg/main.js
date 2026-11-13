@@ -111,13 +111,14 @@ const party = {size: 1, slot: 0, host: true, net: null, members: [], peers: new 
 let quest, panelOpen = false, cine = null, dialogBusy = false, loopStarted = false;
 let lastTime = 0, acc = 0, hudKey = '', lastZone = -1, lastSave = 0, flagsDirty = false, minimapArea = -1, miniBase = null;
 const held = new Set(), touch = new Map();
+let mouseMask = 0, lastWheel = 0;   // mouse: left = strike, right = interact (see «mouse controls»)
 const keyBits = {KeyW: 1, ArrowUp: 1, KeyS: 2, ArrowDown: 2, KeyA: 4, ArrowLeft: 4, KeyD: 8, ArrowRight: 8, KeyE: 16, Space: 32, ShiftLeft: 64, ShiftRight: 64};
 
 function input() {
   if (!E) return;
   const blocked = panelOpen || dialogBusy || cine;
   let mask = 0;
-  if (!blocked) { for (const c of held) mask |= keyBits[c] || 0; for (const v of touch.values()) mask |= v; }
+  if (!blocked) { for (const c of held) mask |= keyBits[c] || 0; for (const v of touch.values()) mask |= v; mask |= mouseMask; }
   E.tj_input(mask);
 }
 function toast(msg, kind = '') {
@@ -731,7 +732,7 @@ function updatePrompt() {
   if (kind === 0) { const key = MAP.interacts[id]; text = `${LV.NAMES?.[key] || NAMES[lang][key] || key} · ${VERB[lang][(LV.LABELS || INTERACT_LABEL)[key] || 'examine']}`; }
   else if (kind === 1) text = `${L(SPEAKERS[MAP.npcs[id]])} · ${VERB[lang].talk}`;
   else if (kind === 2) text = VERB[lang].revive;
-  const html = `<kbd>E</kbd> ${esc(text)}`;
+  const html = `<kbd>${coarsePointer ? 'E' : lang === 'ru' ? 'ПКМ' : '🖱 оң'}</kbd> ${esc(text)}`;
   if (el.innerHTML !== html) el.innerHTML = html;
   el.hidden = false;
 }
@@ -849,6 +850,7 @@ function loop(now) {
   E.tj_render();
   ctx.putImageData(frame, 0, 0);
   updateHud(); updatePrompt();
+  $('viewport').classList.toggle('playing', !panelOpen);
   if ((now / 100 | 0) % 2 === 0) drawMinimap(now);
   if ((now / 250 | 0) !== ambTick) { ambTick = now / 250 | 0; ambienceTick(); renderBuffs(); $('s-score').textContent = timerText() + (official?.active ? (lang === 'ru' ? ' · офиц.' : ' · ресми') : ''); }
   netTick(now);
@@ -872,13 +874,40 @@ window.addEventListener('keydown', e => {
   if (keyBits[e.code]) { e.preventDefault(); held.add(e.code); input(); }
 });
 window.addEventListener('keyup', e => { if (keyBits[e.code]) { held.delete(e.code); input(); } });
-window.addEventListener('blur', () => { held.clear(); touch.clear(); input(); });
+window.addEventListener('blur', () => { held.clear(); touch.clear(); mouseMask = 0; input(); });
 document.addEventListener('visibilitychange', () => { if (document.hidden) { held.clear(); input(); if (E && !panelOpen && !cine && !dialogBusy && party.size === 1) pauseMenu(); } });
 for (const btn of document.querySelectorAll('[data-key]')) {
   btn.addEventListener('pointerdown', ev => { ev.preventDefault(); unlockAudio(); btn.setPointerCapture(ev.pointerId); if (!$('dlg').hidden) { advanceDialog(); return; } touch.set(ev.pointerId, +btn.dataset.key); input(); });
   for (const n of ['pointerup', 'pointercancel', 'lostpointercapture']) btn.addEventListener(n, ev => { touch.delete(ev.pointerId); input(); });
 }
 $('dlg').addEventListener('click', () => advanceDialog());
+// ---------------------------------------------------------------- mouse controls
+// Left button = attack (hold to keep striking), right button = interact / talk (hold for hold-actions),
+// wheel = next / previous weapon. Keyboard (Space, E, 1–3) keeps working. Touch uses the on-screen pad.
+const coarsePointer = matchMedia('(pointer: coarse)').matches;
+const MOUSE_BITS = {0: 32, 2: 16};
+const onUi = el => !!el.closest('.hotbar, .panel, .dlg, .skip, .touch, .minimap, button, a, input');
+$('viewport').addEventListener('pointerdown', ev => {
+  if (ev.pointerType !== 'mouse' || onUi(ev.target)) return;
+  unlockAudio(); canvas.focus({preventScroll: true});
+  ev.preventDefault();
+  if (!$('dlg').hidden) { advanceDialog(); return; }   // any click advances the dialogue
+  const bit = MOUSE_BITS[ev.button];
+  if (!bit || !E || cine || panelOpen) return;
+  mouseMask |= bit; input();
+});
+window.addEventListener('pointerup', ev => { const bit = MOUSE_BITS[ev.button]; if (bit && mouseMask & bit) { mouseMask &= ~bit; input(); } });
+$('viewport').addEventListener('contextmenu', ev => { if (!ev.target.closest('input')) ev.preventDefault(); });
+function cycleWeapon(dir) {
+  const cur = E.tj_state(13);
+  for (let k = 1; k <= 3; k++) { const w = (cur + dir * k + 6) % 3; if (E.tj_item_count(w + 1) > 0) { if (w !== cur) equip(w); return; } }
+}
+$('viewport').addEventListener('wheel', ev => {
+  if (!E || panelOpen || cine || dialogBusy || ev.target.closest('.panel')) return;   // panels keep their own scrolling
+  ev.preventDefault();
+  const now = performance.now(); if (now - lastWheel < 140) return; lastWheel = now;
+  cycleWeapon(ev.deltaY > 0 ? 1 : -1);
+}, {passive: false});
 $('skip').onclick = skipCutscene;
 $('panel').addEventListener('click', e => { if (e.target.closest('[data-close]')) closePanel(); });
 canvas.addEventListener('pointerdown', () => { unlockAudio(); canvas.focus({preventScroll: true}); });
