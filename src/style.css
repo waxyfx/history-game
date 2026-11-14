@@ -9,3 +9,11 @@
 @media (max-height:520px) and (orientation:landscape){.touch-actions{gap:6px}.touch-actions button{width:54px;height:54px}}
 
 .low-quality .game-vignette{display:none}.low-quality .game *{box-shadow:none;text-shadow:none}.modal{overflow-y:auto;max-height:90vh;max-height:90dvh}.playing .modal input,.playing .modal select{font-size:16px}@media(max-height:500px){.modal p,.options button{font-size:14px}}
+.intro-replay{margin-top:18px;min-height:36px;font-size:12px;font-weight:800;letter-spacing:.08em;color:var(--ink);display:inline-flex;gap:10px;align-items:center;padding:4px 0;border-bottom:1px solid var(--gold)}.intro-replay span{color:var(--gold)}.intro-replay:hover{color:var(--gold)}
+.intro-replay+.intro-replay{margin-left:22px}
+/* Participant profile (Жеке кабинет) */
+.member{display:flex;gap:14px;align-items:center;margin:6px 0 10px}
+.member h2{margin:0}
+.member .avatar{width:56px;height:56px;border-radius:50%;object-fit:cover;display:grid;place-items:center;background:#2f7f7a;color:#fff;font-weight:800;font-size:24px;flex:none}
+.results-table{width:100%;border-collapse:collapse;font-size:14px;margin:6px 0 12px}
+.results-table th,.results-table td{padding:6px 8px;border-bottom:1px solid #ffffff1f;text-align:left}

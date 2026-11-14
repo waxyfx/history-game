@@ -68,6 +68,8 @@ for level in range(1,11):
  nodes+=pack('hhhh',512,0,0,1024)+bbox(512,1536)+bbox(0,512)+pack('HH',0,0x8000)
  things=[(256,512,0,1,7),(400,512,0,2028,7),(128,800,0,2028,7),(1408,512,0,2028,7)]
  for i in range(min(4,(level-1)//2)):things.append((1150+(i%2)*150,200+(i//2)*600,180,3004,7))
+ # Easter egg: the author's yurt hides in a corner of the Kazakh Khanate courtyard (sprite COL1 = yurt).
+ if level==10:things.append((112,150,45,30,7))
  # Conservative blockmap: every cell references every line; correct for a tiny map.
  cells=13*9;head=pack('hhhh',-64,-64,13,9);offset=4+cells
  block=head+b''.join(pack('H',offset) for _ in range(cells))+pack('H',0)+b''.join(pack('H',i) for i in range(len(lines)))+pack('H',65535)

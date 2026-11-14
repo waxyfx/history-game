@@ -1,5 +1,42 @@
 # Tarikh: іске қосу және көрсету
 
+## 1. Негізгі сілтемелер мен режимдер
+
+- **`/` — Бастапқы Beta 0.1 (DoomGeneric C/WASM)**: бұрынғы 3D бірінші жақтан көрініс, Freedoom лицензиялары, 10 тарихи деңгей.
+- **`/rpg.html` — Жаңа 2D Top-Down RPG (16-bit Pixel Art)**: C++/WebAssembly дербес қозғалтқышы (480×320), 8 бағытты қозғалыс, семсер/найза/садақ ұрыс жүйесі, қоржын, 6 байланысқан аймақ (Апат орны, Қоныс, Шеберхана, Орман, Үңгір, Құпия уақыт құрдымы), тарихи квиздер, жергілікті сақтау (localStorage) және сегіз дәуірдің толық шежіресі.
+- **`/admin/` немесе `/admin.html` — Мұғалім және Әкімшілік панелі**: Dashboard, оқушылар тізімі, командалар, сессияларды басқару, дәуірлер мәртебесі, квиздер мен сұрақтардың толық CRUD-і (WASM-ді қайта жинақтаусыз), аналитика және RBAC (Player, Teacher, Admin).
+
+## 2. Жобаны жергілікті іске қосу
+
+Жоба қалтасында:
+
+```bash
+npm ci
+npm run dev
+```
+
+Браузерде:
+- Ойын үшін: `http://127.0.0.1:5173/rpg.html`
+- Әкімшілік панель үшін: `http://127.0.0.1:5173/admin.html` (немесе `/admin/`)
+- Бұрынғы Doom нұсқасы үшін: `http://127.0.0.1:5173/`
+
+## 3. Сынақтар мен тексерулер
+
+```bash
+# Барлық 31 бірлік және серверлік тексеруді іске қосу (PostgreSQL PGlite, C++ WASM, сақтау, ұрыс, RBAC)
+npm test
+
+# 2D RPG C++ қозғалтқышын жинақтау (Emscripten)
+npm run engine:rpg
+
+# Толық production жинағын құру (legacy, rpg, admin)
+npm run build
+
+# Браузерлік автоматты тексерулер (Headless Chrome/Edge)
+npm run check:rpg -- http://127.0.0.1:5173
+npm run check:admin -- http://127.0.0.1:5173
+```
+
 Жоба қалтасында Node.js 22 немесе кейінгі нұсқасымен:
 
     npm ci
@@ -11,7 +48,7 @@
 
 ## Топтық ойын және Google арқылы кіру
 
-1. Supabase жобасының SQL Editor бөлімінде supabase/migrations ішіндегі 001, 002, 003 файлдарын осы ретпен орындаңыз.
+1. Supabase жобасының SQL Editor бөлімінде supabase/migrations ішіндегі 001–006 файлдарын осы ретпен орындаңыз (006 — Google профилі, рөлдер және ресми нәтижелер, docs/server-api.md).
 2. Google Cloud-та Web application OAuth клиентін жасаңыз. Authorized redirect URI ретінде Supabase Google провайдері көрсеткен callback URL мекенжайын енгізіңіз.
 3. Supabase Authentication → Providers → Google бөлімінде Client ID және Client secret сақтаңыз. URL Configuration ішінде сайттың HTTPS мекенжайын және әзірлеу кезінде қолданылатын жергілікті redirect URL мекенжайын рұқсат етілген тізімге қосыңыз.
 4. .env.example файлын .env.local атауымен көшіріңіз. VITE_SUPABASE_URL және VITE_SUPABASE_PUBLISHABLE_KEY мәндерін толтырыңыз. Серверді қайта іске қосыңыз. Құпия кілттерді клиентке немесе чатқа енгізбеңіз.
