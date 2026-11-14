@@ -94,6 +94,11 @@ const SFX = {
   shadow: () => { osc('sine', 70, 64, 3, .12, {attack: 1}); osc('sawtooth', 140, 130, 3, .025, {attack: 1.2}); noise(3, .05, {f: 600, f1: 2400, q: 6, attack: 1.4}); },
   whoosh: () => noise(.6, .07, {f: 400, f1: 3000, q: .8, attack: .25}),
   noammo: () => osc('square', 200, 160, .06, .03),
+  // Bronze bell: inharmonic partials with a long tail (MAP04, the knot-keeper).
+  bell: (v = 1) => { [[523, .07], [1206, .035], [1760, .02], [2310, .012], [262, .03]].forEach(([f, a], i) => osc('sine', f, f * .998, 2.6 - i * .3, a * v, {attack: .004})); },
+  heartbeat: (v = 1) => { osc('sine', 60, 42, .18, .2 * v); osc('sine', 56, 40, .16, .14 * v, {at: .26}); },
+  knot: (v = 1) => { for (let i = 0; i < 3; i++) noise(.05, .05 * v, {at: i * .07, f: 1800 - i * 300, q: 6}); },
+  breath: (v = 1) => noise(1.4, .035 * v, {f: 700, f1: 380, q: .6, attack: .5}),
 };
 export function sfx(name, volume = 1, pan = 0) {
   const f = SFX[name];
@@ -143,6 +148,9 @@ const PHRASES = {
   cave: [[0, 4], [-1, 2], [5, 3], [-1, 3], [3, 4], [-1, 4]],
   mystery: [[0, 6], [-1, 2], [1, 6], [-1, 4]],
   camp: [[4, 1], [5, 1], [7, 2], [5, 1], [4, 1], [2, 2], [4, 3], [-1, 1]],
+  steppe: [[0, 3], [3, 1], [4, 2], [-1, 1], [5, 1], [4, 1], [3, 3], [-1, 2], [1, 2], [0, 4], [-1, 3]],
+  witness: [[0, 1], [1, 1], [0, 1], [-1, 1], [5, 1], [4, 1], [3, 2], [-1, 1]],
+  film: [[0, 8], [-1, 4], [4, 6], [-1, 6], [3, 8], [-1, 8]],
 };
 let droneNodes = null;
 function drone(on, root) {
@@ -177,17 +185,18 @@ export function music(mode) {
   if (mode === musicMode) return;
   musicMode = mode; musicStep = 0;
   clearTimeout(musicTimer);
-  const roots = {explore: 196, village: 220, danger: 174.6, cave: 146.8, mystery: 130.8, camp: 246.9};
+  const roots = {explore: 196, village: 220, danger: 174.6, cave: 146.8, mystery: 130.8, camp: 246.9, steppe: 185, witness: 164.8, film: 110};
   drone(mode !== 'off', roots[mode] || 196);
   if (mode === 'off') return;
-  const beat = mode === 'danger' ? .32 : mode === 'cave' || mode === 'mystery' ? .7 : .45;
+  const beat = mode === 'danger' || mode === 'witness' ? .3 : mode === 'film' ? .9 : mode === 'cave' || mode === 'mystery' ? .7 : .45;
   const tick = () => {
     if (musicMode !== mode) return;
     const phrase = PHRASES[mode];
     const [deg, len] = phrase[musicStep % phrase.length];
     const root = roots[mode];
     if (deg >= 0 && !muted) flute(root * 2 * Math.pow(2, SCALE[deg] / 12), len * beat * .95, 0);
-    if (mode === 'danger' && !muted) { drum(0, musicStep % 4 === 0); drum(beat / 2, false); }
+    if ((mode === 'danger' || mode === 'witness') && !muted) { drum(0, musicStep % 4 === 0); drum(beat / 2, false); if (mode === 'witness' && musicStep % 8 === 7) SFX.bell(.35); }
+    if (mode === 'steppe' && musicStep % 6 === 0 && !muted) drum(0, false);
     if (mode === 'village' && musicStep % 4 === 0 && !muted) drum(0, false);
     musicStep++;
     musicTimer = setTimeout(tick, len * beat * 1000);

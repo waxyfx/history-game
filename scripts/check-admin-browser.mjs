@@ -18,7 +18,7 @@ assert(exe, 'Set BROWSER_EXE to an installed Chromium browser');
 
 const profile = await mkdtemp(join(tmpdir(), 'tarikh-admin-'));
 const child = spawn(exe, [
-  '--headless=new', '--remote-debugging-port=0',
+  '--headless=new', '--mute-audio', '--remote-debugging-port=0',
   '--user-data-dir=' + profile, '--no-first-run',
   '--disable-background-networking', 'about:blank'
 ], { stdio: 'ignore', windowsHide: true });

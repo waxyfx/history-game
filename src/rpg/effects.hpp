@@ -40,6 +40,7 @@ constexpr Drop drops[]={
     {Shade,IHerb,1,50},
     {Wraith,IArrows,4,40},{Wraith,ICurd,1,25},
     {Keeper,IKit,1,100},{Keeper,IArrows,10,100},{Keeper,IHerbBig,1,100},
+    {Witness,IKit,1,100},{Witness,IArrows,12,100},{Witness,IHerbBig,1,100},
     {Rider,IKit,1,100},{Rider,IArrows,12,100},{Rider,IHerbBig,1,100},
 };
 }

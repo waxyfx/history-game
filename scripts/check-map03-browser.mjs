@@ -17,7 +17,7 @@ const candidates = process.env.BROWSER_EXE ? [process.env.BROWSER_EXE] : ['C:/Pr
 let exe; for (const c of candidates) { try { await access(c); exe = c; break; } catch {} }
 assert(exe, 'Set BROWSER_EXE to an installed Chromium browser');
 const profile = await mkdtemp(join(tmpdir(), 'tarikh-map03-'));
-const child = spawn(exe, ['--headless=new', '--remote-debugging-port=0', '--user-data-dir=' + profile, '--no-first-run', '--disable-background-networking', '--autoplay-policy=no-user-gesture-required', 'about:blank'], {stdio: 'ignore', windowsHide: true});
+const child = spawn(exe, ['--headless=new', '--mute-audio', '--remote-debugging-port=0', '--user-data-dir=' + profile, '--no-first-run', '--disable-background-networking', '--autoplay-policy=no-user-gesture-required', 'about:blank'], {stdio: 'ignore', windowsHide: true});
 await mkdir('test-results', {recursive: true});
 let port, ws;
 const KEY = {saka_gold: 1, saka_kurgan: 2, saka_women: 0, saka_final: 3, saka_esik: 1, saka_berel: 2, saka_altar: 1, saka_hats: 0};

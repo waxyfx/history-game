@@ -17,13 +17,13 @@ const names=['init','atlas','atlas_size','atlas_ready','input','tick','render','
 const testing=process.argv.includes('--test');
 // One engine, one binary per epoch: -DTJ_LEVEL selects the generated level header.
 const levelArg=process.argv.find(a=>a.startsWith('--level='));
-const levels=testing?[1]:levelArg?[+levelArg.slice(8)]:[1,2,3];
+const levels=testing?[1]:levelArg?[+levelArg.slice(8)]:[1,2,3,4];
 if(testing){await mkdir('tests/fixtures',{recursive:true});names.push('_fixture_player','_fixture_enemy','_fixture_hp','_fixture_arc');}
 // 40 MiB fixed memory: ~22 MiB shared sprite atlas + framebuffer, light buffer and map data.
 for(const level of levels){
 const out=testing?'tests/fixtures/rpg-fixture.wasm':level===1?'public/engine/rpg/tarikh-rpg.wasm':`public/engine/rpg/tarikh-rpg-${level}.wasm`;
 const args=[emcc,testing?'tests/rpg-fixture.cpp':'src/rpg/engine.cpp','-DTJ_LEVEL='+level,'-std=c++17','-O2','-Wall','-Wextra','-Werror',
-    '--no-entry','-sSTANDALONE_WASM=1','-sFILESYSTEM=0','-sINITIAL_MEMORY=41943040',
+    '--no-entry','-sSTANDALONE_WASM=1','-sFILESYSTEM=0','-sINITIAL_MEMORY=58720256',
     '-sSTACK_SIZE=131072','-sALLOW_MEMORY_GROWTH=0','-sEXPORTED_FUNCTIONS='+JSON.stringify(names),
     '-o',out];
 const result=spawnSync(python,args,{stdio:'inherit',env:{...process.env,EM_CONFIG:process.env.EM_CONFIG||resolve(sdk,'.emscripten')}});

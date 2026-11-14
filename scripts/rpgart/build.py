@@ -9,7 +9,7 @@ Outputs:
 import math, os, sys, struct, zlib
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from rpgart.core import *
-from rpgart import world as W, chars as C, chars2 as C2, bronze as B, consumables as CONS, saka as SAKA
+from rpgart import world as W, chars as C, chars2 as C2, bronze as B, consumables as CONS, saka as SAKA, hun as HUN
 
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -147,6 +147,7 @@ def register():
         add(f'FACE_log_{v}', (W.log_face(v), (0, 0)))
         add(f'FACE_snow_{v}', (W.snow_face(v), (0, 0)))
     SAKA.register(add)   # MAP03 props
+    HUN.register(add)    # MAP04 props
     # Props
     for v in range(2): add(f'O_poplar_{v}', W.tree_poplar(v))
     for v in range(2): add(f'O_birch_{v}', W.tree_birch(v))
@@ -251,6 +252,7 @@ ANIMAL_SHEETS = {
     'hare': ['idle', 'run'],
 }
 HUMAN_SHEETS.update(SAKA.HUMAN_SHEETS); ANIMAL_SHEETS.update(SAKA.ANIMAL_SHEETS)   # MAP03
+HUMAN_SHEETS.update(HUN.HUMAN_SHEETS); ANIMAL_SHEETS.update(HUN.ANIMAL_SHEETS)     # MAP04
 
 def pack(items, width):
     """Shelf packer. items: list of (key, w, h). Returns {key: (x, y)}, height."""

@@ -21,8 +21,8 @@ export default {
   scoreOf: Q.scoreOf, secretsFound: Q.secretsFound, pageLines: Q.pageLines, pageTotal: Q.PAGE_TOTAL, restoreSnapshot: persistence.restoreSnapshot,
   begin: quest => quest.start(),
   back: {label: {kk: 'Сақ қонысына оралу', ru: 'Сақ қонысына оралу'}, x: 56, y: 44},
-  passLabel: {kk: 'Дәуірлер картасы', ru: 'Карта эпох'},
-  UI: {chapter: {kk: 'MAP 03 · САҚ ДӘУІРІ'}, complete: {kk: 'MAP 03 АЯҚТАЛДЫ'}, completeSub: {kk: 'Шежіренің 3-парағы қалпына келді'}, stay: {kk: 'Сақ дәуірінде қалу'}, nextOpened: {kk: 'MAP04 — Түрік қағанаты келесі тарауда ашылады'}},
+  passLabel: {kk: 'Ғұндар дәуіріне өту →', ru: 'В эпоху гуннов →'}, next: 4,
+  UI: {chapter: {kk: 'MAP 03 · САҚ ДӘУІРІ'}, complete: {kk: 'MAP 03 АЯҚТАЛДЫ'}, completeSub: {kk: 'Шежіренің 3-парағы қалпына келді'}, stay: {kk: 'Сақ дәуірінде қалу'}, nextOpened: {kk: 'MAP04 — Ғұндар дәуірі ашылды'}},
   music: (z, f) => z === 12 ? 'camp' : z >= 10 ? 'cave' : z <= 3 && z >= 1 ? 'village' : z === 6 || z === 9 || z === 7 ? 'mystery' : 'explore',
   ambience: (z, x, y, tile, f) => {
     let river = 0;

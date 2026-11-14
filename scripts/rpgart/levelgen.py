@@ -57,6 +57,10 @@ KINDS = {
     'goldarmor': ('O_GOLDARMOR_0', 2, 3, (6, 3), LIGHT, (255, 220, 120, 40, 20)), 'mirror': ('O_MIRROR_0', 4, 2, (6, 3), LIGHT, (170, 80, 220, 64, 14)),
     'horsebones': ('O_HORSEBONES', 1, 0, (0, 0), DECAL), 'tunnel': ('O_TUNNEL', 1, 0, (0, 0), DECAL), 'plaques': ('O_PLAQUES', 1, 0, (0, 0), DECAL),
     'shard': ('O_SHARD', 1, 0, (0, 0), DECAL), 'hoofs': ('O_HOOFS', 1, 0, (0, 0), DECAL), 'snowpine': ('O_SNOWPINE_0', 2, 0, (4, 3), TALL),
+    # ---- MAP04 (Huns)
+    'fortwall': ('O_FORTWALL_0', 2, 0, [(24, 5), (20, 5)], TALLBOX), 'banner': ('O_BANNER_0', 3, 0, (2, 2), TALL), 'bales': ('O_BALES', 1, 0, (13, 4), 0),
+    'tally': ('O_TALLY', 1, 0, (0, 0), DECAL), 'raft': ('O_RAFT', 1, 0, (0, 0), DECAL), 'slabtomb': ('O_SLABTOMB', 1, 0, (17, 5), 0),
+    'cords': ('O_CORDS_0', 4, 3, (10, 2), LIGHT, (200, 190, 160, 30, 16)), 'bellpost': ('O_BELLPOST_0', 2, 3, (3, 2), 0),
 }
 
 class Level:
@@ -156,8 +160,8 @@ class Level:
         lines.append(f'constexpr int EnemyCount={len(L.enemies)};')
         lines.append('constexpr EnemyDef enemyDefs[EnemyCount]={' + ','.join('{%d,%d,%d,%d}' % (t, g, x * TS, y * TS) for t, x, y, g in L.enemies) + '};')
         # Sprite sheet per enemy type: wolf, stranger, archer, bear, shade, wraith, keeper
-        es = [L.enemy_sheets.get(i, 'WOLF') for i in range(8)]
-        lines.append('constexpr unsigned char enemySheet[8]={' + ','.join('art::SH_' + s for s in es) + '};')
+        es = [L.enemy_sheets.get(i, 'WOLF') for i in range(9)]
+        lines.append('constexpr unsigned char enemySheet[9]={' + ','.join('art::SH_' + s for s in es) + '};')
         lines.append('struct PickupDef { short item,qty,x,y; };')
         lines.append(f'constexpr int PickupDefCount={len(L.pickups)};')
         lines.append('constexpr PickupDef pickupDefs[PickupDefCount>0?PickupDefCount:1]={' + (','.join('{%d,%d,%d,%d}' % (i, q, x * TS, y * TS) for i, q, x, y in L.pickups) or '{0,0,0,0}') + '};')

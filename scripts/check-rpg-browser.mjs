@@ -14,7 +14,7 @@ const candidates = process.env.BROWSER_EXE ? [process.env.BROWSER_EXE] : ['C:/Pr
 let exe; for (const c of candidates) { try { await access(c); exe = c; break; } catch {} }
 assert(exe, 'Set BROWSER_EXE to an installed Chromium browser');
 const profile = await mkdtemp(join(tmpdir(), 'tarikh-rpg-'));
-const child = spawn(exe, ['--headless=new', '--remote-debugging-port=0', '--user-data-dir=' + profile, '--no-first-run', '--disable-background-networking', '--autoplay-policy=no-user-gesture-required', 'about:blank'], {stdio: 'ignore', windowsHide: true});
+const child = spawn(exe, ['--headless=new', '--mute-audio', '--remote-debugging-port=0', '--user-data-dir=' + profile, '--no-first-run', '--disable-background-networking', '--autoplay-policy=no-user-gesture-required', 'about:blank'], {stdio: 'ignore', windowsHide: true});
 await mkdir('test-results', {recursive: true});
 const sockets = [];
 let port;
@@ -215,6 +215,8 @@ try {
   await host.js('__tj.E.tj_damage(500)'); await delay(300);
   assert(await host.js('__tj.E.tj_state(24) > 0'), 'host downed in co-op');
   await p2.js(`__tj.E.tj_teleport(${12 * T + 10}, ${53.5 * T}); __tj.E.tj_face(6)`); await delay(300);
+  // Muted background tabs are throttled: wait until player 2's engine has the host's 'downed' state.
+  await p2.wait('(__tj.step(1), __tj.E.tj_state(25) === 2)', 8000);
   await p2.key('KeyE', 'e', 'keyDown'); await p2.js('__tj.step(170)'); await p2.key('KeyE', 'e', 'keyUp');
   await host.wait('__tj.E.tj_state(24) === 0 && __tj.E.tj_state(8) === 40', 5000);
   // Disconnect: player 3 leaves, others drop to 2.

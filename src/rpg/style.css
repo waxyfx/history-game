@@ -201,3 +201,17 @@ html, body { height: 100%; overflow: hidden; background: #050909; }
 .viewport.playing, .viewport.playing canvas { cursor: none; }
 .viewport.playing .hotbar, .viewport.playing .hotbar *, .viewport .skip, .viewport .panel, .viewport .panel * { cursor: auto; }
 .viewport.playing .hotbar button, .viewport.playing .hotbar a, .viewport .skip, .viewport .panel button { cursor: pointer; }
+
+/* In-engine films (MAP04+): wide letterbox, vignette and grain, timed subtitles, title cards */
+.viewport.film .bars.on i { height: 11%; }
+.viewport.film::after { content: ''; position: absolute; inset: 0; z-index: 3; pointer-events: none;
+  background: radial-gradient(ellipse at center, transparent 55%, #000a 100%), repeating-linear-gradient(0deg, #ffffff05 0 1px, transparent 1px 3px);
+  animation: grain .3s steps(3) infinite; mix-blend-mode: normal; }
+@keyframes grain { 50% { transform: translateY(1px); } }
+.sub { position: absolute; left: 10%; right: 10%; bottom: 3.5%; z-index: 6; margin: 0; text-align: center; color: #f4ecd6;
+  font-size: calc(var(--s) * 6.4px); text-shadow: 0 2px 4px #000, 0 0 12px #000; transition: opacity .25s; }
+.sub b { display: block; font-size: .72em; letter-spacing: .14em; color: #c9b583; text-transform: uppercase; margin-bottom: .2em; }
+.sub.out { opacity: 0; }
+.title-card { position: absolute; inset: 0; z-index: 6; display: grid; place-items: center; text-align: center; color: #efe6cf;
+  font-size: calc(var(--s) * 12px); letter-spacing: .3em; text-shadow: 0 0 18px #000; transition: opacity .7s; pointer-events: none; }
+.title-card.out { opacity: 0; }

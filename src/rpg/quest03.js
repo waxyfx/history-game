@@ -218,7 +218,7 @@ export function createQuest(G) {
         await G.travel(...P(89, 99));
         if (!B.finished) return G.cine('home', cutHome);
         return;
-      case 'campgate': return G.say(D.campgateLocked);
+      case 'campgate': if (B.finished && G.levelPassed()) return G.gotoLevel(4); return G.say(D.campgateLocked);
       case 'holo': return G.results();
       case 'hoofs': await G.say(D.hoofs, FACTS.horse); return evidence(EVIDENCE.hoofs);
       case 'shard': await G.say(D.shard); return evidence(EVIDENCE.shard);

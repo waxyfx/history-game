@@ -1,5 +1,5 @@
 // Epoch registry: one runtime (main.js + engine), one content bundle per level, loaded on demand.
-const LOADERS = {1: () => import('./level1.js'), 2: () => import('./level2.js'), 3: () => import('./level3.js')};
+const LOADERS = {1: () => import('./level1.js'), 2: () => import('./level2.js'), 3: () => import('./level3.js'), 4: () => import('./level4.js')};
 export const LEVEL_IDS = Object.keys(LOADERS).map(Number);
 // TEMPORARY (QA): every playable epoch is open in practice mode so levels can be checked without
 // passing the previous one. Official runs are still unlocked only by the server. Set to false to restore the gate.

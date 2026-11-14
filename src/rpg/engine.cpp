@@ -169,6 +169,7 @@ void dropLoot(const Enemy& e){
     for(const auto& d:drops)if(d.type==e.type&&int(rng()%100)<d.chance){spawnPickup(d.item,d.qty,e.x+(k%3-1)*9,e.y+(k/3)*6);++k;}
     if(e.type==Shade)for(int i=0;i<16;++i)particle(e.x,e.y-12,(frand()-.5f)*2,-frand()*2,40,0,rgba(0xa35cc0));
 }
+bool isBossType(int t){ return t==Keeper||t==Rider||t==Witness; }
 void alertGroup(int group){ for(auto& e:enemies)if(e.group==group&&e.hp>0&&!e.alerted){e.alerted=1;emit(EV_ALERT,int(&e-enemies),e.type);} }
 void hurtEnemy(Enemy& e,int damage,float fromX,float fromY){
     if(e.hp<=0||!e.enabled)return;
@@ -180,6 +181,15 @@ void hurtEnemy(Enemy& e,int damage,float fromX,float fromY){
                 e.showBar=240;alertGroup(e.group);sfx(SFX_BLOCK,e.x,e.y);emit(EV_ALERT,int(&e-enemies),-1);return;}}
         if(e.special==6)damage*=2;
     }
+    if(e.type==Witness){ // behind three banners no blow lands; spent, he takes half again as much
+        if(e.state==Roar||(e.phase==2&&e.illusions)){for(int i=0;i<8;++i)particle(e.x,e.y-20,(frand()-.5f)*2.4f,-frand()*1.6f,16,0,rgba(0xd29ae6));
+            e.showBar=240;alertGroup(e.group);sfx(SFX_BLOCK,e.x,e.y);return;}
+        if(e.special==6)damage=damage*3/2;
+        // Each face must be fought: burst damage stops at the next phase boundary.
+        int floor=e.phase==1?enemySpecs[e.type].health*2/3:e.phase==2?enemySpecs[e.type].health/3:0;
+        if(damage>e.hp-floor)damage=e.hp-floor;
+        if(damage<=0)return;
+    }
     e.hp=e.hp>damage?e.hp-damage:0;e.hitFlash=8;e.showBar=240;
     alertGroup(e.group);e.alerted=1;
     float dx=e.x-fromX,dy=e.y-fromY,len=sqrtf(dx*dx+dy*dy)+.01f;
@@ -187,9 +197,9 @@ void hurtEnemy(Enemy& e,int damage,float fromX,float fromY){
     if(!blockedFeet(e.x+dx/len*kb,e.y,5,3))e.x+=dx/len*kb;
     if(!blockedFeet(e.x,e.y+dy/len*kb,5,3))e.y+=dy/len*kb;
     for(int i=0;i<5;++i)particle(e.x,e.y-8,(frand()-.5f)*2,-frand()*1.5f,18,0,rgba(0xf3d68b));
-    if(e.hp==0){e.state=Death;e.timer=e.type==Keeper||e.type==Rider?200:150;e.illusions=0;e.attack.active=false;e.animTime=0;++game.kills;dropLoot(e);
+    if(e.hp==0){e.state=Death;e.timer=isBossType(e.type)?200:150;e.illusions=0;e.attack.active=false;e.animTime=0;++game.kills;dropLoot(e);
         sfx(SFX_ENEMY_DIE,e.x,e.y);emit(EV_ENEMY_DIED,int(&e-enemies),e.type);}
-    else { if(e.type!=Keeper&&e.type!=Rider&&(e.type!=Bear||e.state!=Charge)){e.state=Hurt;e.timer=12;e.attack.active=false;} sfx(SFX_ENEMY_HURT,e.x,e.y); }
+    else { if(!isBossType(e.type)&&(e.type!=Bear||e.state!=Charge)){e.state=Hurt;e.timer=12;e.attack.active=false;} sfx(SFX_ENEMY_HURT,e.x,e.y); }
 }
 // Player-side hit on an enemy: the host applies it, a network client only predicts the flash.
 void playerHitsEnemy(int index,int damage,float fx,float fy){
@@ -218,7 +228,7 @@ void hitPlayer(int slot,int damage){
 void strikeEnemies(const Attack& a){
     for(int i=0;i<EnemyCount;++i){auto& e=enemies[i];
         if(e.enabled&&e.hp>0&&inArc(a.weapon,a.facing,a.x,a.y-4,e.x,e.y-4)&&lineClear(a.x,a.y,e.x,e.y))playerHitsEnemy(i,outgoingDamage(weapons[a.weapon].damage),a.x,a.y);}
-    for(auto& e:enemies)if(e.type==Rider&&e.illusions&&e.hp>0)for(int k=1;k<3;++k)if((e.illusions&(1<<k))&&inArc(a.weapon,a.facing,a.x,a.y-4,e.px[k],e.py[k]-4)){
+    for(auto& e:enemies)if((e.type==Rider||(e.type==Witness&&e.phase==2))&&e.enabled&&e.illusions&&e.hp>0)for(int k=0;k<3;++k)if((e.illusions&(1<<k))&&inArc(a.weapon,a.facing,a.x,a.y-4,e.px[k],e.py[k]-4)&&lineClear(a.x,a.y,e.px[k],e.py[k])){
         e.illusions&=~(1<<k);sfx(SFX_BLOCK,e.px[k],e.py[k]);for(int i=0;i<22;++i)particle(e.px[k],e.py[k]-18,(frand()-.5f)*3,(frand()-.5f)*3,30,0,rgba(0xd29ae6));}
     // NPC reaction: villagers flinch when someone swings next to them.
     for(auto& n:npcs)if(n.active&&!n.hidden){float dx=n.x-a.x,dy=n.y-a.y;if(dx*dx+dy*dy<48*48)n.alert=90;}
@@ -563,7 +573,7 @@ void tickKeeper(Enemy& e){
 // Phase 2 (on foot): the golden armour deflects frontal hits; strike from the side/back or right after his akinak cut.
 // Phase 3 (mirror): two illusions mirror him around the hero; only the real one casts a shadow and a gold glint,
 // only his bolts hurt; a blow shatters an illusion. Phase 2 also wakes the group after his (corrupted warriors).
-bool isBoss(int type){ return type==Keeper||type==Rider; }
+bool isBoss(int type){ return isBossType(type); }
 void riderIllusions(Enemy& e,const Player& p){
     for(int k=1;k<3;++k)if(e.illusions&(1<<k)){float a=k==1?2.094f:-2.094f,dx=e.x-p.x,dy=e.y-p.y;
         e.px[k]=p.x+dx*cosf(a)-dy*sinf(a);e.py[k]=p.y+dx*sinf(a)+dy*cosf(a);}
@@ -651,6 +661,75 @@ void drawRiderTelegraphs(const Enemy& e){
         for(int i=0;i<30;++i){float a=i/30.f*6.283f+game.ticks*.1f;renderer.pixel(x+int(cosf(a)*12),y-30+int(sinf(a)*12),rgba(0xd29ae6,pulse));}}}
     if(e.special==6){for(int i=0;i<3;++i){float a=game.ticks*.15f+i*2.09f;renderer.pixel(cx+int(cosf(a)*9),cy-46+int(sinf(a)*3),rgba(0xfff2c4));}}
 }
+// ------------------------------------------------------------------ boss: the three-faced witness (MAP04)
+// Phase 1 "whistling arrows": he marks the ground under the hero (a shrinking ring), then a volley lands there.
+// Phase 2 "three banners": untouchable while his three banners stand; cut them down (he sweeps a slow line of
+//   shadow meanwhile) and he collapses, open to blows, until he raises them again.
+// Phase 3 "echo": he marks where the hero stands and dashes there, three times; then he is spent and open.
+void witnessBanners(Enemy& e){ e.illusions=7; for(int k=0;k<3;++k){float a=1.5708f+k*2.0944f;e.px[k]=e.homeX+cosf(a)*62;e.py[k]=e.homeY+sinf(a)*40+6;} }
+void tickWitness(Enemy& e){
+    const auto& spec=enemySpecs[e.type];
+    bossIndex=int(&e-enemies);
+    if(e.state==Death){ if(e.timer>0)--e.timer;
+        if(e.timer%5==0&&e.timer>50)for(int i=0;i<5;++i)particle(e.x+(frand()-.5f)*36,e.y-10-frand()*34,(frand()-.5f)*1.4f,-frand()*1.4f,40,0,rgba(0xa35cc0));
+        if(!e.timer)e.active=false; setAnim(e.anim,e.animTime,art::A_DEATH); return; }
+    if(game.cinematic){setAnim(e.anim,e.animTime,art::A_IDLE);return;}
+    int maxhp=spec.health,phase=e.hp*3>maxhp*2?1:e.hp*3>maxhp?2:3;
+    if(phase>e.phase){e.phase=phase;e.state=Roar;e.timer=80;e.special=0;e.illusions=0;e.seed=0;game.shake=20;sfx(SFX_ROAR,e.x,e.y);
+        for(int i=0;i<36;++i)particle(e.x+(frand()-.5f)*30,e.y-10-frand()*24,(frand()-.5f)*2.5f,-frand()*2,44,0,rgba(0xa35cc0));}
+    if(e.state==Roar){ setAnim(e.anim,e.animTime,art::A_ROAR); if(--e.timer<=0){e.state=Chase;e.attack.cooldown=30;if(e.phase==2){e.x=e.homeX;e.y=e.homeY;witnessBanners(e);}} return; }
+    float dist;int target=nearestPlayer(e,dist);
+    if(target<0){ setAnim(e.anim,e.animTime,art::A_IDLE); if(e.special!=6)e.special=0; return; }
+    const Player& p=players[target];
+    float dx=p.x-e.x,dy=p.y-e.y;
+    if(!e.alerted){e.alerted=1;alertGroup(e.group);e.state=Roar;e.timer=70;game.shake=14;sfx(SFX_ROAR,e.x,e.y);return;}
+    if(e.attack.cooldown)--e.attack.cooldown;
+    e.facing=heading(dx,dy);
+    if(e.special==6){ setAnim(e.anim,e.animTime,art::A_HURT); if(e.timer%10==0)particle(e.x+(frand()-.5f)*14,e.y-44,0,-.3f,20,0,rgba(0xfff2c4));
+        if(--e.timer<=0){e.special=0;e.attack.cooldown=40;e.seed=0;if(e.phase==2)witnessBanners(e);} return; }
+    if(e.phase==1){
+        if(e.special==1){ setAnim(e.anim,e.animTime,art::A_BOW);
+            if(--e.timer<=0){keeperHitArea(e.px[0],e.py[0],26,spec.damage);game.shake=8;sfx(SFX_ARROW_HIT,e.px[0],e.py[0]);
+                for(int i=0;i<12;++i)particle(e.px[0]+(frand()-.5f)*30,e.py[0]-frand()*40,0,2.5f,14,0,rgba(0xe8dcc0));
+                e.special=0;e.attack.cooldown=(++e.seed%3)?16:80;}
+            return; }
+        if(!e.attack.cooldown&&dist<230){e.special=1;e.timer=52;e.px[0]=p.x;e.py[0]=p.y;sfx(SFX_BOWSTRING,e.x,e.y);return;}
+        if(dist<70)walkEnemy(e,e.x-dx,e.y-dy,spec.speed); else if(dist>150)walkEnemy(e,p.x,p.y,spec.speed*.7f);
+        setAnim(e.anim,e.animTime,dist<70||dist>150?art::A_WALK:art::A_IDLE); return;
+    }
+    if(e.phase==2){ // rooted behind the banners; a beam of shadow sweeps around him
+        setAnim(e.anim,e.animTime,art::A_CHARGE);
+        if(!e.illusions){e.special=6;e.timer=170;sfx(SFX_IMPACT,e.x,e.y);game.shake=12;return;}
+        // A lighthouse beam: constant turn (one sweep about every 6 s), so it can be read and dodged.
+        e.dx+=.017f;if(e.dx>6.2832f)e.dx-=6.2832f;
+        if(game.ticks%4==0)for(int s=0;s<MaxPlayers;++s){auto& q=players[s];if(!q.active||q.hp<=0||q.down)continue;
+            float qx=q.x-e.x,qy=q.y-e.y,along=qx*cosf(e.dx)+qy*sinf(e.dx),side=-qx*sinf(e.dx)+qy*cosf(e.dx);
+            if(along>14&&along<120&&fabsf(side)<7&&lineClear(e.x,e.y,q.x,q.y))hitPlayer(s,12);}
+        return;
+    }
+    if(e.special==3){ setAnim(e.anim,e.animTime,art::A_ROAR); if(--e.timer<=0){e.special=4;e.timer=30;e.attack.connected=false;sfx(SFX_HOOVES,e.x,e.y);} return; }
+    if(e.special==4){ setAnim(e.anim,e.animTime,art::A_SWIPE);
+        float lx=e.px[0]-e.x,ly=e.py[0]-e.y,l=sqrtf(lx*lx+ly*ly)+.01f,sp=l<6?l:6;
+        if(!blockedFeet(e.x+lx/l*sp,e.y+ly/l*sp,6,4)){e.x+=lx/l*sp;e.y+=ly/l*sp;} else l=0;
+        if(game.ticks%2==0)particle(e.x,e.y-16,(frand()-.5f),(frand()-.5f),18,0,rgba(0xa35cc0));
+        if(!e.attack.connected)for(int s=0;s<MaxPlayers;++s){auto& q=players[s];if(q.active&&q.hp>0&&!q.down&&fabsf(q.x-e.x)<13&&fabsf(q.y-e.y)<11){hitPlayer(s,spec.damage+2);e.attack.connected=true;}}
+        if(l<7||--e.timer<=0){ if(++e.seed>=3){e.special=6;e.timer=120;} else {e.special=0;e.attack.cooldown=14;} }
+        return; }
+    if(!e.attack.cooldown){e.special=3;e.timer=30;e.px[0]=p.x;e.py[0]=p.y;sfx(SFX_GROWL,e.x,e.y);return;}
+    setAnim(e.anim,e.animTime,art::A_IDLE);
+}
+void drawWitnessTelegraphs(const Enemy& e){
+    int cx=int(e.x)-renderer.camX,cy=int(e.y)-renderer.camY;
+    unsigned pulse=120+unsigned(60*sinf(game.ticks*.4f));uint32_t red=rgba(0xe0421f,pulse),vio=rgba(0xd29ae6,pulse);
+    if((e.phase==1&&e.special==1)||(e.phase==3&&(e.special==3||e.special==4))){int x=int(e.px[0])-renderer.camX,y=int(e.py[0])-renderer.camY;
+        int r=e.phase==1?26:13;for(int i=0;i<48;++i){float a=i/48.f*6.283f;renderer.pixel(x+int(cosf(a)*r),y+int(sinf(a)*r*.76f),red);}
+        if(e.phase==1){int rr=26*e.timer/52;for(int i=0;i<32;++i){float a=i/32.f*6.283f;renderer.pixel(x+int(cosf(a)*rr),y+int(sinf(a)*rr*.76f),rgba(0xffe08a,pulse));}}
+        else for(float t=0;t<1;t+=.04f)renderer.pixel(cx+int((x-cx)*t),cy-10+int((y-cy+10)*t),vio);}
+    if(e.phase==2&&e.illusions){for(int l=14;l<120;l+=2){renderer.pixel(cx+int(cosf(e.dx)*l),cy+int(sinf(e.dx)*l),vio);
+            renderer.pixel(cx+int(cosf(e.dx)*l-sinf(e.dx)*6),cy+int(sinf(e.dx)*l+cosf(e.dx)*6),rgba(0xa35cc0,60));
+            renderer.pixel(cx+int(cosf(e.dx)*l+sinf(e.dx)*6),cy+int(sinf(e.dx)*l-cosf(e.dx)*6),rgba(0xa35cc0,60));}}
+    if(e.special==6)for(int i=0;i<3;++i){float a=game.ticks*.15f+i*2.09f;renderer.pixel(cx+int(cosf(a)*9),cy-50+int(sinf(a)*3),rgba(0xfff2c4));}
+}
 void drawKeeperTelegraphs(const Enemy& e){
     int cx=int(e.x)-renderer.camX,cy=int(e.y)-renderer.camY;
     unsigned pulse=120+unsigned(60*sinf(game.ticks*.4f));
@@ -679,6 +758,7 @@ void drawBossBar(const Enemy& e){
 void tickEnemy(Enemy& e){
     if(e.type==Keeper&&e.state!=Hurt){ ++e.animTime;if(e.hitFlash)--e.hitFlash;if(e.showBar)--e.showBar; tickKeeper(e); return; }
     if(e.type==Rider){ ++e.animTime;if(e.hitFlash)--e.hitFlash;if(e.showBar)--e.showBar; tickRider(e); return; }
+    if(e.type==Witness){ ++e.animTime;if(e.hitFlash)--e.hitFlash;if(e.showBar)--e.showBar; tickWitness(e); return; }
     const auto& spec=enemySpecs[e.type];auto& a=e.attack;
     ++e.animTime;
     if(e.hitFlash)--e.hitFlash;
@@ -1015,6 +1095,7 @@ void render(){
             unsigned alpha=e.state==Death&&e.timer<60?unsigned(e.timer*4):255;
             uint32_t tint=e.type==Bear&&e.state==Telegraph&&(game.ticks/4)%2?rgba(0xe06a3f,90):0;
             int sheet=enemySheet[e.type];
+            if(e.type==Witness&&e.phase==2)for(int k=0;k<3;++k)if(e.illusions&(1<<k))renderer.sprite(art::O_BANNER_0+k,int(e.px[k]),int(e.py[k]));
             if(e.type==Rider&&e.illusions)for(int k=1;k<3;++k)if(e.illusions&(1<<k)){const Player& L0=me();
                 drawActor(sheet,e.anim,f,heading(L0.x-e.px[k],L0.y-e.py[k]),e.px[k],e.py[k],unsigned(150+40*((game.ticks/6+k)%2)),0,rgba(0xa35cc0,110),false);}
             drawActor(sheet,e.anim,f,e.facing,e.x,e.y,alpha,e.hitFlash>4?110:0,tint);
@@ -1051,6 +1132,7 @@ void render(){
     }
     for(const auto& e:enemies)if(e.type==Keeper&&e.active&&e.enabled&&e.hp>0)drawKeeperTelegraphs(e);
     for(const auto& e:enemies)if(e.type==Rider&&e.active&&e.enabled&&e.hp>0)drawRiderTelegraphs(e);
+    for(const auto& e:enemies)if(e.type==Witness&&e.active&&e.enabled&&e.hp>0)drawWitnessTelegraphs(e);
     for(const auto& e:enemies)if(!isBoss(e.type)&&e.active&&e.enabled&&e.hp>0&&(e.showBar||e.alerted)){
         int w=e.type==Bear?30:16;drawBar(int(e.x),int(e.y)-(e.type==Bear?44:e.type==Wolf?24:32),w,e.hp,enemySpecs[e.type].health,rgba(e.type==Bear?0xe06a3f:0xb8442b));
         if(e.state==Telegraph||(e.attack.active&&e.attack.age<enemySpecs[e.type].windup))renderer.sprite(art::X_BUBBLE_ALERT,int(e.x),int(e.y)-(e.type==Bear?46:34));

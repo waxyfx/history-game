@@ -88,6 +88,7 @@ document.querySelector('#rpg-app').innerHTML = `
         <span class="dlg-next">▼</span>
       </div>
       <button class="skip" id="skip" hidden></button>
+      <p class="sub" id="sub" hidden></p><div class="title-card" id="title-card" hidden></div>
       <div class="panel" id="panel" hidden><div class="panel-card" id="panel-card"></div></div>
       <p id="loading" class="loading" role="status"></p>
       <div class="touch" id="touch">
@@ -217,9 +218,19 @@ async function playCutscene(id, script, broadcast = true) {
     fog: n => E.tj_fog(n), music: m => music(m),
     flash: async ms => { if (d.skipping) return; const f = $('fade'); f.style.transition = 'none'; f.style.background = '#fff'; f.style.opacity = .85; await sleep(40); f.style.transition = `opacity ${ms}ms`; f.style.opacity = 0; await sleep(ms); f.style.background = ''; },
     final: fn => fn(), after: fn => d.afters.push(fn),
+    // Film tools: timed subtitles (no click needed), title cards, light, hard cuts through black.
+    E, G, sfx,
+    sub: async (line, ms = 2600) => { if (d.skipping) return; const el = $('sub'), sp = SPEAKERS[line.who];
+      el.innerHTML = `${sp ? `<b>${esc(L(sp))}</b>` : ''}${esc(L(line))}`; el.hidden = false; el.classList.remove('out');
+      await d.wait(ms); el.classList.add('out'); await d.wait(260); el.hidden = true; },
+    title: async (text, ms = 2400) => { if (d.skipping) return; const el = $('title-card'); el.textContent = text; el.hidden = false; el.classList.remove('out'); await d.wait(ms); el.classList.add('out'); await d.wait(700); el.hidden = true; },
+    light: (r, g, b, now) => now ? E.tj_light_now(r, g, b) : E.tj_light(r, g, b),
+    black: async ms => { const f = $('fade'); f.style.transition = `opacity ${d.skipping ? 0 : ms}ms`; f.style.opacity = 1; await d.wait(ms); },
+    unblack: async ms => { const f = $('fade'); f.style.transition = `opacity ${d.skipping ? 0 : ms}ms`; f.style.opacity = 0; await d.wait(ms); },
   });
   try { await script(d); } catch (e) { console.error(e); }
   if (d.skipping) { E.tj_shadow(0, 0, 0); E.tj_fog(0); $('fade').style.transition = 'none'; $('fade').style.opacity = 0; }
+  $('sub').hidden = true; $('title-card').hidden = true; $('viewport').classList.remove('film');
   E.tj_camera(0, 0, 0, 0);
   $('bars').classList.remove('on'); $('skip').hidden = true; $('dlg').hidden = true;
   cine = null; E.tj_cinematic(0); input();
@@ -966,7 +977,9 @@ async function boot() {
     frame = new ImageData(new Uint8ClampedArray(E.memory.buffer, E.tj_pixels(), W * H * 4), W, H);
     Object.assign(G, {
       say, quiz, choose, bonusTrial, chamber, journal, levelPassed, results, complete, travel, toast, changed, heroPos, save: s => save(s),
-      cine: (id, fn) => playCutscene(id, fn), sfx, gotoLevel: n => { save(true); location.href = '/rpg.html' + (n > 1 ? '?level=' + n : ''); }, spawnFx: (p, type, n) => E.tj_spawn_fx(type, p[0], p[1], n),
+      cine: (id, fn) => playCutscene(id, fn), sfx,
+      // A cinematic film rendered in the engine: wide letterbox, grain, timed subtitles, no dialogue boxes.
+      film: (fn, id = 'film' + LV.id) => { $('viewport').classList.add('film'); return playCutscene(id, fn); }, gotoLevel: n => { save(true); location.href = '/rpg.html' + (n > 1 ? '?level=' + n : ''); }, spawnFx: (p, type, n) => E.tj_spawn_fx(type, p[0], p[1], n),
     });
     quest = createQuest(G);
     $('loading').remove();
