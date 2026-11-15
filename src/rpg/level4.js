@@ -3,6 +3,7 @@ import {MAP04} from './gen/map04.js';
 import * as S from './story04.js';
 import * as Q from './quest04.js';
 import {makePersistence} from './persistence.js';
+import {playFilm} from './cinema04.js';
 
 // 24 header words + 25 items + 14 enemies × 2 + 4 effect slots × 2.
 export const SAVE_WORDS_L4 = 24 + 25 + 14 * 2 + 8;
@@ -20,6 +21,11 @@ export default {
   applyWorld: Q.applyWorld, createQuest: Q.createQuest, questStage: Q.questStage, questTarget: Q.questTarget,
   scoreOf: Q.scoreOf, secretsFound: Q.secretsFound, pageLines: Q.pageLines, pageTotal: Q.PAGE_TOTAL, restoreSnapshot: persistence.restoreSnapshot,
   begin: quest => quest.start(),
+  // The motion-comic «Түйінші» (src/cinema/knot), played on the way from the camp into Talas.
+  comic: async opts => (await import('../cinema/knot/index.js')).playKnotComic(opts),
+  // ?film=1: the hollow is open, the knot-keeper waits; the hero stands in the hall (enemies off).
+  playDemoFilm: G => { Object.assign(G.flags.b, {arrived: true, council: true, witnessDown: true, masks: true, peace: true}); G.forceNpc = true; Q.applyWorld(G);
+    G.E.tj_groups(0); G.E.tj_teleport(32 * 16, 96 * 16); return G.film(playFilm, 'filmdemo'); },
   back: {label: {kk: 'Талас даласына оралу', ru: 'Талас даласына оралу'}, x: 40, y: 65},
   passLabel: {kk: 'Дәуірлер картасы', ru: 'Карта эпох'},
   UI: {chapter: {kk: 'MAP 04 · ҒҰНДАР ДӘУІРІ'}, complete: {kk: 'MAP 04 АЯҚТАЛДЫ'}, completeSub: {kk: 'Шежіренің 4-парағы қалпына келді'}, stay: {kk: 'Ғұндар дәуірінде қалу'}, nextOpened: {kk: 'MAP05 келесі тарауда ашылады'}},

@@ -151,7 +151,9 @@ export function createQuest(G) {
     switch (key) {
       case 'camphun':
         if (B.page) return G.say(D.campTalkErlan);
-        G.sfx('portal'); await G.travel(...P(40, 69.4));
+        G.sfx('portal');
+        if (!B.arrived && G.comic) await G.comic();   // the motion-comic «Түйінші» on the first crossing
+        await G.travel(...P(40, 69.4));
         if (!B.arrived) return G.cine('arrival', cutArrival);
         return;
       case 'hungate':

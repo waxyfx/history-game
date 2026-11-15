@@ -110,6 +110,7 @@ const G = {
 };
 const party = {size: 1, slot: 0, host: true, net: null, members: [], peers: new Map(), lastState: 0, lastEnemies: 0, lastFlags: 0};
 let quest, panelOpen = false, cine = null, dialogBusy = false, loopStarted = false;
+let comicOpen = false; // a motion-comic cinematic is covering the game (input and simulation paused)
 let lastTime = 0, acc = 0, hudKey = '', lastZone = -1, lastSave = 0, flagsDirty = false, minimapArea = -1, miniBase = null;
 const held = new Set(), touch = new Map();
 let mouseMask = 0, lastWheel = 0;   // mouse: left = strike, right = interact (see «mouse controls»)
@@ -871,7 +872,7 @@ function loop(now) {
 // ---------------------------------------------------------------- input wiring
 window.addEventListener('keydown', e => {
   unlockAudio();
-  if (e.ctrlKey || e.metaKey || e.altKey || !E) return;
+  if (e.ctrlKey || e.metaKey || e.altKey || !E || comicOpen) return;
   if (document.activeElement?.tagName === 'INPUT') return;
   if (e.code === 'Escape') { e.preventDefault(); if (cine) skipCutscene(); else if (panelOpen) { if (!$('panel-card').querySelector('[data-choice],[data-trial]')) closePanel(); } else if (!dialogBusy) pauseMenu(); return; }
   if (!$('dlg').hidden && ['KeyE', 'Space', 'Enter'].includes(e.code)) { e.preventDefault(); if (!e.repeat) advanceDialog(); return; }
@@ -979,6 +980,15 @@ async function boot() {
       say, quiz, choose, bonusTrial, chamber, journal, levelPassed, results, complete, travel, toast, changed, heroPos, save: s => save(s),
       cine: (id, fn) => playCutscene(id, fn), sfx,
       // A cinematic film rendered in the engine: wide letterbox, grain, timed subtitles, no dialogue boxes.
+      // Motion-comic cinematic in the intro's format: the game pauses underneath and resumes afterwards.
+      comic: async () => {
+        if (!LV.comic || comicOpen) return;
+        comicOpen = true; held.clear(); touch.clear(); mouseMask = 0; input(); E.tj_pause(1); music('off');
+        let ctxA = null; try { ctxA = new (window.AudioContext || window.webkitAudioContext)(); } catch {}
+        try { await (await LV.comic({audioCtx: ctxA})).done; } catch (e) { console.warn(e); }
+        try { ctxA?.close(); } catch {}
+        comicOpen = false; E.tj_pause(0); lastTime = performance.now(); acc = 0; musicForZone(true); canvas.focus({preventScroll: true});
+      },
       film: (fn, id = 'film' + LV.id) => { $('viewport').classList.add('film'); return playCutscene(id, fn); }, gotoLevel: n => { save(true); location.href = '/rpg.html' + (n > 1 ? '?level=' + n : ''); }, spawnFx: (p, type, n) => E.tj_spawn_fx(type, p[0], p[1], n),
     });
     quest = createQuest(G);
@@ -986,7 +996,15 @@ async function boot() {
     resize();
     $('hotbar').addEventListener('pointerdown', e => e.stopPropagation());
     const params = new URLSearchParams(location.search);
-    if (params.has('new')) { // Started from the intro comic: a fresh journey into MAP.
+    if (params.has('film') && LV.comic) { // Watch the level's cinematic on its own, then the level opens as usual.
+      if (!load(true)) { newGame(); startOfficial(true); } else $('fade').style.opacity = 0;
+      setTimeout(() => G.comic(), 300);
+    } else if (params.has('ingame') && LV.playDemoFilm) { // The older in-engine version (second meeting).
+      SAVE_KEY = LV.saveKey + '.filmdemo';
+      E.tj_init(); G.flags = newFlags(); G.local = {granted: [], attempts: {}, seen: [], crystal: 0}; G.armed = null; G.forceNpc = true;
+      E.tj_party(1, 0); E.tj_hero(SH.aibar); $('fade').style.opacity = 0;
+      setTimeout(() => LV.playDemoFilm(G).then(() => toast(lang === 'ru' ? 'Ролик окончен. Обнови страницу, чтобы посмотреть снова.' : 'Бейнеролик аяқталды. Қайта көру үшін бетті жаңарт.')), 400);
+    } else if (params.has('new')) { // Started from the intro comic: a fresh journey into MAP.
       try { const old = localStorage.getItem(SAVE_KEY); if (old) localStorage.setItem(SAVE_KEY + '.prev', old); localStorage.removeItem(SAVE_KEY); } catch {}
       history.replaceState(null, '', location.pathname + levelQS(params.get('party') ? 'party=' + params.get('party') : ''));
       newGame(); startOfficial(true);

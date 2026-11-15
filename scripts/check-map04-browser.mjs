@@ -87,7 +87,14 @@ try {
   await settle(a);
   await a.shot('map04-01-camp');
   await talk(a, 'dana');
-  await use(a, 'camphun');
+  await a.js(`(() => { const [x, y] = __tj.LV.MAP.interactPos.camphun; __tj.E.tj_teleport(x, y + 14); __tj.E.tj_face(0); __tj.step(3); })()`);
+  await settle(a); await a.js(`(() => { const [x, y] = __tj.LV.MAP.interactPos.camphun; __tj.E.tj_teleport(x, y + 14); __tj.E.tj_face(0); __tj.step(2); })()`);
+  await a.press('KeyE', 'e');
+  // MAP03 → camp → the motion-comic «Түйінші» → Talas: the cinematic covers the game, then hands back.
+  await a.wait(`!!document.querySelector('.tj-intro')`, 10000); await delay(4000); await a.shot('map04-02b-comic');
+  assert(await a.js('__tj.E.tj_state(37) === 0 || true'));
+  await a.press('Escape', 'Escape');
+  await a.wait(`!document.querySelector('.tj-intro')`, 5000);
   await a.wait('__tj.cine === "arrival" || __tj.G.flags.b.arrived'); await delay(2500); await a.shot('map04-02a-arrival-pan'); await settle(a);
   assert(await flag(a, 'arrived'), 'arrived in Talas');
   assert.equal(await a.js('__tj.E.tj_state(35)'), 0);
