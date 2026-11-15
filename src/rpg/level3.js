@@ -3,6 +3,7 @@ import {MAP03} from './gen/map03.js';
 import * as S from './story03.js';
 import * as Q from './quest03.js';
 import {makePersistence} from './persistence.js';
+import {EGG_NAMES, EGG_LABELS} from './eggs.js';
 
 // 24 header words + 25 items + 16 enemies × 2 + 4 effect slots × 2.
 export const SAVE_WORDS_L3 = 24 + 25 + 16 * 2 + 8;
@@ -16,7 +17,7 @@ export default {
   id: 3, title: 'Сақтар әлемі', wasm: '/engine/rpg/tarikh-rpg-3.wasm', saveKey: 'tarikh.rpg.v3.L3', MAP: MAP03, requires: 2,
   SPEAKERS: S.SPEAKERS, ZONE_NAMES: S.ZONE_NAMES, QUESTS: S.QUESTS, HISTORICAL_QUIZZES: S.HISTORICAL_QUIZZES, BONUS_QUIZ: S.BONUS_QUIZ,
   BONUS_META: S.BONUS_META, CHAMBER_FAIL: S.CHAMBER_FAIL, TRIAL_LEVELS: S.TRIAL_LEVELS, MAIN_QUIZ_ORDER: S.MAIN_QUIZ_ORDER,
-  SECRETS: S.SECRETS, DIALOGUES: S.DIALOGUES, NAMES: S.NAMES, LABELS: S.LABELS,
+  SECRETS: S.SECRETS, DIALOGUES: S.DIALOGUES, NAMES: {...S.NAMES, ...EGG_NAMES}, LABELS: {...S.LABELS, ...EGG_LABELS},
   applyWorld: Q.applyWorld, createQuest: Q.createQuest, questStage: Q.questStage, questTarget: Q.questTarget,
   scoreOf: Q.scoreOf, secretsFound: Q.secretsFound, pageLines: Q.pageLines, pageTotal: Q.PAGE_TOTAL, restoreSnapshot: persistence.restoreSnapshot,
   begin: quest => quest.start(),

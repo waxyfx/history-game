@@ -17,7 +17,7 @@ const names=['init','atlas','atlas_size','atlas_ready','input','tick','render','
 const testing=process.argv.includes('--test');
 // One engine, one binary per epoch: -DTJ_LEVEL selects the generated level header.
 const levelArg=process.argv.find(a=>a.startsWith('--level='));
-const levels=testing?[1]:levelArg?[+levelArg.slice(8)]:[1,2,3,4];
+const levels=testing?[1]:levelArg?[+levelArg.slice(8)]:[1,2,3,4,5];
 if(testing){await mkdir('tests/fixtures',{recursive:true});names.push('_fixture_player','_fixture_enemy','_fixture_hp','_fixture_arc');}
 // 40 MiB fixed memory: ~22 MiB shared sprite atlas + framebuffer, light buffer and map data.
 for(const level of levels){

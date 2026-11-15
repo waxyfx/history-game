@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import {EGG_NAMES} from '../src/rpg/eggs.js';
 import {readFile} from 'node:fs/promises';
 import {HISTORICAL_QUIZZES, DIALOGUES, SECRETS, QUESTS, NAMES, SPEAKERS, ZONE_NAMES} from '../src/rpg/story02.js';
 import {scoreOf, pageLines, questStage, MAX_SCORE, PASS_SCORE, TRIAL_POINTS, IA, NPC, TAG, TRIG} from '../src/rpg/quest02.js';
@@ -42,7 +43,7 @@ test('MAP02 story: required lines, all new texts in Kazakh, every interact/NPC n
   assert(all.some(l => l.who === 'zulmatNamed' && l.kk === 'Сен әлі де оларды өзіңнен қорқытатын мен деп ойлайсың ба?'));
   assert(all.some(l => l.who === 'smith' && l.kk === 'Ол дұрыс айтады. Біз сені есімізде сақтадық.'));
   assert(all.some(l => l.kk.includes('«Шежіреші оралғанда, от екінші рет сөнеді»')));
-  for (const k of MAP02.interacts) assert(NAMES[k], 'name for ' + k);
+  for (const k of MAP02.interacts) assert(NAMES[k] || EGG_NAMES[k], 'name for ' + k);   // team easter eggs are named in eggs.js
   for (const k of MAP02.npcs) assert(SPEAKERS[k], 'speaker for ' + k);
   for (const q of Object.values(QUESTS)) assert.match(q.kk.join(' '), KAZ);
   assert.equal(ZONE_NAMES.kk.length, 9);

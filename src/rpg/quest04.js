@@ -5,6 +5,7 @@
 import {MAP04} from './gen/map04.js';
 import {A, TS, IT} from './quest.js';
 import {playFilm} from './cinema04.js';
+import {EGG_TEXT, eggCrack, eggFind, eggChess} from './eggs.js';
 import {DIALOGUES as D, HISTORICAL_QUIZZES, QUESTS, SECRETS, SIDES, WITNESSES, PROOFS, FACTS, CHOICES} from './story04.js';
 
 export const IA = Object.fromEntries(MAP04.interacts.map((n, i) => [n, i]));
@@ -64,6 +65,7 @@ export function applyWorld(G) {
   tag('tally', b.tallyBurned); tag('hollowseal', b.peace);
   const arr = !!b.arrived, sides = sidesDone(f);
   ia('camphun', true); ia('campgate', true); ia('holo', true); ia('hungate', true);
+  tag('labseal', b.eggLabOpen); ia('labcrack', !b.eggLabOpen, 90); ia('greenportal', !!b.eggLabOpen);   // team easter egg
   ia('tallystone', arr && !b.tallyBurned); ia('council', arr); ia('muster', arr); ia('borderstone', arr);
   ia('envoypost', arr && !b.envoyFree, 110); ia('whistle', true); ia('ramparts', arr); ia('wallmark', true); ia('silk', true);
   ia('cord11', true); ia('cordwest', true); ia('bell', true); ia('oldkit', true);
@@ -161,8 +163,10 @@ export function createQuest(G) {
         G.sfx('portal'); await G.travel(...P(89, 99));
         if (!B.finished) return G.cine('home', cutHome);
         return;
-      case 'campgate': return G.say(D.campgateLocked);
+      case 'campgate': if (B.finished && G.gotoLevel) return G.gotoLevel(5); return G.say(D.campgateLocked);
       case 'holo': return G.results();
+      case 'labcrack': return eggCrack(G, set, 'eggLabOpen', hold, pos('labcrack'));
+      case 'greenportal': return eggFind(G, set, 'eggLab', EGG_TEXT.lab, 'map04');
       case 'tallystone': {
         const r = await quiz('hun_script');
         if (r.fresh) {
@@ -244,9 +248,9 @@ export function createQuest(G) {
   async function cutArrival(d) {
     d.music('mystery');
     const hero = G.heroPos();
-    d.pose(A.death, 300); d.cam(hero[0], hero[1] - 20, 999);
-    G.sfx('portal'); await d.flash(500); await d.fadeIn(1200); await d.wait(400);
-    d.pose(A.idle, 1);
+    // Stepped through the camp gate standing — arrives standing (no fall / wake-up).
+    d.pose(A.idle, 1); d.face(4); d.cam(hero[0], hero[1] - 20, 999);
+    G.sfx('portal'); await d.flash(500); d.fx(hero[0], hero[1] - 8, 7, 18); await d.fadeIn(1200); await d.wait(400);
     await d.say(D.arrive.slice(0, 1));
     d.cam(...P(90, 42), 1.2); await d.wait(1700);    // the fort
     d.cam(...P(12, 32), .9); await d.wait(2200);     // the aul beyond the river

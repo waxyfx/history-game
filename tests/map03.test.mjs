@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import {EGG_NAMES} from '../src/rpg/eggs.js';
 import {readFile} from 'node:fs/promises';
 import {HISTORICAL_QUIZZES, DIALOGUES, SECRETS, QUESTS, NAMES, SPEAKERS, ZONE_NAMES, CHOICES, PEOPLE, EVIDENCE} from '../src/rpg/story03.js';
 import {scoreOf, pageLines, questStage, MAX_SCORE, PASS_SCORE, TRIAL_POINTS, IA, NPC, TAG, TRIG, createQuest} from '../src/rpg/quest03.js';
@@ -39,7 +40,7 @@ test('MAP03 story: the accusation scene, Kazakh text everywhere, every speaker/i
   for (const k of ['barsbek', 'qaraman', 'arna', 'altynbek', 'kungey', 'ulpan', 'warrior1', 'warrior2', 'zulmatNamed', 'aibar']) assert(who.has(k), 'speaks in the assembly: ' + k);
   assert(scene.some(l => l.who === 'zulmatNamed' && /құтқарушы/.test(l.kk)), 'Zulmat twists the story');
   assert(scene.findIndex(l => l.who === 'qaraman' && /қоршаңдар/.test(l.kk)) > scene.findIndex(l => l.who === 'zulmatNamed'), 'warriors surround after the speech');
-  for (const k of MAP03.interacts) assert(NAMES[k], 'name for ' + k);
+  for (const k of MAP03.interacts) assert(NAMES[k] || EGG_NAMES[k], 'name for ' + k);   // team easter eggs are named in eggs.js
   for (const k of MAP03.npcs) assert(SPEAKERS[k], 'speaker for ' + k);
   for (const q of Object.values(QUESTS)) assert.match(q.kk.join(' '), KAZ);
   assert.equal(ZONE_NAMES.kk.length, 13);

@@ -4,6 +4,7 @@
 // they change who talks to Aibar, what they reveal, and how the final assembly plays out.
 import {MAP03} from './gen/map03.js';
 import {A, TS, IT} from './quest.js';
+import {EGG_TEXT, eggCrack, eggFind, eggChess} from './eggs.js';
 import {DIALOGUES as D, HISTORICAL_QUIZZES, QUESTS, SECRETS, PEOPLE, EVIDENCE, FACTS, CHOICES} from './story03.js';
 
 export const IA = Object.fromEntries(MAP03.interacts.map((n, i) => [n, i]));
@@ -71,6 +72,7 @@ export function applyWorld(G) {
   tag('shardmark', f.tracks.includes(EVIDENCE.shard)); tag('campgatelight', false);
   const acc = !!b.accused;
   ia('campsaka', true); ia('campgate', true); ia('holo', true); ia('sakagate', true);
+  tag('chessseal', b.eggChessOpen); ia('chess', true); ia('zeromask', !!b.eggChessOpen);   // team easter egg
   ia('hoofs', b.arrived); ia('shard', b.arrived && !f.tracks.includes(EVIDENCE.shard)); ia('plaque', acc && !b.plaque);
   ia('goldwork', b.welcomed); ia('target', b.welcomed); ia('altar', true); ia('niche', !b.niche);
   ia('kurganseal', b.arrived); ia('tunnel', b.arrived); ia('institute', true); ia('arnacache', !b.arnacache);
@@ -220,6 +222,8 @@ export function createQuest(G) {
         return;
       case 'campgate': if (B.finished && G.levelPassed()) return G.gotoLevel(4); return G.say(D.campgateLocked);
       case 'holo': return G.results();
+      case 'chess': return eggChess(G, set, 'eggChessOpen');
+      case 'zeromask': return eggFind(G, set, 'eggZero', EGG_TEXT.zero, 'map03');
       case 'hoofs': await G.say(D.hoofs, FACTS.horse); return evidence(EVIDENCE.hoofs);
       case 'shard': await G.say(D.shard); return evidence(EVIDENCE.shard);
       case 'plaque': if (!B.plaque) { set('plaque'); G.sfx('pickup'); return G.say(D.plaqueFound); } return;
@@ -305,11 +309,12 @@ export function createQuest(G) {
   async function cutArrival(d) {
     d.music('mystery');
     const hero = G.heroPos();
-    d.pose(A.death, 300); d.cam(hero[0], hero[1] - 20, 999);
+    // He walked into the camp gate on his feet, so he steps out of it on his feet (no fall / wake-up).
+    d.pose(A.idle, 1); d.face(4); d.cam(hero[0], hero[1] - 20, 999);
     G.sfx('portal'); await d.flash(500);
+    d.fx(hero[0], hero[1] - 8, 7, 18);
     await d.fadeIn(1200);
     await d.wait(500);
-    d.pose(A.idle, 1);
     await d.say(D.arrive.slice(0, 1));
     d.cam(...P(36, 18), 1.4); await d.wait(1600);   // horses grazing below the snowy ridge
     await d.say(D.arrive.slice(1, 2));

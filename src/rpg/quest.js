@@ -3,6 +3,7 @@
 // co-op peers can merge them in any order without conflicts or duplicated rewards.
 import {MAP01} from './gen/map01.js';
 import {ANIMS, SHEETS} from './gen/atlas.js';
+import {EGG_TEXT, eggCrack, eggFind, eggChess} from './eggs.js';
 import {DIALOGUES, HISTORICAL_QUIZZES, FACTS, VILLAGERS, SECRETS, QUESTS, BONUS_META, CACHE_BRANCH} from './story.js';
 
 export const TS = 16;
@@ -90,6 +91,7 @@ export function applyWorld(G) {
   ia('crack', !b.crack, 110); ia('altar', b.crack); ia('flute', b.crack && !b.flute);
   ia('zmark', true); ia('page2', !!f.quiz.stone_secret && !b.page2);
   ia('homegate', b.finished); ia('campgate', true); ia('holo', true);
+  tag('doomseal', b.eggDoomOpen); ia('doomcrack', !b.eggDoomOpen, 90); ia('doomthrone', !!b.eggDoomOpen);   // team easter egg
   // Enemy groups: 1 hunting wolves, 2 ravine wolves, 3 strangers (flee from the shadow), 4 cave bear.
   E.tj_groups((1 << 1) | (1 << 2) | (b.shadow ? 0 : 1 << 3) | (1 << 4));
   E.tj_torch(b.returned ? 1 : 0);
@@ -224,6 +226,8 @@ export function createQuest(G) {
         await G.say(D.campgateOpen);
         return G.gotoLevel?.(2);
       case 'holo': return G.results();
+      case 'doomcrack': return eggCrack(G, set, 'eggDoomOpen', hold, pos('doomcrack'));
+      case 'doomthrone': return eggFind(G, set, 'eggDoom', EGG_TEXT.doom, 'map01');
     }
   }
 

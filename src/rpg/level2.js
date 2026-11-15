@@ -3,6 +3,7 @@ import {MAP02} from './gen/map02.js';
 import * as S from './story02.js';
 import * as Q from './quest02.js';
 import {makePersistence} from './persistence.js';
+import {EGG_NAMES, EGG_LABELS} from './eggs.js';
 
 // 24 header words + 25 items + 13 enemies × 2 + 4 effect slots × 2; 69-word saves (19 items, no effects) stay loadable.
 export const SAVE_WORDS_L2 = 24 + 25 + 13 * 2 + 8, PREV_SAVE_WORDS_L2 = 24 + 19 + 13 * 2;
@@ -16,7 +17,7 @@ export default {
   id: 2, title: 'Күлге көмілген шындық', wasm: '/engine/rpg/tarikh-rpg-2.wasm', saveKey: 'tarikh.rpg.v3.L2', MAP: MAP02, requires: 1,
   SPEAKERS: S.SPEAKERS, ZONE_NAMES: S.ZONE_NAMES, QUESTS: S.QUESTS, HISTORICAL_QUIZZES: S.HISTORICAL_QUIZZES, BONUS_QUIZ: S.BONUS_QUIZ,
   BONUS_META: S.BONUS_META, CHAMBER_FAIL: S.CHAMBER_FAIL, TRIAL_LEVELS: S.TRIAL_LEVELS, MAIN_QUIZ_ORDER: S.MAIN_QUIZ_ORDER,
-  SECRETS: S.SECRETS, DIALOGUES: S.DIALOGUES, NAMES: S.NAMES, LABELS: S.LABELS,
+  SECRETS: S.SECRETS, DIALOGUES: S.DIALOGUES, NAMES: {...S.NAMES, ...EGG_NAMES}, LABELS: {...S.LABELS, ...EGG_LABELS},
   applyWorld: Q.applyWorld, createQuest: Q.createQuest, questStage: Q.questStage, questTarget: Q.questTarget,
   scoreOf: Q.scoreOf, secretsFound: Q.secretsFound, pageLines: Q.pageLines, pageTotal: Q.PAGE_TOTAL, restoreSnapshot: persistence.restoreSnapshot,
   begin: quest => quest.start(),

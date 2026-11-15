@@ -741,7 +741,7 @@ function updatePrompt() {
   const kind = E.tj_state(25), id = E.tj_state(26), el = $('prompt');
   if (kind < 0 || cine || dialogBusy || panelOpen) { el.hidden = true; return; }
   let text = '';
-  if (kind === 0) { const key = MAP.interacts[id]; text = `${LV.NAMES?.[key] || NAMES[lang][key] || key} · ${VERB[lang][(LV.LABELS || INTERACT_LABEL)[key] || 'examine']}`; }
+  if (kind === 0) { const key = MAP.interacts[id]; text = `${L(LV.NAMES?.[key]) || NAMES[lang][key] || key} · ${VERB[lang][(LV.LABELS || INTERACT_LABEL)[key] || 'examine']}`; }
   else if (kind === 1) text = `${L(SPEAKERS[MAP.npcs[id]])} · ${VERB[lang].talk}`;
   else if (kind === 2) text = VERB[lang].revive;
   const html = `<kbd>${coarsePointer ? 'E' : lang === 'ru' ? 'ПКМ' : '🖱 оң'}</kbd> ${esc(text)}`;
@@ -814,7 +814,7 @@ function handleEvents() {
       case EV.PEER_HIT: { const s = memberSlotOfEngine(a); if (s >= 0) party.net?.send('dmg', {to: s, d: b}); break; }
       case EV.REVIVE_PEER: { const s = memberSlotOfEngine(a); if (s >= 0) party.net?.send('rev', {to: s}); break; }
       case EV.PLATES: quest.plates(a); break;
-      case EV.ALERT: if (!cine) music('danger'); break;
+      case EV.ALERT: if (b === 99) quest.bossTalk?.(a); else if (!cine) music('danger'); break;   // 99: a boss stops fighting (MAP05)
       case EV.NOAMMO: toast(t('noAmmo'), 'warn'); sfx('noammo'); break;
     }
   }
@@ -842,6 +842,7 @@ function musicForZone(force) {
   music(LV.music ? LV.music(z, G.flags) : z === 1 ? 'village' : z === 5 ? 'cave' : z === 6 ? 'camp' : z === 4 ? 'danger' : 'explore');
 }
 function ambienceTick() {
+  quest?.tick?.();   // optional 4 Hz level logic (MAP05: reflection, lingering, per-zone light)
   const z = E.tj_state(2), [x, y] = heroPos();
   if (LV.ambience) { ambience(LV.ambience(z, x, y, (a, b) => E.tj_tile(a, b), G.flags)); return; }
   const fire = Math.max(0, 1 - Math.hypot(x - 32 * TS, y - 41 * TS) / 140) + Math.max(0, 1 - Math.hypot(x - 85 * TS, y - 19.5 * TS) / 140);
@@ -979,6 +980,7 @@ async function boot() {
     Object.assign(G, {
       say, quiz, choose, bonusTrial, chamber, journal, levelPassed, results, complete, travel, toast, changed, heroPos, save: s => save(s),
       cine: (id, fn) => playCutscene(id, fn), sfx,
+      music: m => music(m), musicZone: () => musicForZone(true), busy: () => !!(cine || dialogBusy || panelOpen || comicOpen),
       // A cinematic film rendered in the engine: wide letterbox, grain, timed subtitles, no dialogue boxes.
       // Motion-comic cinematic in the intro's format: the game pauses underneath and resumes afterwards.
       comic: async () => {
@@ -987,6 +989,8 @@ async function boot() {
         let ctxA = null; try { ctxA = new (window.AudioContext || window.webkitAudioContext)(); } catch {}
         try { await (await LV.comic({audioCtx: ctxA})).done; } catch (e) { console.warn(e); }
         try { ctxA?.close(); } catch {}
+        // The comic has its own ҚАЗ/РУС switch (same storage key): keep the game UI in the language chosen there.
+        if (getLang() !== lang) { lang = getLang(); document.documentElement.lang = lang; updateHud(true); }
         comicOpen = false; E.tj_pause(0); lastTime = performance.now(); acc = 0; musicForZone(true); canvas.focus({preventScroll: true});
       },
       film: (fn, id = 'film' + LV.id) => { $('viewport').classList.add('film'); return playCutscene(id, fn); }, gotoLevel: n => { save(true); location.href = '/rpg.html' + (n > 1 ? '?level=' + n : ''); }, spawnFx: (p, type, n) => E.tj_spawn_fx(type, p[0], p[1], n),

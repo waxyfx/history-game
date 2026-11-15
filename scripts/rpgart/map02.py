@@ -238,6 +238,14 @@ def emit():
                  (24, 1, 82, 33),   # forge coal by the charcoal heap
                  (24, 1, 65, 55.5), # forge coal in the hidden workshop (secret)
                  (22, 1, 27, 86)]   # guard infusion in the tablet chamber, before the keeper
+    # Team easter egg (optional): a niche behind a loose rock west of the mural hall.
+    for y in range(91, 99):
+        for x in range(4, 13): L.set(x, y, 'cave')
+    for x in range(12, 17): L.set(x, 94, 'cave')
+    L.obj('crock', *P(15, 94.5), 3, L.tag('chipseal'))
+    L.obj('gpuplan', *P(8, 93.4)); L.obj('jacket', *P(11.4, 92.6)); L.obj('anvil', *P(5.4, 96.6))
+    L.interact('chipcrack', *P(17.4, 94.5), 18, L.tag('chipseal'))
+    L.interact('gpuplan', *P(8, 94.4), 20)
     L.area('world', 0, 0, 100, 68)
     L.area('under', 0, 70, 56, 108, dark=(46, 34, 40), outdoor=False)
     L.zone_area = [0, 0, 0, 0, 0, 0, 0, 0, 1]

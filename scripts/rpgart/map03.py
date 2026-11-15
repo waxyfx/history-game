@@ -263,6 +263,14 @@ def emit():
     L.pickups = [(9, 2, 14, 62), (4, 8, 34, 58), (9, 1, 50, 60), (25, 2, 40, 49), (4, 6, 70, 50), (23, 1, 47, 24),
                  (21, 1, 80, 34), (9, 2, 100, 40), (4, 8, 22, 46), (20, 1, 106, 68),
                  (22, 1, 32, 106), (9, 2, 10, 97), (21, 1, 59, 102), (5, 1, 32, 95), (4, 10, 46, 101)]
+    # Team easter egg (optional): solve the board, the alcove north of the west room opens.
+    for y in range(85, 92):
+        for x in range(2, 11): L.set(x, y, 'pave')
+    for y in range(92, 96): L.set(6, y, 'cave')
+    L.obj('crock', *P(6.5, 94.5), 3, L.tag('chessseal'))
+    L.obj('chess', *P(12.4, 101.6)); L.obj('zeromask', *P(6.5, 87.4)); L.obj('torch', *P(3, 86)); L.obj('torch', *P(10, 86))
+    L.interact('chess', *P(12.4, 102.4), 20)
+    L.interact('zeromask', *P(6.5, 88.4), 20)
     L.area('world', 0, 0, W, WY)
     L.area('tomb', 0, TY, 66, H, dark=(70, 52, 40), outdoor=False)
     L.area('camp', 66, TY, W, H)

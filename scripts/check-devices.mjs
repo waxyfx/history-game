@@ -8,7 +8,7 @@ const names=['C:/Program Files/Google/Chrome/Application/chrome.exe','C:/Program
 const base=process.argv[2]||'http://127.0.0.1:5176';
 async function check(exe){
  const profile=await mkdtemp(join(tmpdir(),'tarikh-device-'));
- const child=spawn(exe,['--headless=new','--remote-debugging-port=0','--user-data-dir='+profile,'--no-first-run','--disable-background-networking','about:blank'],{stdio:'ignore',windowsHide:true});
+ const child=spawn(exe,['--headless=new','--mute-audio','--remote-debugging-port=0','--user-data-dir='+profile,'--no-first-run','--disable-background-networking','about:blank'],{stdio:'ignore',windowsHide:true});
  let ws;
  try{
   let port;

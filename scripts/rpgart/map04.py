@@ -194,6 +194,14 @@ def emit():
     L.enemy_sheets = {0: 'WOLF', 1: 'HUNWARRIOR', 2: 'HUNSCOUT', 3: 'HUNRIDER', 4: 'HUNCORRUPT', 5: 'WRAITH', 6: 'KEEPER', 7: 'GOLDRIDER', 8: 'WITNESS'}
     L.pickups = [(9, 2, 44, 64), (4, 8, 50, 56), (25, 2, 14, 24), (9, 1, 34, 48), (23, 1, 6, 58), (4, 8, 70, 46), (21, 1, 84, 26),
                  (9, 2, 106, 8), (20, 1, 56, 8), (22, 1, 32, 106), (9, 2, 18, 100), (21, 1, 46, 100), (5, 1, 32, 95), (4, 10, 14, 86)]
+    # Team easter egg (optional): a lab behind a loose rock east of the hall of witnesses.
+    for y in range(96, 104):
+        for x in range(52, 63): L.set(x, y, 'pave')
+    for x in range(48, 53): L.set(x, 99, 'cave')
+    L.obj('crock', *P(50.5, 99.5), 3, L.tag('labseal'))
+    L.obj('greenportal', *P(58, 98.6)); L.obj('labbench', *P(55, 102.6)); L.obj('torch', *P(61, 101))
+    L.interact('labcrack', *P(48.2, 99.5), 18, L.tag('labseal'))
+    L.interact('greenportal', *P(58, 99.6), 22)
     L.area('world', 0, 0, W, WY)
     L.area('under', 0, TY, 66, H, dark=(48, 50, 70), outdoor=False)
     L.area('camp', 66, TY, W, H)

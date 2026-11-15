@@ -323,6 +323,15 @@ def emit():
     interact('homegate', 25 * TS, 83.5 * TS, 26, tag('homegate'))
     interact('campgate', 76 * TS, 79.6 * TS, 26, tag('campgate'))
     interact('holo', 76 * TS, 86 * TS, 22)
+    # Team easter egg (optional): a refuge behind a loose rock west of the bear hall.
+    for y in range(96, 105):
+        for x in range(3, 12): setr(x, y, 'cave')
+    for x in range(11, 16): setr(x, 99, 'cave')
+    obj('crock', 14.5 * TS, 99.5 * TS, 3, tag('doomseal'))
+    obj('doomthrone', 7 * TS, 99.8 * TS); obj('doomgear', 4.6 * TS, 103.4 * TS); obj('doomgear', 9.6 * TS, 103.4 * TS, 0)
+    obj('crystal', 3.6 * TS, 97.4 * TS)
+    interact('doomcrack', 16.4 * TS, 99.5 * TS, 18, tag('doomseal'))
+    interact('doomthrone', 7 * TS, 100.8 * TS, 20)
     # Triggers (story beats when the local player walks in).
     trigger('settlement', 19, 31, 45, 52)
     trigger('hunting', 52, 38, 70, 56)

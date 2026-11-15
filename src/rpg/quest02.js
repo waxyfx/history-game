@@ -3,6 +3,7 @@
 //   talked = witnesses heard, tracks = clues examined (story02 CLUES), petro = murals examined.
 import {MAP02} from './gen/map02.js';
 import {A, TS, IT as IT1} from './quest.js';
+import {EGG_TEXT, eggCrack, eggFind, eggChess} from './eggs.js';
 import {DIALOGUES as D, HISTORICAL_QUIZZES, QUESTS, SECRETS, WITNESSES, CLUES, FACTS} from './story02.js';
 
 export const IA = Object.fromEntries(MAP02.interacts.map((n, i) => [n, i]));
@@ -76,6 +77,7 @@ export function applyWorld(G) {
   ia('hearth', true); ia('brokenaxe', b.forgeSeen); ia('forgetrack', village); ia('bracelet', village && !b.bracelet);
   ia('doorsymbol', village); ia('secretnote', !b.note); ia('granary', village); ia('pgaibar', true);
   ia('cist', b.elderClue); ia('mausoleum', true);
+  tag('chipseal', b.eggChipOpen); ia('chipcrack', !b.eggChipOpen, 90); ia('gpuplan', !!b.eggChipOpen);   // team easter egg
   ia('sheafstack', !b.sheaves, 90); ia('hiddenmould', b.sheaves);
   ia('trapdoor', b.under || !!f.quiz.bronze_burial, b.under ? 0 : 120); ia('stairsup', true);
   for (const n of [1, 2, 3, 4]) ia('mural' + n, true);
@@ -223,6 +225,8 @@ export function createQuest(G) {
         if (hold && f.quiz.bronze_burial) return G.cine('discovery', cutDiscovery);
         return;
       case 'stairsup': return G.travel(...P(73.5, 35.4));
+      case 'chipcrack': return eggCrack(G, set, 'eggChipOpen', hold, pos('chipcrack'));
+      case 'gpuplan': return eggFind(G, set, 'eggChip', EGG_TEXT.chip, 'map02');
       case 'mural1': case 'mural2': case 'mural3': case 'mural4': {
         const n = +key.slice(5);
         await G.say(D[key], n === 2 ? FACTS.petro : null);
