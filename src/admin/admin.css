@@ -177,3 +177,6 @@ dialog.admin-modal h2 { font-size: 20px; font-weight: 600; margin-bottom: 16px; 
 .gate-back{color:#86cdbd;font-size:13px;text-decoration:none}
 .gate-session{position:fixed;right:12px;bottom:12px;z-index:50;display:flex;gap:8px;align-items:center;background:#132223;border:1px solid #2f4543;border-radius:8px;padding:6px 8px;color:#cedabe;font:12px system-ui}
 .gate-session button{background:#0b1416;border:1px solid #2f4543;color:#e9e3cf;border-radius:5px;padding:4px 8px;cursor:pointer}
+.gate-card button.gate-google{background:#f1ead6;color:#1a1208;display:flex;align-items:center;justify-content:center;gap:8px}
+.gate-card button.gate-google::before{content:"G";font:900 15px/1 system-ui;color:#4285f4}
+.gate-or{margin:0;text-align:center;font-size:12px;color:#7f8f84}
