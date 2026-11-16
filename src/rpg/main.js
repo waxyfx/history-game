@@ -385,7 +385,7 @@ function roadmap() {
   openPanel(`<p class="eyebrow">TARIKH JOLY</p><h2>${lang === 'ru' ? 'Карта эпох' : 'Дәуірлер картасы'}</h2><div class="epochs">${ALL_EPOCHS.map(e => { const open = e.id === 1 || TEMP_UNLOCK_ALL || localPassed(e.id - 1) || levelPassedOf(e.id - 1); const playable = open && LEVEL_IDS.includes(e.id);
     return `<article class="${e.id === LV.id ? 'on' : ''}"><small>MAP ${String(e.id).padStart(2, '0')} · ${esc(e.badge)}</small><b>${esc(e.title)}</b><span>${esc(e.period)}</span>${playable && e.id !== LV.id ? `<a class="go" href="/rpg.html${e.id > 1 ? '?level=' + e.id : ''}">${lang === 'ru' ? 'Играть' : 'Ойнау'} →</a>` : !playable ? `<em>${esc(t('mapLocked'))}</em>` : ''}</article>`; }).join('')}</div><button class="primary" data-close>${esc(t('close'))}</button>`, 'wide');
 }
-// ---------------------------------------------------------------- level result (100 / pass 90)
+// ---------------------------------------------------------------- level result (100 / pass 60)
 const fmt = s => s == null ? '—' : `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
 let lastOfficial = null; // display copy of the server result (the server stays the source of truth)
 const levelPassed = () => !!(lastOfficial ? lastOfficial.passed : (G.flags.b.finished && scoreOf(G.flags) >= PASS_SCORE));

@@ -31,7 +31,7 @@ test('Structure: 3 mandatory + 1 final + secret trials; mandatory path alone rea
   assert(by('secret').length >= 2);
   const sum = list => list.reduce((s, t) => s + t.points, 0);
   assert.equal(sum(trials), MAX_SCORE);
-  assert.equal(sum([...by('main'), ...by('final')]), PASS_SCORE, 'all mandatory + final = 90 = pass');
+  assert.equal(sum([...by('main'), ...by('final')]), 90, 'all mandatory + final = 90'); assert.equal(PASS_SCORE, 60, 'pass mark 60');
   for (const q of Object.values(HISTORICAL_QUIZZES)) {
     assert(q.intro?.length && q.evidence?.length, 'observe before answering: ' + q.id);
     assert(q.branch.ok.length && q.branch.no.length, 'both branches continue the story: ' + q.id);
@@ -41,14 +41,15 @@ test('Structure: 3 mandatory + 1 final + secret trials; mandatory path alone rea
   assert(DIALOGUES.shadow.some(l => l.who === 'zulmat'), 'Zulmat speaks in the shadow scene');
 });
 
-test('Local score mirrors the server weights: 90 pass, 100 pass, below 90 fail; a wrong final still completes', () => {
+test('Local score mirrors the server weights: pass mark 60; a wrong final still completes', () => {
   const flags = ok => ({b: {}, talked: [], tracks: [], petro: [], quiz: Object.fromEntries(Object.entries(ok).map(([id, v]) => [id, {a: 1, t: 1, ok: v, ch: 0}])), t0: 1, tEnd: 0});
   const all = Object.fromEntries(Object.keys(TRIAL_POINTS).map(id => [id, true]));
   assert.equal(scoreOf(flags(all)), 100);
   const path = {stone_main: true, stone_hunting: true, stone_cave: true, stone_secret: true};
   assert.equal(scoreOf(flags(path)), 90); assert(scoreOf(flags(path)) >= PASS_SCORE);
   const wrongFinal = {...path, stone_secret: false, stone_workshop: true, stone_bonus_4: true};
-  assert.equal(scoreOf(flags(wrongFinal)), 66); assert(scoreOf(flags(wrongFinal)) < PASS_SCORE);
+  assert.equal(scoreOf(flags(wrongFinal)), 66); assert(scoreOf(flags(wrongFinal)) >= PASS_SCORE);
+  assert(scoreOf(flags({stone_main: true, stone_hunting: true})) < PASS_SCORE, 'below 60 fails');
   assert.equal(pageLines(flags(wrongFinal)), 3, 'page restored, one line stays distorted');
   // Saved choices keep the branch result.
   const v = validateFlags(flags({stone_main: false}));

@@ -28,7 +28,7 @@ test('MAP03 trials match the private server keys (009); 3 main + final + 4 secre
   }
   const by = t => trials.filter(q => q.tier === t), sum = l => l.reduce((s, q) => s + q.points, 0);
   assert.equal(by('main').length, 3); assert.equal(by('final').length, 1); assert(by('secret').length >= 3);
-  assert.equal(sum(trials), MAX_SCORE); assert.equal(sum([...by('main'), ...by('final')]), PASS_SCORE);
+  assert.equal(sum(trials), MAX_SCORE); assert.equal(sum([...by('main'), ...by('final')]), 90); assert.equal(PASS_SCORE, 60);
   assert.match(sql, /required_quiz = 'saka_final' where level_id = 3/);
 });
 
@@ -51,13 +51,14 @@ test('MAP03 story: the accusation scene, Kazakh text everywhere, every speaker/i
   for (const t of ['outskirts', 'arena', 'hall']) assert(TRIG[t] != null);
 });
 
-test('MAP03 score: 89 fails, 90 passes, 100 passes; a wrong final still completes the level', () => {
+test('MAP03 score: pass mark 60 — 80, 90 and 100 pass, below 60 fails; a wrong final still completes the level', () => {
   const flags = ok => ({b: {}, talked: [], tracks: [], petro: [], quiz: Object.fromEntries(Object.entries(ok).map(([id, v]) => [id, {a: 1, t: 1, ok: v, ch: 0}])), t0: 1, tEnd: 0});
   const path = {saka_gold: true, saka_kurgan: true, saka_women: true, saka_final: true};
   assert.equal(scoreOf(flags(path)), 90);
   assert.equal(scoreOf(flags(Object.fromEntries(Object.keys(TRIAL_POINTS).map(k => [k, true])))), 100);
   const s = scoreOf(flags({...path, saka_gold: false, saka_esik: true, saka_berel: true, saka_altar: true, saka_hats: true}));
-  assert.equal(s, 80); assert(s < PASS_SCORE);
+  assert.equal(s, 80); assert(s >= PASS_SCORE);
+  assert(scoreOf(flags({...path, saka_final: false, saka_gold: false})) < PASS_SCORE, 'below 60 fails');
   assert.equal(pageLines(flags({...path, saka_final: false})), 3);
 });
 

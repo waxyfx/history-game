@@ -38,7 +38,7 @@ export function secretsFound(f) {
   return SECRETS.filter(s => s === 'petro' ? f.petro.length >= 4 : f.b[s]).length;
 }
 // Level score (max 100, pass 90): trial weights from story.js; mirrors 007_competition.sql.
-export const MAX_SCORE = 100, PASS_SCORE = 90;
+export const MAX_SCORE = 100, PASS_SCORE = 60;
 export const TRIAL_POINTS = Object.fromEntries([...Object.values(HISTORICAL_QUIZZES).map(q => [q.id, q.points]), ...BONUS_META.map(b => [b.id, b.points])]);
 export function scoreOf(f) {
   let s = 0;

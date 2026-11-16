@@ -57,7 +57,7 @@ test('MAP04 official SQL: locked progression, private answers, one-shot scoring 
   assert.equal((await finish(run)).passed,true);
  }
  await t.test('Mandatory trials produce 90; answers are hidden and cannot be changed or duplicated',async()=>{
-  const run=await rpc('level_start_run',[4,'solo',null]);assert.equal(run.pass_score,90);assert.equal(run.max_score,100);
+  const run=await rpc('level_start_run',[4,'solo',null]);assert.equal(run.pass_score,60);assert.equal(run.max_score,100);
   await assert.rejects(db.query('select * from private.official_quiz_keys where level_id=4'),/permission denied/);
   await assert.rejects(rpc('level_submit_answer',[run.id,'saka_final',3,randomUUID()]),/табылмады/);
   await assert.rejects(rpc('level_finish_run',[run.id,randomUUID()]),/соңғы сынағы/);
@@ -70,12 +70,12 @@ test('MAP04 official SQL: locked progression, private answers, one-shot scoring 
   for(const q of trials.filter(q=>q.tier!=='secret'&&q.id!=='hun_script'))await rpc('level_submit_answer',[run.id,q.id,q.correctIndex,randomUUID()]);
   const finished=await finish(run);assert.equal(finished.score,90);assert.equal(finished.passed,true);
  });
- await t.test('All trials yield 100; a wrong final completes with 70 and fails without blocking the result',async()=>{
+ await t.test('All trials yield 100; a wrong final completes with 70, still above the pass mark of 60',async()=>{
   for(const wrongFinal of [false,true]){
    await sys('update private.rate_limits set calls=0');await as(user);
    const run=await rpc('level_start_run',[4,'solo',null]);
    for(const q of trials)await rpc('level_submit_answer',[run.id,q.id,wrongFinal&&q.tier==='final'?(q.correctIndex+1)%4:q.correctIndex,randomUUID()]);
-   const finished=await finish(run);assert.equal(finished.score,wrongFinal?70:100);assert.equal(finished.passed,!wrongFinal);
+   const finished=await finish(run);assert.equal(finished.score,wrongFinal?70:100);assert.equal(finished.passed,true);
   }
  });
 });

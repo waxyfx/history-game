@@ -15,7 +15,7 @@ export const TAG = Object.fromEntries(MAP04.tags.map((n, i) => [n, i]));
 const P = (x, y) => [Math.round(x * TS), Math.round(y * TS)];
 const QID = Object.fromEntries(Object.entries(HISTORICAL_QUIZZES).map(([n, q]) => [q.id, +n]));
 
-export const MAX_SCORE = 100, PASS_SCORE = 90;
+export const MAX_SCORE = 100, PASS_SCORE = 60;
 export const TRIAL_POINTS = Object.fromEntries(Object.values(HISTORICAL_QUIZZES).map(q => [q.id, q.points]));
 export function scoreOf(f) {
   let s = 0;

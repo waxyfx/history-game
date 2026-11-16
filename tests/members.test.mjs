@@ -71,7 +71,7 @@ test('Results: single-choice trials are scored secretly on the server and cannot
   const st = await googleUser('Bek', 'g-bek'), other = await googleUser('Other', 'g-other');
   await as(st);
   const run = await rpc('level_start_run', [1, 'solo', null]);
-  assert.equal(run.status, 'active'); assert.equal(run.max_score, 100); assert.equal(run.pass_score, 90);
+  assert.equal(run.status, 'active'); assert.equal(run.max_score, 100); assert.equal(run.pass_score, 60);
   assert(run.server_now && run.competition_started_at, 'server clock for the live timer');
   assert.equal(run.score, undefined, 'no score during the run');
   assert.equal((await rpc('level_start_run', [1, 'solo', null])).id, run.id, 'active run is resumed');
@@ -106,13 +106,13 @@ test('Results: single-choice trials are scored secretly on the server and cannot
   assert.equal((await rpc('admin_get_level_results', [1, 50, 0]))[0].name, 'Bek');
 });
 
-test('Competition: 89 fail, 90 pass, 100 pass, retries, next-level lock and server time', async t => {
+test('Competition: 59 fail, 60 pass, 100 pass, retries, next-level lock and server time', async t => {
   const {db, as, rpc, sys, googleUser} = await setup(); t.after(() => db.close());
-  // Configurable weights (operator-side): final 50 + main 39 = 89, + cave 1 = 90, + hunting 10 = 100.
+  // Configurable weights (operator-side): final 50 + main 9 = 59, + cave 1 = 60, + hunting 40 = 100.
   await sys(`update private.official_quiz_keys set points = 0 where level_id = 1`);
-  for (const [q, p] of [['stone_secret', 50], ['stone_main', 39], ['stone_cave', 1], ['stone_hunting', 10]])
+  for (const [q, p] of [['stone_secret', 50], ['stone_main', 9], ['stone_cave', 1], ['stone_hunting', 40]])
     await sys(`update private.official_quiz_keys set points = $2 where level_id = 1 and quiz_id = $1`, [q, p]);
-  assert.equal((await sys(`select pass_score, max_score from private.official_level_rules where level_id = 1`)).rows[0].pass_score, 90);
+  assert.equal((await sys(`select pass_score, max_score from private.official_level_rules where level_id = 1`)).rows[0].pass_score, 60);
   const st = await googleUser('Aru', 'g-aru');
   await as(st);
   await assert.rejects(rpc('level_start_run', [2, 'solo', null]), /құлыптаулы/, 'level 2 is locked before level 1 is passed');
@@ -122,14 +122,14 @@ test('Competition: 89 fail, 90 pass, 100 pass, retries, next-level lock and serv
     await backdate(sys, run.id, backSeconds); await as(st);
     return [run, await rpc('level_finish_run', [run.id, randomUUID()])];
   };
-  // Attempt 1: 89 -> finished but NOT passed.
+  // Attempt 1: 59 -> finished but NOT passed.
   const [run1, r1] = await play([['stone_secret', 0], ['stone_main', 1], ['stone_cave', 0]], 300);
-  assert.deepEqual([r1.score, r1.passed, r1.attempt_number, r1.next_level_unlocked], [89, false, 1, false]);
+  assert.deepEqual([r1.score, r1.passed, r1.attempt_number, r1.next_level_unlocked], [59, false, 1, false]);
   await assert.rejects(rpc('level_start_run', [2, 'solo', null]), /құлыптаулы/);
-  // Attempt 2 starts from zero (previous answers are not carried over): 90 -> PASS, level 2 unlocks.
+  // Attempt 2 starts from zero (previous answers are not carried over): 60 -> PASS, level 2 unlocks.
   const [run2, r2] = await play([['stone_secret', 0], ['stone_main', 1], ['stone_cave', 1]], 200);
   assert.notEqual(run2.id, run1.id); assert.deepEqual(run2.answered, [], 'fresh attempt');
-  assert.deepEqual([r2.score, r2.passed, r2.attempt_number, r2.next_level_unlocked, r2.next_level], [90, true, 2, true, 2]);
+  assert.deepEqual([r2.score, r2.passed, r2.attempt_number, r2.next_level_unlocked, r2.next_level], [60, true, 2, true, 2]);
   // Server time: attempt duration from this run only; competition time keeps counting across attempts.
   assert(r2.duration_seconds >= 200 && r2.duration_seconds < 260, 'attempt duration from server timestamps');
   assert.equal(r2.competition_id, r1.competition_id, 'retries keep the same competition timer');

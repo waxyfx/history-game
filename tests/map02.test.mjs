@@ -33,7 +33,7 @@ test('MAP02 trials: answers and weights match the private server keys (008); tex
   const by = t => trials.filter(q => q.tier === t);
   assert.equal(by('main').length, 3); assert.equal(by('final').length, 1); assert(by('secret').length >= 3);
   const sum = l => l.reduce((s, q) => s + q.points, 0);
-  assert.equal(sum(trials), MAX_SCORE); assert.equal(sum([...by('main'), ...by('final')]), PASS_SCORE);
+  assert.equal(sum(trials), MAX_SCORE); assert.equal(sum([...by('main'), ...by('final')]), 90); assert.equal(PASS_SCORE, 60);
   assert.match(sql, /required_quiz = 'bronze_tablet' where level_id = 2/);
 });
 
@@ -53,16 +53,17 @@ test('MAP02 story: required lines, all new texts in Kazakh, every interact/NPC n
   assert(NPC.smithdown != null && NPC.missing3 != null);
 });
 
-test('MAP02 score: 89 fails, 90 passes, 100 passes; a wrong final still completes the level', () => {
+test('MAP02 score: pass mark 60 — 80, 90 and 100 pass, a wrong final (60) still passes, below 60 fails', () => {
   const flags = ok => ({b: {}, talked: [], tracks: [], petro: [], quiz: Object.fromEntries(Object.entries(ok).map(([id, v]) => [id, {a: 1, t: 1, ok: v, ch: 0}])), t0: 1, tEnd: 0});
   const path = {bronze_metal: true, bronze_economy: true, bronze_burial: true, bronze_tablet: true};
   assert.equal(scoreOf(flags(path)), 90);
   assert.equal(scoreOf(flags(Object.fromEntries(Object.keys(TRIAL_POINTS).map(k => [k, true])))), 100);
   const s89 = scoreOf(flags({...path, bronze_metal: false, bronze_casting: true, bronze_mausoleum: true, bronze_tin: true}));
-  assert.equal(s89, 80); assert(s89 < PASS_SCORE);
+  assert.equal(s89, 80); assert(s89 >= PASS_SCORE);
   assert.equal(scoreOf(flags({...path, bronze_economy: false, bronze_casting: true, bronze_mausoleum: true, bronze_tin: true, bronze_metal: true})), 80);
   const wrongFinal = flags({...path, bronze_tablet: false});
-  assert.equal(scoreOf(wrongFinal), 60); assert.equal(pageLines(wrongFinal), 3);
+  assert.equal(scoreOf(wrongFinal), 60); assert(scoreOf(wrongFinal) >= PASS_SCORE); assert.equal(pageLines(wrongFinal), 3);
+  assert(scoreOf(flags({...path, bronze_tablet: false, bronze_metal: false})) < PASS_SCORE, 'below 60 fails');
 });
 
 test('MAP02 quest stages follow the investigation without softlocks', () => {
