@@ -973,7 +973,9 @@ async function boot() {
     E.tj_atlas_ready(1);
     atlasCanvas = document.createElement('canvas'); atlasCanvas.width = atlas.width; atlasCanvas.height = atlas.height;
     atlasCanvas.getContext('2d').putImageData(new ImageData(new Uint8ClampedArray(atlas.data.buffer, atlas.data.byteOffset, atlas.data.length), atlas.width, atlas.height), 0, 0);
-    document.documentElement.style.setProperty('--atlas', `url(${atlasCanvas.toDataURL()})`);
+    // UI icons read the atlas through a blob: URL. A data: URL of the whole atlas grew past Chrome's 2 MB URL
+    // limit (MAP05 art) and the browser silently dropped it, leaving the hotbar and the bag without icons.
+    atlasCanvas.toBlob(blob => { if (blob) document.documentElement.style.setProperty('--atlas', `url(${URL.createObjectURL(blob)})`); });
     document.documentElement.style.setProperty('--atlas-size', `${atlas.width * 2}px ${atlas.height * 2}px`);
     E.tj_init();
     frame = new ImageData(new Uint8ClampedArray(E.memory.buffer, E.tj_pixels(), W * H * 4), W, H);
