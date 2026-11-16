@@ -169,7 +169,7 @@ export function createQuest(G) {
           set('qaramanAsked');
           const c = await G.choose(CHOICES.qaraman);
           if (c === 0) { await G.say(D.qaramanReady); set('qaramanTold'); }
-          else await G.say([{who: 'aibar', kk: '(Айбар үнсіз өтіп кетті. Шындықты ел алдында айтады.)'}]);
+          else await G.say([{who: 'aibar', kk: '(Айдар үнсіз өтіп кетті. Шындықты ел алдында айтады.)'}]);
           return;
         }
         return G.say(D.qaramanHostile);

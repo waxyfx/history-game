@@ -2,7 +2,7 @@
 // Plays when Aibar takes the fifth page. Images only, no explanation of their order:
 // the runic stone, Zulmat, the second Aibar, the eleventh knot, the Gate of time, Aibar looking at the viewer.
 export const CAST = {
- hero: {kk: 'Айбар', ru: 'Айбар'},
+ hero: {kk: 'Айдар', ru: 'Айдар'},
  twin: {kk: '???', ru: '???'},
  sys: {kk: 'ЖҮЙЕ', ru: 'СИСТЕМА'},
 };

@@ -4,7 +4,7 @@
 const L = (who, kk) => ({who, kk});
 
 export const SPEAKERS = {
-  aibar: {kk: 'Айбар', portrait: 'aibar'},
+  aibar: {kk: 'Айдар', portrait: 'aibar'},
   elder: {kk: 'Ақсары ана', portrait: 'matriarch'},
   smith: {kk: 'Көркем ұста', portrait: 'smith'},
   smithdown: {kk: 'Көркем ұста', portrait: 'smith'},

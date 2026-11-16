@@ -3,7 +3,7 @@
 // The scene raises questions only: who the knot-keeper is, why «not this time», whose handwriting, why eleven.
 
 export const CAST = {
- hero: {kk: 'Айбар', ru: 'Айбар'},
+ hero: {kk: 'Айдар', ru: 'Айдар'},
  knot: {kk: '???', ru: '???'},
  sys: {kk: 'ЖҮЙЕ', ru: 'СИСТЕМА'},
 };
@@ -41,7 +41,7 @@ export const SHOTS = [
   A(.4, 2.4, [28, 14], [36, 34], 'Тоқта!', 'Подожди!', 18, 'shout'),
  ], sfx: [[.6, 'whoosh'], [1.8, 'steps'], [3.2, 'dissolve']]},
  {id: 'wall', scene: 3, dur: 9, trans: 'fade', lines: [
-  {at: 5.6, end: 8.9, kind: 'caption', p: [26, 82], w: 36, kk: 'Бұл — Айбардың қолтаңбасы.', ru: 'Это почерк Айбара.'},
+  {at: 5.6, end: 8.9, kind: 'caption', p: [26, 82], w: 36, kk: 'Бұл — Айдардың қолтаңбасы.', ru: 'Это почерк Айдара.'},
  ], sfx: [[.8, 'chime'], [2.6, 'zaps', 1.8], [3, 'glass'], [4.4, 'heart']]},
  {id: 'zulmat', scene: 3, dur: 2.5, trans: 'cut', lines: [], sfx: [[0, 'sting']]},
  {id: 'final', scene: 3, dur: 11, trans: 'black', lines: [
