@@ -107,11 +107,11 @@ export function applyWorld(G) {
   for (const k of SIDES) npcFlags(k, arr, ev && !f.talked.includes(k) ? 2 : 0);
   const ayanAway = b.twin1 && !b.imageDown;
   npcFlags('ayan', met && !ayanAway, 0, ayanAway); npcFlags('herd', met, 0); npcFlags('qin', b.qinOpen, b.qinOpen && !b.qinMet ? 1 : 0);
-  npcFlags('dana', true, 0); npcFlags('erlan', true, 0);
+  npcFlags('dana', true, 0); npcFlags('erlan', true, 0); npcFlags('bilge', arr, arr && !b.bilgeMet ? 1 : 0);
   if (G.forceNpc || G.npcState !== npcState(b)) {
     G.npcState = npcState(b);
     npcFlags('twin', false, 0, 1); npcFlags('reflect', false, 0, 1);
-    for (const k of ['irkin', 'kumis', 'togyz', 'sentry', 'herd', 'tonyukuk', 'kultegin']) E.tj_npc_routine(NPC[k]);
+    for (const k of ['irkin', 'kumis', 'togyz', 'sentry', 'herd', 'tonyukuk', 'kultegin', 'bilge']) E.tj_npc_routine(NPC[k]);
     if (!ayanAway) E.tj_npc_routine(NPC.ayan);
   }
   G.forceNpc = false;
@@ -185,6 +185,12 @@ export function createQuest(G) {
         await G.say(D.kulteginAnswer[c] || D.kulteginAnswer[2]);
         addTo('talked', 'kultegin'); return sideCheck();
       }
+      case 'bilge': {   // Bilge as Tardush shad (711–712): distrust, a question, no help
+        if (B.bilgeMet) return G.say(D.bilge2);
+        await G.say(D.bilge1, FACTS.bilge);
+        const c = await G.choose(CHOICES.bilge);
+        set('bilgeMet'); return G.say(D.bilgeAnswer[c] || D.bilgeAnswer[2]);
+      }
       case 'qin':
         if (!B.qinMet) { set('qinMet'); await G.say(D.qin); anomaly(G, 'map05'); return; }
         return G.say(D.qinAgain);
@@ -209,9 +215,9 @@ export function createQuest(G) {
         if (!B.page) return G.say(D.turkgateLocked);
         G.sfx('portal');
         if (!B.finished) return G.cine('home', cutHome);
+        if (G.levelPassed()) return G.gotoLevel(6);   // MAP05 → MAP06: the same gate leads on once the page is earned
         return G.results();
-        return;
-      case 'campgate': return G.say(D.campgateLocked);
+      case 'campgate': return B.finished && G.levelPassed() ? G.gotoLevel(6) : G.say(D.campgateLocked);
       case 'holo': return G.results();
       case 'cradle': await G.say(D.cradle); return proof(PROOFS.cradle);
       case 'runeboard':

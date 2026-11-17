@@ -3,6 +3,7 @@
 //   talked = witnesses heard, tracks = clues examined (story02 CLUES), petro = murals examined.
 import {MAP02} from './gen/map02.js';
 import {A, TS, IT as IT1} from './quest.js';
+import {makeArrowWatch} from './range.js';
 import {EGG_TEXT, eggCrack, eggFind, eggChess} from './eggs.js';
 import {DIALOGUES as D, HISTORICAL_QUIZZES, QUESTS, SECRETS, WITNESSES, CLUES, FACTS} from './story02.js';
 
@@ -43,6 +44,8 @@ export function questStage(f) {
   if (b.elderClue) return 'sanctuary';
   if (reportReady(f)) return 'report';
   if (b.village) return 'investigate';
+  // Before the village: the bow lesson at the range (optional for the plot, but the tracker leads there first).
+  if (!b.bowTrained) return !b.bowGiven ? 'bow' : !(b.bowT1 && b.bowT2 && b.bowT3) ? 'bowStatic' : !b.bowMove ? 'bowMove' : 'bowFight';
   return 'arrive';
 }
 export function questTarget(f) {
@@ -120,7 +123,12 @@ export function applyWorld(G) {
   }
   G.forceNpc = false;
   // Kit: the chronicler arrives armed as at the end of MAP01; story items follow team progress.
-  grant(G, 'kit', true, () => { E.tj_item_add(IT.spear, 1); E.tj_item_add(IT.bow, 1); E.tj_item_add(IT.arrows, 12); E.tj_item_add(IT.torch, 1); });
+  // MAP02 opens with the club and the stone spear only; the bow is earned at Mergen's range.
+  grant(G, 'kit', true, () => { E.tj_item_add(IT.spear, 1); E.tj_item_add(IT.torch, 1); });
+  grant(G, 'bow', b.bowGiven, () => { E.tj_item_add(IT.bow, 1); E.tj_item_add(IT.arrows, 8); });
+  grant(G, 'bowkit', b.bowReward, () => { E.tj_item_add(IT.quiver, 1); E.tj_item_add(IT.arrows, 12); });
+  ia('arrowrack', !!b.bowGiven);
+  E.tj_npc_flags(NPC.mergen, 1, !b.bowGiven || (b.bowMove && !b.bowFight) || (b.bowTrained && !b.bowReward) ? 2 : 0, 0);
   grant(G, 'bracelet', b.bracelet, () => E.tj_item_add(IT.bracelet, 1));
   grant(G, 'mould', b.mould, () => E.tj_item_add(IT.mould, 1));
   grant(G, 'seal', b.institute, () => E.tj_item_add(IT.seal, 1));
@@ -146,6 +154,7 @@ export function createQuest(G) {
 
   async function talk(key) {
     const f = G.flags, B = f.b;
+    if (key === 'mergen') return mergen();
     if (key === 'elder') {
       if (!B.village) return;
       if (!B.elderClue && reportReady(f)) return G.cine('report', cutReport);
@@ -249,6 +258,12 @@ export function createQuest(G) {
       case 'keeperfire':
         if (B.keeper && !B.ember) { set('ember'); G.sfx('pickup'); G.spawnFx(pos('keeperfire'), 0, 20); return G.say(D.ember); }
         return;
+      case 'arrowrack': {   // training arrows: topped up to 8 while the lesson lasts, one last bundle after it
+        const n = E.tj_item_count(IT.arrows);
+        if (n >= 8) return G.say(D.rackFull);
+        if (B.bowTrained) { if (B.rackLast) return G.say(D.rackEmpty); set('rackLast'); }
+        E.tj_item_add(IT.arrows, 8 - n); G.sfx('pickup'); return G.say(D.rackTake);
+      }
       case 'sakagate':
         if (!B.rekindled) return G.say(D.sakaLocked);
         if (!B.finished) return G.cine('saka', cutSaka);
@@ -258,6 +273,7 @@ export function createQuest(G) {
 
   async function trigger(key) {
     const B = b();
+    if (key === 'range' && !B.bowGiven && !B.rangeSeen) { set('rangeSeen'); return G.say(D.bowCall); }
     if (key === 'square' && !B.village) return G.cine('accuse', cutAccuse);
     if (key === 'forge' && !B.forgeSeen) return G.cine('forge', cutForge);
     if (key === 'sanctuary' && !B.shadesSeen) { set('shadesSeen'); E.tj_shake(8); G.sfx('shadow'); return G.say(D.sanctuary); }
@@ -267,6 +283,7 @@ export function createQuest(G) {
   }
   function plates() {}
   async function enemyDied(i, type) {
+    if (groupOf(i) === 1 && b().bowFight && !b().bowTrained && !groupAlive(1)) { set('bowTrained'); await G.say(D.bowFightDone); }
     if (groupOf(i) === 3 && !b().freed) {
       const left = MAP02.enemies.some((e, j) => e.group === 3 && E.tj_enemy(j, 0) > 0);
       if (!left) { set('freed'); G.sfx('revive'); G.forceNpc = true; applyWorld(G); await G.say(D.freed); }
@@ -493,5 +510,50 @@ export function createQuest(G) {
       boss: cutBoss, rekindle: cutRekindle, saka: cutSaka}[id];
     if (s) G.cine(id, s);
   }
-  return {start, talk, interact, trigger, plates, enemyDied, mirror};
+  // ---------------------------------------------------------------- bow lesson (Mergen, the range)
+  const groupAlive = g => MAP02.enemies.some((e, j) => e.group === g && E.tj_enemy(j, 0) > 0);
+  async function mergen() {
+    const B = b();
+    if (!B.bowGiven) { await G.say(D.bowIntro, FACTS.bow); set('bowGiven'); G.forceNpc = true; applyWorld(G); E.tj_equip?.(2); return; }
+    if (!(B.bowT1 && B.bowT2 && B.bowT3)) return G.say(D.bowStaticHint);
+    if (!B.bowMove) return G.say(D.bowMoveHint);
+    if (!B.bowFight) {
+      if (!B.ammoTold) { set('ammoTold'); await G.say(D.bowAmmo); }
+      await G.say(D.bowFightStart); set('bowFight');
+      if (!groupAlive(1)) { set('bowTrained'); await G.say(D.bowFightDone); }
+      return;
+    }
+    if (!B.bowTrained) return G.say(D.bowFightWait);
+    if (!B.bowReward) { await G.say(D.bowReward); set('bowReward'); G.sfx('pickup'); return; }
+    return G.say(D.bowAfter);
+  }
+  // Per frame: arrows in flight are checked against the three targets and the moving one (which is drawn here).
+  const RANGE = {statics: [[16, 51], [20, 50.6], [24, 51]].map(([x, y]) => [x * TS, y * TS]), x0: 15.2 * TS, x1: 24.8 * TS, y: 53.6 * TS};   // the lane runs in front of the fixed targets
+  const watchArrows = makeArrowWatch(E), STATIC_T = RANGE.statics.map(([x, y], k) => ({x, y, key: 'bowT' + (k + 1)}));
+  function movingTarget() { const k = (Math.sin(E.tj_state(10) * .03) + 1) / 2; return [RANGE.x0 + (RANGE.x1 - RANGE.x0) * k, RANGE.y]; }
+  function hitTarget(key, x, y) {
+    if (b()[key]) return;
+    set(key); G.sfx('pickup'); G.spawnFx([Math.round(x), Math.round(y - 10)], 0, 14);
+    const B = b(), n = [B.bowT1, B.bowT2, B.bowT3].filter(Boolean).length;
+    if (key.startsWith('bowT')) { G.toast((G.lang() === 'ru' ? 'Мишень ' : 'Нысана ') + n + ' / 3', 'good'); if (n === 3) G.say(D.bowStaticDone); }
+    else if (key === 'bowM2') { set('bowMove'); G.toast(G.lang() === 'ru' ? 'Движущаяся мишень поражена дважды' : 'Қозғалмалы нысанаға екі рет тиді', 'good'); G.say(D.bowAmmo).then(() => set('ammoTold')); }
+    else G.toast(G.lang() === 'ru' ? 'Движущаяся мишень · 1 / 2' : 'Қозғалмалы нысана · 1 / 2', 'good');
+  }
+  function frame(ctx) {
+    const B = b();
+    if (!B.bowGiven || E.tj_state(35) !== 0) return;
+    const cx = E.tj_state(29), cy = E.tj_state(30), [mx, my] = movingTarget();
+    const live = B.bowT1 && B.bowT2 && B.bowT3;   // the moving target comes out once the fixed ones are done
+    if (ctx && live && mx - cx > -20 && mx - cx < 500 && my - cy > -40 && my - cy < 340) {   // the moving target: a reed disc on a sled
+      const x = Math.round(mx - cx), y = Math.round(my - cy);
+      ctx.fillStyle = '#5c4334'; ctx.fillRect(x - 6, y - 2, 12, 3); ctx.fillRect(x - 1, y - 12, 2, 10);
+      for (const [r, c] of [[6, '#e8dcc0'], [4, '#b8442b'], [2, '#e8dcc0']]) { ctx.fillStyle = c; ctx.beginPath(); ctx.arc(x, y - 16, r, 0, 7); ctx.fill(); }
+    }
+    const targets = live && !B.bowMove ? [...STATIC_T, {x: mx, y: my, w: 8, moving: true}] : STATIC_T;
+    watchArrows(targets, t => {
+      if (t.moving) { if (b().bowT1 && b().bowT2 && b().bowT3 && !b().bowMove) hitTarget(b().bowM1 ? 'bowM2' : 'bowM1', mx, my); }
+      else hitTarget(t.key, t.x, t.y);
+    });
+  }
+  return {start, talk, interact, trigger, plates, enemyDied, mirror, frame};
 }

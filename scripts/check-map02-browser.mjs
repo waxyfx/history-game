@@ -98,7 +98,44 @@ try {
   await a.wait('__tj.cine === "arrival"'); await delay(2600); await a.shot('map02-01-arrival');
   await settle(a);
   assert(await flag(a, 'arrived'));
-  assert(await a.js('__tj.E.tj_item_count(2) === 1 && __tj.E.tj_item_count(3) === 1 && __tj.E.tj_item_count(4) >= 12'), 'kit granted');
+  assert(await a.js('__tj.E.tj_item_count(2) === 1 && __tj.E.tj_item_count(3) === 0 && __tj.E.tj_item_count(4) === 0'), 'kit: club + spear, no bow yet');
+  // Bow lesson with Mergen: the bow is earned at the range, not handed out.
+  assert.equal(await a.js('__tj.LV.questStage(__tj.G.flags)'), 'bow');
+  await talk(a, 'mergen');   // stepping onto the range first plays Mergen's call; then the real conversation
+  if (!(await flag(a, 'bowGiven'))) await talk(a, 'mergen');
+  assert(await flag(a, 'bowGiven'), 'bow given by Mergen');
+  assert(await a.js('__tj.E.tj_item_count(3) === 1 && __tj.E.tj_item_count(4) === 8'), 'bow + 8 arrows');
+  for (const [k, n] of [['Digit1', 0], ['Digit2', 1], ['Digit3', 2]]) { await a.press(k, k.slice(-1)); await delay(80); assert.equal(await a.js('__tj.E.tj_state(13)'), n, 'weapon slot ' + n); }
+  const shoot = (x, y) => a.js(`(() => { const E = __tj.E; E.tj_teleport(${x * 16}, ${y * 16}); E.tj_face(0); E.tj_input(32); for (let i = 0; i < 4; i++) __tj.step(1); E.tj_input(0); for (let i = 0; i < 70; i++) __tj.step(1); return E.tj_item_count(4); })()`);
+  let arrows = 8;
+  await shoot(18, 55);   // a miss between targets: counts nothing, costs an arrow
+  assert.equal(await a.js('__tj.E.tj_item_count(4)'), --arrows, 'an arrow is spent');
+  assert(!(await a.js('!!(__tj.G.flags.b.bowT1 || __tj.G.flags.b.bowT2 || __tj.G.flags.b.bowT3)')), 'a miss hits nothing');
+  for (const x of [16, 20, 24]) { await shoot(x, 55); arrows--; }
+  await settle(a);
+  assert(await a.js('!!(__tj.G.flags.b.bowT1 && __tj.G.flags.b.bowT2 && __tj.G.flags.b.bowT3)'), 'three fixed targets hit');
+  assert.equal(await a.js('__tj.LV.questStage(__tj.G.flags)'), 'bowMove');
+  await use(a, 'arrowrack');
+  assert.equal(await a.js('__tj.E.tj_item_count(4)'), 8, 'the rack tops arrows up to 8');
+  // The moving target: lead it (fire ~26 ticks before it crosses x = 20).
+  const leadShot = () => a.js(`(() => { const E = __tj.E, X = t => 15.2 * 16 + (24.8 - 15.2) * 16 * (Math.sin(t * .03) + 1) / 2;
+    E.tj_teleport(320, 920); E.tj_face(0); __tj.step(2);
+    for (let i = 0; i < 400; i++) { if (Math.abs(X(E.tj_state(10) + 26) - 320) < 3) break; __tj.step(1); }
+    E.tj_input(32); for (let i = 0; i < 4; i++) __tj.step(1); E.tj_input(0); for (let i = 0; i < 70; i++) __tj.step(1); return 1; })()`);
+  for (let k = 0; k < 6 && !(await flag(a, 'bowMove')); k++) { await leadShot(); await settle(a); }
+  assert(await flag(a, 'bowMove'), 'moving target hit twice');
+  assert(await flag(a, 'ammoTold'), 'ammo lesson given');
+  await talk(a, 'mergen');
+  assert(await flag(a, 'bowFight'), 'combat trial started');
+  await a.js(`(() => { const E = __tj.E; for (let r = 0; r < 40; r++) { [0, 1].forEach(i => { if (E.tj_enemy(i, 0) > 0) E.tj_enemy_damage(i, 40, 0); }); E.tj_heal(100); __tj.step(2); } })()`);
+  await settle(a);
+  assert(await flag(a, 'bowTrained'), 'combat trial passed');
+  await talk(a, 'mergen');
+  assert(await a.js('!!__tj.G.flags.b.bowReward && __tj.E.tj_item_count(10) === 1'), 'quiver reward');
+  assert(await a.js('__tj.save(true)'));
+  await a.js('__tj.load(true)');
+  assert(await a.js('!!__tj.G.flags.b.bowTrained && __tj.E.tj_item_count(3) === 1'), 'training kept after load');
+  assert.equal(await a.js('__tj.LV.questStage(__tj.G.flags)'), 'arrive', 'on to the village');
   // Armed raiders on the road (group 2): a real fight with the sword.
   await a.js(`(() => { const E = __tj.E; for (let i = 0; i < 60 && E.tj_enemy(2, 0) > 0; i++) { const ex = E.tj_enemy(2, 2) / 1000, ey = E.tj_enemy(2, 3) / 1000; E.tj_teleport(Math.round(ex - 16), Math.round(ey)); E.tj_face(2); E.tj_heal(100); E.tj_input(32); __tj.step(2); E.tj_input(0); __tj.step(24); } })()`);
   await a.shot('map02-02-raiders');

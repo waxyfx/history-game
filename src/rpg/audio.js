@@ -65,6 +65,9 @@ const SFX = {
   step_cave: (v, p) => { noise(.05, .06 * v, {f: 380, q: 2, pan: p}); osc('sine', 180, 120, .08, .02 * v, {pan: p}); },
   sword: (v, p) => noise(.16, .16 * v, {f: 2600, f1: 900, q: 1.5, pan: p}),
   spear: (v, p) => { noise(.12, .12 * v, {f: 1400, f1: 500, q: 2, pan: p}); osc('triangle', 220, 120, .1, .05 * v, {pan: p}); },
+  // MAP08–MAP09 firearms: a flintlock's crack and a rifle's report; a click of the lock.
+  shot: (v, p) => { noise(.22, .22 * v, {f: 1800, f1: 200, q: .7, pan: p}); osc('sine', 90, 40, .18, .14 * v, {pan: p}); },
+  cock: (v, p) => noise(.05, .06 * v, {f: 4200, f1: 2600, q: 2, pan: p}),
   bowstring: (v, p) => osc('triangle', 300, 340, .25, .03 * v, {pan: p, attack: .2}),
   bow: (v, p) => { osc('triangle', 520, 180, .12, .1 * v, {pan: p}); noise(.18, .06 * v, {f: 3000, f1: 1200, pan: p}); },
   arrow_hit: (v, p) => { noise(.05, .12 * v, {f: 700, q: 3, pan: p}); osc('square', 140, 80, .05, .04 * v, {pan: p}); },

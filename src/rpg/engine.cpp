@@ -34,6 +34,7 @@ struct Player {
     float stepAcc=0;
     int holdKind=-1,holdId=-1,holdTicks=0,holdNeed=0;
     int netFrame=0;
+    int burstLeft=0,burstT=0,combo=0,lastStrike=-999;   // MAP09 burst fire, MAP07 sabre combo
 };
 struct Npc {
     bool active=true,hidden=false,talk=true;
@@ -64,6 +65,8 @@ struct Game {
     int fog=0,fogCur=0,torch=0;
     int checkX=level::SpawnX,checkY=level::SpawnY;
     int focusKind=-1,focusId=-1;
+    int lanceCharge=0;   // MAP06: a running spear thrust becomes a lance charge
+    int bullets=0,burst=0,sabre=0,bossFloor=0;   // MAP08–MAP10: firearms, burst fire, sabre combo, the finale's health floor (%)
     int questKind=-1,questId=-1;   // the current objective (set by JS): a bobbing marker shows where to go
     unsigned triggerFired=0,triggerArmed=0xffffffffu,staticPicked=0;
     int platesMask=0,groups=0x3,kills=0,lastPickup=0,alarm=0;
@@ -124,8 +127,9 @@ void initCloud(){
 
 // ------------------------------------------------------------------ combat helpers
 bool launch(int owner,float x,float y,int facing,int damage,bool cosmetic=false,bool fire=false){
-    for(auto& p:projectiles)if(!p.active){auto d=directions[facing];float sp=fire?2.6f:4.2f;
-        p.active=true;p.cosmetic=cosmetic;p.fire=fire;p.owner=owner;p.damage=damage;p.facing=facing;p.x=x+d.x*6;p.y=y+d.y*6;p.dx=d.x*sp;p.dy=d.y*sp;p.remaining=220;return true;}
+    for(auto& p:projectiles)if(!p.active){auto d=directions[facing];float sp=fire?2.6f:owner<0&&game.bullets?6.4f:4.2f;
+        p.active=true;p.cosmetic=cosmetic;p.fire=fire;p.owner=owner;p.damage=damage;p.facing=facing;p.x=x+d.x*6;p.y=y+d.y*6;p.dx=d.x*sp;p.dy=d.y*sp;
+        p.remaining=owner<0?weapons[Bow].range+20:220;return true;}
     return false;
 }
 bool startAttack(Attack& a,int weapon,int facing,float x,float y){
@@ -171,7 +175,7 @@ void dropLoot(const Enemy& e){
     for(const auto& d:drops)if(d.type==e.type&&int(rng()%100)<d.chance){spawnPickup(d.item,d.qty,e.x+(k%3-1)*9,e.y+(k/3)*6);++k;}
     if(e.type==Shade)for(int i=0;i<16;++i)particle(e.x,e.y-12,(frand()-.5f)*2,-frand()*2,40,0,rgba(0xa35cc0));
 }
-bool isBossType(int t){ return t==Keeper||t==Rider||t==Witness||t==Image; }
+bool isBossType(int t){ return t==Keeper||t==Rider||t==Witness||t==Image||t==Herald||t==Zulmat; }
 void alertGroup(int group){ for(auto& e:enemies)if(e.group==group&&e.hp>0&&!e.alerted){e.alerted=1;emit(EV_ALERT,int(&e-enemies),e.type);} }
 void hurtEnemy(Enemy& e,int damage,float fromX,float fromY){
     if(e.hp<=0||!e.enabled)return;
@@ -188,6 +192,23 @@ void hurtEnemy(Enemy& e,int damage,float fromX,float fromY){
             e.showBar=240;alertGroup(e.group);sfx(SFX_BLOCK,e.x,e.y);return;}
         if(e.special==6)damage=damage*3/2;
         // Each face must be fought: burst damage stops at the next phase boundary.
+        int floor=e.phase==1?enemySpecs[e.type].health*2/3:e.phase==2?enemySpecs[e.type].health/3:0;
+        if(damage>e.hp-floor)damage=e.hp-floor;
+        if(damage<=0)return;
+    }
+    if(e.type==Zulmat){ // shielded while he writes; in the finale his health stops at the level's floor
+        if(e.state==Roar||e.special==7){for(int i=0;i<8;++i)particle(e.x,e.y-20,(frand()-.5f)*2.4f,-frand()*1.6f,16,0,rgba(0x7ff5e4));
+            e.showBar=240;sfx(SFX_BLOCK,e.x,e.y);return;}
+        if(e.special==5)damage=damage*3/2;
+        int maxh=enemySpecs[e.type].health,floor=e.phase==1?maxh*2/3:e.phase==2?maxh/3:maxh*game.bossFloor/100;
+        if(damage>e.hp-floor)damage=e.hp-floor;
+        if(damage<=0)return;
+    }
+    if(e.type==Herald){ // seals and the reading shield him; at full gallop blows only graze him
+        if(e.state==Roar||(e.phase==2&&e.illusions)||(e.phase==3&&e.special==7)){for(int i=0;i<8;++i)particle(e.x,e.y-20,(frand()-.5f)*2.4f,-frand()*1.6f,16,0,rgba(0xffd24a));
+            e.showBar=240;alertGroup(e.group);sfx(SFX_BLOCK,e.x,e.y);return;}
+        if(e.phase==1&&e.special!=3)damage/=2;
+        if(e.special==5||e.special==6)damage=damage*3/2;
         int floor=e.phase==1?enemySpecs[e.type].health*2/3:e.phase==2?enemySpecs[e.type].health/3:0;
         if(damage>e.hp-floor)damage=e.hp-floor;
         if(damage<=0)return;
@@ -237,7 +258,10 @@ void hitPlayer(int slot,int damage){
 }
 void strikeEnemies(const Attack& a){
     for(int i=0;i<EnemyCount;++i){auto& e=enemies[i];
-        if(e.enabled&&e.hp>0&&inArc(a.weapon,a.facing,a.x,a.y-4,e.x,e.y-4)&&lineClear(a.x,a.y,e.x,e.y))playerHitsEnemy(i,outgoingDamage(weapons[a.weapon].damage),a.x,a.y);}
+        if(e.enabled&&e.hp>0&&inArc(a.weapon,a.facing,a.x,a.y-4,e.x,e.y-4,a.charge?14:0)&&lineClear(a.x,a.y,e.x,e.y))playerHitsEnemy(i,outgoingDamage(weapons[a.weapon].damage)*(a.charge?3:2)/2,a.x,a.y);}
+    // MAP06: only a lance charge breaks the herald's tamga seals.
+    if(a.charge)for(auto& e:enemies)if(e.type==Herald&&e.phase==2&&e.enabled&&e.illusions&&e.hp>0)for(int k=0;k<3;++k)if((e.illusions&(1<<k))&&inArc(a.weapon,a.facing,a.x,a.y-4,e.px[k],e.py[k]-4,14)){
+        e.illusions&=~(1<<k);sfx(SFX_IMPACT,e.px[k],e.py[k]);game.shake=6;for(int i=0;i<22;++i)particle(e.px[k],e.py[k]-8,(frand()-.5f)*3,(frand()-.5f)*3,30,0,rgba(0xffd24a));}
     for(auto& e:enemies)if((e.type==Rider||((e.type==Witness||e.type==Image)&&e.phase==2))&&e.enabled&&e.illusions&&e.hp>0)for(int k=0;k<3;++k)if((e.illusions&(1<<k))&&inArc(a.weapon,a.facing,a.x,a.y-4,e.px[k],e.py[k]-4)&&lineClear(a.x,a.y,e.px[k],e.py[k])){
         e.illusions&=~(1<<k);sfx(SFX_BLOCK,e.px[k],e.py[k]);for(int i=0;i<22;++i)particle(e.px[k],e.py[k]-18,(frand()-.5f)*3,(frand()-.5f)*3,30,0,rgba(0xd29ae6));}
     // NPC reaction: villagers flinch when someone swings next to them.
@@ -260,6 +284,11 @@ void playerStrike(){
     if(game.paused||game.cinematic||!game.control||p.hp<=0||p.down||p.dead||p.hurt)return;
     if(p.weapon==Bow&&game.inv.counts[IArrows-1]==0){ if(!p.attack.cooldown){emit(EV_NOAMMO);p.attack.cooldown=30;} return; }
     if(startAttack(p.attack,p.weapon,p.facing,p.x,p.y)){
+        p.attack.charge=game.lanceCharge&&p.weapon==Spear&&p.running&&p.moving;
+        if(game.sabre&&p.weapon==Sword){   // MAP07 sabre: the third quick cut of a series is a finishing blow
+            p.combo=game.ticks-p.lastStrike<48?p.combo+1:1;p.lastStrike=game.ticks;
+            if(p.combo>=3){p.combo=0;p.attack.charge=true;game.shake=4;auto d=directions[p.facing];for(int i=0;i<12;++i)particle(p.x+d.x*10,p.y-8,d.x*(1.5f+frand()),d.y*(1.5f+frand())-.4f,16,0,rgba(0xfff2c4));}}
+        if(p.attack.charge){auto d=directions[p.facing];for(int i=0;i<10;++i)particle(p.x-d.x*6,p.y-2,(frand()-.5f)*.8f-d.x,-frand()*.6f,18,2);}
         sfx(p.weapon==Sword?SFX_SWORD:p.weapon==Spear?SFX_SPEAR:SFX_BOWSTRING,p.x,p.y);
         for(auto& a:animals){float dx=a.x-p.x,dy=a.y-p.y;if(dx*dx+dy*dy<110*110)a.flee=90;}
     }
@@ -331,11 +360,16 @@ void tickLocalPlayer(){
         ++a.age;
         const auto& w=weapons[a.weapon];
         if(a.age==w.windup){
-            if(a.weapon==Bow){ if(game.inv.counts[IArrows-1]>0&&launch(-1,p.x,p.y-8,a.facing,outgoingDamage(w.damage))){--game.inv.counts[IArrows-1];sfx(SFX_BOW,p.x,p.y);} }
+            if(a.weapon==Bow){ if(game.inv.counts[IArrows-1]>0&&launch(-1,p.x,p.y-8,a.facing,outgoingDamage(w.damage))){--game.inv.counts[IArrows-1];sfx(SFX_BOW,p.x,p.y);
+                if(game.bullets){auto d=directions[a.facing];for(int i=0;i<8;++i)particle(p.x+d.x*12,p.y-8+d.y*8,d.x*(1+frand())+(frand()-.5f),d.y*(1+frand())-frand()*.5f,10,0,rgba(frand()<.5f?0xffe08a:0xc8c8c8));}
+                if(game.burst>1){p.burstLeft=game.burst-1;p.burstT=5;}} }
             else if(!a.connected){strikeEnemies(a);a.connected=true;}
         }
         if(a.age>=w.windup+12)a.active=false;
     }
+    if(p.burstLeft&&--p.burstT<=0){   // burst fire: the rest of the burst follows the first round
+        if(game.inv.counts[IArrows-1]>0&&launch(-1,p.x,p.y-8,p.facing,outgoingDamage(weapons[Bow].damage))){--game.inv.counts[IArrows-1];sfx(SFX_BOW,p.x,p.y);--p.burstLeft;p.burstT=5;}
+        else p.burstLeft=0;}
     if(game.paused||!game.control||game.cinematic){p.moving=false;}
     else {
         if((p.keys&Strike))playerStrike();
@@ -852,6 +886,151 @@ void drawImageTelegraphs(const Enemy& e){
             for(float t=0;t<1;t+=.05f)if(int(t*20)%2==0)renderer.pixel(qx+int((x-qx)*t),qy-6+int((y-qy+6)*t),rgba(0xe0421f,pulse/2));}}
     if(e.special==5||e.special==6)for(int i=0;i<3;++i){float a=game.ticks*.15f+i*2.09f;renderer.pixel(cx+int(cosf(a)*8),cy-36+int(sinf(a)*3),rgba(0xfff2c4));}
 }
+// ------------------------------------------------------------------ boss: «Жалған жарлықтың иесі», the herald of the forged yarlyk (MAP06)
+// Phase 1 "yam gallop": he rides the rim of the hall like a relay rider (his path is drawn on the floor); now and
+//   then he reins in and looses a fan of arrows (a cone is shown first). At full gallop blows only graze him.
+// Phase 2 "paiza": he raises the golden tablet and three tamga seals light up around him; while any seal burns he is
+//   untouchable and the seals pulse (a ring shows before each pulse). Only a running lance charge breaks a seal.
+// Phase 3 "the forged yarlyk": he reads the decree aloud — lines of the text sweep across the hall one by one, each
+//   with one gap to stand in (shown before it moves). After the reading he is winded and open.
+void heraldSeals(Enemy& e){ e.illusions=7; for(int k=0;k<3;++k){float a=-1.5708f+k*2.0944f;e.px[k]=e.homeX+cosf(a)*96;e.py[k]=e.homeY+sinf(a)*48+4;} }
+void tickHerald(Enemy& e){
+    const auto& spec=enemySpecs[e.type];
+    bossIndex=int(&e-enemies);
+    if(e.state==Death){ if(e.timer>0)--e.timer;
+        if(e.timer%5==0&&e.timer>50)for(int i=0;i<5;++i)particle(e.x+(frand()-.5f)*30,e.y-10-frand()*30,(frand()-.5f)*1.4f,-frand()*1.4f,40,0,rgba(frand()<.6f?0xffd24a:0x8f1d22));
+        if(!e.timer)e.active=false; setAnim(e.anim,e.animTime,art::A_DEATH); return; }
+    if(game.cinematic){setAnim(e.anim,e.animTime,art::A_IDLE);return;}
+    int maxhp=spec.health,phase=e.hp*3>maxhp*2?1:e.hp*3>maxhp?2:3;
+    if(phase>e.phase){e.phase=phase;e.state=Roar;e.timer=80;e.special=0;e.illusions=0;e.seed=0;game.shake=18;sfx(SFX_SHOUT,e.x,e.y);
+        for(int i=0;i<36;++i)particle(e.x+(frand()-.5f)*30,e.y-10-frand()*24,(frand()-.5f)*2.5f,-frand()*2,44,0,rgba(0xffd24a));}
+    if(e.state==Roar){ setAnim(e.anim,e.animTime,art::A_VICTORY);
+        if(--e.timer<=0){e.state=Chase;e.attack.cooldown=30;if(e.phase>=2){e.x=e.homeX;e.y=e.homeY;}if(e.phase==2)heraldSeals(e);} return; }
+    float dist;int target=nearestPlayer(e,dist);
+    if(target<0){ setAnim(e.anim,e.animTime,art::A_IDLE); if(e.special!=6&&e.special!=5)e.special=0; return; }
+    const Player& p=players[target];
+    float dx=p.x-e.x,dy=p.y-e.y;
+    if(!e.alerted){e.alerted=1;alertGroup(e.group);e.state=Roar;e.timer=70;game.shake=12;sfx(SFX_HOOVES,e.x,e.y);return;}
+    if(e.attack.cooldown)--e.attack.cooldown;
+    if(e.special==5||e.special==6){ setAnim(e.anim,e.animTime,art::A_HURT);   // winded / exposed
+        if(e.timer%10==0)particle(e.x+(frand()-.5f)*14,e.y-34,0,-.3f,20,0,rgba(0xfff2c4));
+        if(--e.timer<=0){bool ex=e.special==6;e.special=0;e.attack.cooldown=36;e.seed=0;if(ex&&e.phase==2)heraldSeals(e);} return; }
+    if(e.phase==1){
+        if(e.special==3){ setAnim(e.anim,e.animTime,art::A_BOW); e.facing=heading(dx,dy);
+            if(--e.timer<=0){for(int k=-1;k<=1;++k)launch(int(&e-enemies),e.x,e.y-14,(e.facing+k+8)&7,spec.damage-6);
+                sfx(SFX_BOW,e.x,e.y);e.special=0;e.attack.cooldown=130;}
+            return; }
+        if(!e.attack.cooldown&&dist<230){e.special=3;e.timer=34;sfx(SFX_BOWSTRING,e.x,e.y);return;}
+        // the gallop: a fixed ellipse round the hall's centre (drawn on the floor), trampling whoever stands on it
+        e.dx+=.012f;if(e.dx>6.2832f)e.dx-=6.2832f;
+        float tx=e.homeX+cosf(e.dx)*150,ty=e.homeY+sinf(e.dx)*58;
+        walkEnemy(e,tx,ty,spec.speed);setAnim(e.anim,e.animTime,art::A_RUN);
+        if(game.ticks%3==0)particle(e.x,e.y,(frand()-.5f)*.6f,-.3f,18,2);
+        for(int s=0;s<MaxPlayers;++s){auto& q=players[s];if(q.active&&q.hp>0&&!q.down&&!q.invuln&&fabsf(q.x-e.x)<12&&fabsf(q.y-e.y)<9)hitPlayer(s,spec.damage);}
+        return;
+    }
+    if(e.phase==2){   // rooted at the centre behind the burning seals
+        setAnim(e.anim,e.animTime,art::A_INTERACT); e.facing=heading(dx,dy);
+        if(!e.illusions){e.special=6;e.timer=160;sfx(SFX_IMPACT,e.x,e.y);game.shake=12;return;}
+        if(++e.seed>=150){e.seed=0;}
+        if(e.seed==110)for(int k=0;k<3;++k)if(e.illusions&(1<<k))keeperHitArea(e.px[k],e.py[k],30,spec.damage-4);   // the pulse
+        return;
+    }
+    // phase 3 — the reading: three lines sweep the hall top to bottom, each with one gap
+    if(e.special==7){ setAnim(e.anim,e.animTime,art::A_INTERACT);
+        ++e.aux; int line=e.aux/70, t=e.aux%70;
+        if(t==0){e.py[0]=e.homeY-62;e.px[1]=e.homeX+(frand()-.5f)*360;}
+        if(t>=24){e.py[0]+=3.2f;   // the line moves after a 24-tick warning
+            for(int s=0;s<MaxPlayers;++s){auto& q=players[s];if(q.active&&q.hp>0&&!q.down&&!q.invuln&&fabsf(q.y-e.py[0])<6&&fabsf(q.x-e.px[1])>22)hitPlayer(s,spec.damage-2);}}
+        if(line>=3){e.special=5;e.timer=120;e.aux=0;sfx(SFX_IMPACT,e.x,e.y);}
+        return; }
+    if(!e.attack.cooldown){e.special=7;e.aux=0;sfx(SFX_SHOUT,e.x,e.y);return;}
+    setAnim(e.anim,e.animTime,art::A_IDLE);
+}
+void drawHeraldTelegraphs(const Enemy& e){
+    int cx=int(e.x)-renderer.camX,cy=int(e.y)-renderer.camY;
+    unsigned pulse=120+unsigned(60*sinf(game.ticks*.4f));uint32_t red=rgba(0xe0421f,pulse),gold=rgba(0xffd24a,pulse);
+    int hx=int(e.homeX)-renderer.camX,hy=int(e.homeY)-renderer.camY;
+    if(e.phase==1){for(int i=0;i<96;i+=2){float a=i/96.f*6.283f;renderer.pixel(hx+int(cosf(a)*150),hy+int(sinf(a)*58),rgba(0xb8442b,90));}
+        if(e.special==3){auto d=directions[e.facing];for(int l=12;l<150;l+=5)for(int k=-l*4/10;k<=l*4/10;k+=4)renderer.pixel(cx+int(d.x*l-d.y*k),cy-12+int(d.y*l+d.x*k),red);}}
+    if(e.phase==2&&e.illusions)for(int k=0;k<3;++k)if(e.illusions&(1<<k)){int x=int(e.px[k])-renderer.camX,y=int(e.py[k])-renderer.camY;
+        renderer.sprite(art::O_TAMGA,int(e.px[k]),int(e.py[k]));
+        for(int i=0;i<24;++i){float a=i/24.f*6.283f+game.ticks*.05f;renderer.pixel(x+int(cosf(a)*9),y-2+int(sinf(a)*5),gold);}
+        if(e.seed>80&&e.seed<110){int r=30;for(int i=0;i<48;++i){float a=i/48.f*6.283f;renderer.pixel(x+int(cosf(a)*r),y+int(sinf(a)*r*.76f),red);}}}
+    if(e.phase==3&&e.special==7){int y=int(e.py[0])-renderer.camY,gx=int(e.px[1])-renderer.camX,t=e.aux%70;
+        uint32_t col=t<24?rgba(0xffd24a,pulse/2):rgba(0xe0421f,200);
+        for(int x=hx-330;x<hx+330;x+=2)if(abs(x-gx)>22){renderer.pixel(x,y,col);renderer.pixel(x,y+1,col);}
+        for(int i=0;i<12;++i){renderer.pixel(gx-22,y-6+i,rgba(0x86cdbd,pulse));renderer.pixel(gx+22,y-6+i,rgba(0x86cdbd,pulse));}}
+    if(e.special==5||e.special==6)for(int i=0;i<3;++i){float a=game.ticks*.15f+i*2.09f;renderer.pixel(cx+int(cosf(a)*8),cy-38+int(sinf(a)*3),rgba(0xfff2c4));}
+}
+// ------------------------------------------------------------------ boss: Зұлмат, the two hands (MAP10, the finale)
+// Phase 1 "the Heir": he marks a line toward the hero and dashes along it; close in, a wide cut. The back of the dash is open.
+// Phase 2 "the Chronicler": rooted at the centre, he writes — three lines of ink sweep the hall, each with one gap; then he
+//   is winded and open. Two ink shades (his group) wake with this phase.
+// Phase 3 "both hands": dash and line alternate faster. His health stops at the floor the level sets (tj_boss_floor)
+//   until the story lets the fight end; then every blow of the sword lands double.
+void tickZulmat(Enemy& e){
+    const auto& spec=enemySpecs[e.type];
+    bossIndex=int(&e-enemies);
+    if(e.state==Death){ if(e.timer>0)--e.timer;
+        if(e.timer%4==0&&e.timer>40)for(int i=0;i<6;++i)particle(e.x+(frand()-.5f)*40,e.y-10-frand()*40,(frand()-.5f)*1.6f,-frand()*1.6f,44,0,rgba(frand()<.5f?0x1a1424:0x7ff5e4));
+        if(!e.timer)e.active=false; setAnim(e.anim,e.animTime,art::A_DEATH); return; }
+    if(game.cinematic){setAnim(e.anim,e.animTime,art::A_IDLE);return;}
+    int maxhp=spec.health,phase=e.hp*3>maxhp*2?1:e.hp*3>maxhp?2:3;
+    if(phase>e.phase){e.phase=phase;e.state=Roar;e.timer=80;e.special=0;e.aux=0;e.seed=0;game.shake=18;sfx(SFX_SHOUT,e.x,e.y);
+        for(int i=0;i<40;++i)particle(e.x+(frand()-.5f)*30,e.y-10-frand()*30,(frand()-.5f)*2.6f,-frand()*2,44,0,rgba(frand()<.5f?0x7ff5e4:0x2a1f3a));}
+    if(e.state==Roar){ setAnim(e.anim,e.animTime,art::A_VICTORY);
+        if(--e.timer<=0){e.state=Chase;e.attack.cooldown=30;if(e.phase==2){e.x=e.homeX;e.y=e.homeY;}} return; }
+    float dist;int target=nearestPlayer(e,dist);
+    if(target<0){ setAnim(e.anim,e.animTime,art::A_IDLE); return; }
+    const Player& p=players[target];
+    float dx=p.x-e.x,dy=p.y-e.y;
+    if(!e.alerted){e.alerted=1;alertGroup(e.group);e.state=Roar;e.timer=70;game.shake=12;sfx(SFX_SHOUT,e.x,e.y);return;}
+    if(e.attack.cooldown)--e.attack.cooldown;
+    if(e.special==5){ setAnim(e.anim,e.animTime,art::A_HURT);   // winded: open
+        if(e.timer%10==0)particle(e.x+(frand()-.5f)*14,e.y-34,0,-.3f,20,0,rgba(0x7ff5e4));
+        if(--e.timer<=0){e.special=0;e.attack.cooldown=e.phase==3?24:40;} return; }
+    if(e.special==1){ setAnim(e.anim,e.animTime,art::A_SWORD);   // dash telegraph: the line is drawn
+        if(--e.timer<=0){e.special=2;e.timer=22;sfx(SFX_SWIPE,e.x,e.y);} return; }
+    if(e.special==2){ setAnim(e.anim,e.animTime,art::A_RUN);    // the dash
+        float lx=e.px[0]-e.x,ly=e.py[0]-e.y,l=sqrtf(lx*lx+ly*ly)+.01f;float sp=5.2f;
+        if(l>sp){e.x+=lx/l*sp;e.y+=ly/l*sp;}
+        if(game.ticks%2==0)particle(e.x,e.y-12,(frand()-.5f)*.6f,-.2f,22,0,rgba(0x2a1f3a));
+        for(int s=0;s<MaxPlayers;++s){auto& q=players[s];if(q.active&&q.hp>0&&!q.down&&!q.invuln&&fabsf(q.x-e.x)<13&&fabsf(q.y-e.y)<10)hitPlayer(s,spec.damage);}
+        if(l<=sp||--e.timer<=0){e.special=5;e.timer=e.phase==3?50:70;game.shake=6;} return; }
+    if(e.special==3){ setAnim(e.anim,e.animTime,art::A_SWORD); e.facing=heading(dx,dy);   // the wide cut
+        if(--e.timer<=0){auto d=directions[e.facing];keeperHitArea(e.x+d.x*20,e.y+d.y*14,30,spec.damage);sfx(SFX_SWORD,e.x,e.y);e.special=0;e.attack.cooldown=50;} return; }
+    if(e.special==7){ setAnim(e.anim,e.animTime,art::A_INTERACT);   // writing: lines sweep down with one gap each
+        ++e.aux; int len=e.phase==3?56:70, line=e.aux/len, t=e.aux%len;
+        if(t==0){e.py[1]=e.homeY-70;e.px[1]=e.homeX+(frand()-.5f)*360;}
+        if(t>=22){e.py[1]+=3.4f;
+            for(int s=0;s<MaxPlayers;++s){auto& q=players[s];if(q.active&&q.hp>0&&!q.down&&!q.invuln&&fabsf(q.y-e.py[1])<6&&fabsf(q.x-e.px[1])>22)hitPlayer(s,spec.damage-4);}}
+        if(line>=(e.phase==3?2:3)){e.special=5;e.timer=e.phase==3?70:110;e.aux=0;sfx(SFX_IMPACT,e.x,e.y);}
+        return; }
+    if(!e.attack.cooldown){
+        bool write=e.phase==2||(e.phase==3&&(e.seed++&1));
+        if(write){e.special=7;e.aux=0;if(e.phase==2){e.x=e.homeX;e.y=e.homeY;}sfx(SFX_SHOUT,e.x,e.y);return;}
+        if(dist<34){e.special=3;e.timer=20;return;}
+        e.special=1;e.timer=e.phase==3?26:36;e.px[0]=p.x;e.py[0]=p.y;e.facing=heading(dx,dy);sfx(SFX_GROWL,e.x,e.y);return;
+    }
+    if(e.phase==2){setAnim(e.anim,e.animTime,art::A_IDLE);return;}
+    if(dist>30){walkEnemy(e,p.x,p.y,spec.speed);setAnim(e.anim,e.animTime,art::A_WALK);}
+    else setAnim(e.anim,e.animTime,art::A_IDLE);
+}
+void drawZulmatTelegraphs(const Enemy& e){
+    int cx=int(e.x)-renderer.camX,cy=int(e.y)-renderer.camY;
+    unsigned pulse=120+unsigned(60*sinf(game.ticks*.4f));uint32_t ink=rgba(0x7ff5e4,pulse),red=rgba(0xe0421f,200);
+    int hx=int(e.homeX)-renderer.camX;
+    if(e.special==1){float lx=e.px[0]-e.x,ly=e.py[0]-e.y,l=sqrtf(lx*lx+ly*ly)+.01f;
+        for(float t=0;t<l;t+=3){int x=cx+int(lx/l*t),y=cy-6+int(ly/l*t);renderer.pixel(x,y,ink);renderer.pixel(x,y+1,ink);}
+        int ex=int(e.px[0])-renderer.camX,ey=int(e.py[0])-renderer.camY;for(int i=0;i<24;++i){float a=i/24.f*6.283f;renderer.pixel(ex+int(cosf(a)*11),ey+int(sinf(a)*7),red);}}
+    if(e.special==3){auto d=directions[e.facing];for(int i=-10;i<=10;++i){float a=atan2f(d.y,d.x)+i*.08f;renderer.pixel(cx+int(cosf(a)*30),cy-6+int(sinf(a)*22),red);}}
+    if(e.special==7){int len=e.phase==3?56:70,t=e.aux%len,y=int(e.py[1])-renderer.camY,gx=int(e.px[1])-renderer.camX;
+        uint32_t col=t<22?rgba(0x7ff5e4,pulse/2):rgba(0x1a1424,230);
+        for(int x=hx-330;x<hx+330;x+=2)if(abs(x-gx)>22){renderer.pixel(x,y,col);renderer.pixel(x,y+1,col);renderer.pixel(x+1,y+1,col);}
+        for(int i=0;i<12;++i){renderer.pixel(gx-22,y-6+i,rgba(0xffd24a,pulse));renderer.pixel(gx+22,y-6+i,rgba(0xffd24a,pulse));}}
+    if(e.special==5)for(int i=0;i<3;++i){float a=game.ticks*.15f+i*2.09f;renderer.pixel(cx+int(cosf(a)*8),cy-40+int(sinf(a)*3),rgba(0xfff2c4));}
+}
 void drawBossBar(const Enemy& e){
     int w=260,x=(Width-w)/2,y=Height-30;
     renderer.rect(x-2,y-2,w+4,9,rgba(0x120f14,220));
@@ -864,6 +1043,8 @@ void tickEnemy(Enemy& e){
     if(e.type==Rider){ ++e.animTime;if(e.hitFlash)--e.hitFlash;if(e.showBar)--e.showBar; tickRider(e); return; }
     if(e.type==Witness){ ++e.animTime;if(e.hitFlash)--e.hitFlash;if(e.showBar)--e.showBar; tickWitness(e); return; }
     if(e.type==Image){ ++e.animTime;if(e.hitFlash)--e.hitFlash;if(e.showBar)--e.showBar; tickImage(e); return; }
+    if(e.type==Herald){ ++e.animTime;if(e.hitFlash)--e.hitFlash;if(e.showBar)--e.showBar; tickHerald(e); return; }
+    if(e.type==Zulmat){ ++e.animTime;if(e.hitFlash)--e.hitFlash;if(e.showBar)--e.showBar; tickZulmat(e); return; }
     const auto& spec=enemySpecs[e.type];auto& a=e.attack;
     ++e.animTime;
     if(e.hitFlash)--e.hitFlash;
@@ -1216,7 +1397,10 @@ void render(){
             renderer.sprite(icon[k.item],int(k.x),int(k.y)-bob-1);
             if((k.bob/20)%3==0)renderer.pixel(int(k.x)+3-cx,int(k.y)-14-cy,rgba(0xfff2c4));
             break;}
-        case 6:{const Projectile& p=projectiles[d.idx];if(p.fire)renderer.sprite(art::X_FIREBOLT_0+((game.ticks/5)&1),int(p.x),int(p.y));else renderer.sprite(art::X_ARROW_0+p.facing,int(p.x),int(p.y));break;}
+        case 6:{const Projectile& p=projectiles[d.idx];if(p.fire)renderer.sprite(art::X_FIREBOLT_0+((game.ticks/5)&1),int(p.x),int(p.y));
+            else if(game.bullets&&p.owner<0){int x=int(p.x)-renderer.camX,y=int(p.y)-renderer.camY;float l=sqrtf(p.dx*p.dx+p.dy*p.dy)+.01f;
+                for(int k=0;k<7;++k)renderer.pixel(x-int(p.dx/l*k),y-int(p.dy/l*k),rgba(k<2?0xfff6c8:0xd8b070,255-k*30));}
+            else renderer.sprite(art::X_ARROW_0+p.facing,int(p.x),int(p.y));break;}
         case 7:{int f=(game.ticks/7)&3;renderer.sprite(art::Z_SHADOW_0+f,game.shadowX,game.shadowY,false,unsigned(game.shadowAlpha));break;}
         }
     }
@@ -1247,6 +1431,8 @@ void render(){
     for(const auto& e:enemies)if(e.type==Rider&&e.active&&e.enabled&&e.hp>0)drawRiderTelegraphs(e);
     for(const auto& e:enemies)if(e.type==Witness&&e.active&&e.enabled&&e.hp>0)drawWitnessTelegraphs(e);
     for(const auto& e:enemies)if(e.type==Image&&e.active&&e.enabled&&e.hp>0)drawImageTelegraphs(e);
+    for(const auto& e:enemies)if(e.type==Herald&&e.active&&e.enabled&&e.hp>0)drawHeraldTelegraphs(e);
+    for(const auto& e:enemies)if(e.type==Zulmat&&e.active&&e.enabled&&e.hp>0)drawZulmatTelegraphs(e);
     for(const auto& e:enemies)if(!isBoss(e.type)&&e.active&&e.enabled&&e.hp>0&&(e.showBar||e.alerted)){
         int w=e.type==Bear?30:16;drawBar(int(e.x),int(e.y)-(e.type==Bear?44:e.type==Wolf?24:32),w,e.hp,enemySpecs[e.type].health,rgba(e.type==Bear?0xe06a3f:0xb8442b));
         if(e.state==Telegraph||(e.attack.active&&e.attack.age<enemySpecs[e.type].windup))renderer.sprite(art::X_BUBBLE_ALERT,int(e.x),int(e.y)-(e.type==Bear?46:34));
@@ -1455,6 +1641,15 @@ void tj_light_now(int r,int g,int b){ tj_light(r,g,b);tj::game.amb[0]=r;tj::game
 void tj_fog(int amount){ tj::game.fog=amount; }
 void tj_torch(int on){ tj::game.torch=on; }
 void tj_shadow(int x,int y,int alpha){ tj::game.shadowX=x;tj::game.shadowY=y;tj::game.shadowAlpha=alpha; }
+// MAP06 weapon progression: a level re-tunes a slot (and the lance charge) from its own flags after every load.
+void tj_weapon_tune(int w,int damage,int windup,int recovery,int range,int width){ if(w<0||w>2)return; auto& s=tj::weapons[w];
+    if(damage<=0){s=tj::baseWeapons[w];return;} s.damage=damage;s.windup=windup;s.recovery=recovery;s.range=float(range);s.width=float(width); }
+void tj_lance(int on){ tj::game.lanceCharge=on?1:0; }
+// MAP07–MAP10 mechanics: sabre combo, firearms (bullet shots), burst fire (rounds per trigger), the finale's health floor.
+void tj_sabre(int on){ tj::game.sabre=on?1:0; }
+void tj_bullets(int on){ tj::game.bullets=on?1:0; }
+void tj_burst(int n){ tj::game.burst=n<1?0:n>5?5:n; }
+void tj_boss_floor(int pct){ tj::game.bossFloor=pct<0?0:pct>90?90:pct; }
 void tj_quest(int kind,int id){ tj::game.questKind=kind;tj::game.questId=id; }
 void tj_pose(int anim,int ticks){ auto& p=tj::me();p.pose=anim;p.poseTime=ticks;p.animTime=0;p.anim=anim; }
 void tj_face(int facing){ tj::me().facing=facing&7; }

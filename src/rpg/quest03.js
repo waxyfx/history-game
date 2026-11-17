@@ -74,6 +74,8 @@ export function applyWorld(G) {
   ia('campsaka', true); ia('campgate', true); ia('holo', true); ia('sakagate', true);
   tag('chessseal', b.eggChessOpen); ia('chess', true); ia('zeromask', !!b.eggChessOpen);   // team easter egg
   ia('hoofs', b.arrived); ia('shard', b.arrived && !f.tracks.includes(EVIDENCE.shard)); ia('plaque', acc && !b.plaque);
+  ia('echostone', !!b.welcomed);   // the echo stone on the sacred hill (Tomyris, a time echo)
+  E.tj_npc_flags(NPC.tomyris, 0, 0, 1);
   ia('goldwork', b.welcomed); ia('target', b.welcomed); ia('altar', true); ia('niche', !b.niche);
   ia('kurganseal', b.arrived); ia('tunnel', b.arrived); ia('institute', true); ia('arnacache', !b.arnacache);
   ia('assembly', b.welcomed); ia('stairsup', true); ia('horses', true); ia('treasury', true);
@@ -191,6 +193,7 @@ export function createQuest(G) {
         if (B.fled && !B.plaque) return G.say(D.ledgerWary);
         await G.say(D.ledger); return evidence(EVIDENCE.ledger);
       case 'kungey':
+        if (B.tomyrisEcho && !B.shyrakTold && !first) { set('shyrakTold'); return G.say(D.shyrak, FACTS.shyrak); }
         if (!B.accused) { await G.say(first ? D.kungey1 : D.kungey2); heard(); return; }
         if (!f.tracks.includes(EVIDENCE.legend)) { await G.say(D.legend); return evidence(EVIDENCE.legend); }
         if (!f.quiz.saka_hats) return quiz('saka_hats');
@@ -228,6 +231,7 @@ export function createQuest(G) {
         return;
       case 'campgate': if (B.finished && G.levelPassed()) return G.gotoLevel(4); return G.say(D.campgateLocked);
       case 'holo': return G.results();
+      case 'echostone': if (B.tomyrisEcho) return G.say(D.echoAgain); return G.cine('echo', cutEcho);
       case 'chess': return eggChess(G, set, 'eggChessOpen');
       case 'zeromask': return eggFind(G, set, 'eggZero', EGG_TEXT.zero, 'map03');
       case 'hoofs': await G.say(D.hoofs, FACTS.horse); return evidence(EVIDENCE.hoofs);
@@ -491,6 +495,24 @@ export function createQuest(G) {
     d.after(() => G.complete());
   }
 
+  // The echo stone: Tomyris (c. 530 BC) — she distrusts Aidar; what he says does not change history.
+  async function cutEcho(d) {
+    d.music('mystery');
+    const [hx, hy] = G.heroPos();
+    d.cam(hx, hy - 16, 1.6); G.sfx('portal'); E.tj_fog(150); await d.flash(600);
+    await d.say(D.echoStart);
+    E.tj_npc_set(NPC.tomyris, ...P(66, 12.2), 4, A.idle, 1); E.tj_npc_flags(NPC.tomyris, 0, 0, 0); d.fx(...P(66, 12), 2, 14);
+    d.cam(...P(66, 13), 1.4); await d.wait(700);
+    await d.say(D.echoTomyris);
+    d.final(() => { set('tomyrisEcho'); });
+    d.after(async () => {
+      const c = await G.choose(CHOICES.echo);
+      set(c ? 'tomyrisWarned' : 'tomyrisSilent');
+      await G.say(c ? D.echoWarn : D.echoSilent, FACTS.tomyris);
+      E.tj_fog(0); E.tj_npc_flags(NPC.tomyris, 0, 0, 1); G.spawnFx(P(66, 12), 2, 14); G.sfx('secret');
+      await G.say(D.echoEnd);
+    });
+  }
   function mirror(id) {
     const s = {welcome: cutWelcome, assembly: cutAssembly, trail: cutTrail, boss: cutBoss, verdict: cutVerdict, home: cutHome}[id];
     if (s) G.cine(id, s);

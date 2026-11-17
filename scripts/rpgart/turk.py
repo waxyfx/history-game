@@ -30,6 +30,12 @@ C.STYLES.update({
                  legs='blue', legshade=0, boots='wood', scarf='wolf', pack='quiver', twin=True),
     'turkcorrupt': dict(skin='skin2', hair='black', hairstyle='braid', top='grey', topkind='tunic', trim='red', legs='fur', legshade=0,
                         boots='hide', furcap='wolf', corrupt=True),
+    # Historical figures (original pixel art): Tomyris, queen of the Massagetae (6th c. BC; MAP03 «time echo»),
+    # and Bilge as Tardush shad (later Bilge kagan; MAP05, 711–712).
+    'tomyris': dict(skin='skin', hair='black', hairstyle='braid', top='red', topkind='tunic', trim='gold', legs='hide', legshade=1,
+                    boots='hide', peakhat='gold', necklace=True, bracelets=True, pack='quiver'),
+    'bilge': dict(skin='skin2', hair='black', hairstyle='braid', top='teal', topkind='cloak', trim='gold', legs='ink', legshade=1,
+                  boots='hide', beard='black', bracelets=True, diadem=True),
     # MAP05 easter egg: a crowned emperor from beyond time (eyes bound with white cloth, arms folded).
     'qin': dict(skin='skin', hair='black', hairstyle='tail', top='black', topkind='cloak', trim='gold', legs='ink', legshade=1,
                 boots='wood', qin=True),
@@ -62,7 +68,7 @@ def human_frame(style, view, anim, f):
     return outline(img)
 C.human_frame = human_frame
 
-C.PORTRAITS.extend(['tonyukuk', 'kultegin', 'irkin', 'kumis', 'togyz', 'sentry', 'turkherd', 'ayan', 'twin', 'qin', 'stele'])
+C.PORTRAITS.extend(['tomyris', 'bilge', 'tonyukuk', 'kultegin', 'irkin', 'kumis', 'togyz', 'sentry', 'turkherd', 'ayan', 'twin', 'qin', 'stele'])
 _prev_portrait = C.portrait
 def portrait(name):
     if name == 'stele':   # the runic stone «speaks» (inscriptions, system notes)
@@ -100,6 +106,7 @@ HUMAN_SHEETS = {
     'turkherd': ['idle', 'walk', 'talk'], 'ayan': ['idle', 'walk', 'run', 'talk'],
     'twin': ['idle', 'walk', 'run', 'sword', 'hurt', 'death', 'interact', 'talk', 'victory'],
     'turkcorrupt': ['idle', 'walk', 'run', 'sword', 'hurt', 'death'], 'qin': ['idle', 'talk', 'victory'],
+    'tomyris': ['idle', 'walk', 'talk', 'bow'], 'bilge': ['idle', 'walk', 'talk'],
 }
 ANIMAL_SHEETS = {}
 

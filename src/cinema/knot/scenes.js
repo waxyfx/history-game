@@ -378,3 +378,6 @@ export const SCENES = {
  },
 };
 function easeInOut(k) {return ease(k);}
+
+// Shared with the finale (src/cinema/stitch): the same knot-keeper and the same cord of eleven knots.
+export {makeKnot, cord};

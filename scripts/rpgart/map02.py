@@ -207,8 +207,12 @@ def emit():
     I('tablet', *P(27, 82.6), 22, tag('tablet'))
     I('keeperfire', *P(44, 81), 24, tag('keeperfire'))
     I('sakagate', *P(51, 25.2), 26)
+    # Archery range (bow training with Mergen): three fixed targets, a lane for the moving target, an arrow rack.
+    for x, y in ((16, 51), (20, 50.6), (24, 51)): L.obj('target', *P(x, y))
+    L.obj('post', *P(14.6, 53.6)); L.obj('post', *P(25.4, 53.6)); L.obj('weaponrack', *P(25.6, 57.4))
+    I('arrowrack', *P(25.6, 57.6), 26)   # reachable from either side of the rack
     for key, x0, y0, x1, y1 in (('square', 41, 24, 61, 39), ('forge', 63, 22, 86, 40), ('sanctuary', 42, 3, 60, 14),
-                               ('murals', 14, 90, 40, 99), ('arena', 37, 76, 52, 89), ('burial', 66, 44, 96, 66), ('workshop', 61, 53, 67, 57)):
+                               ('murals', 14, 90, 40, 99), ('arena', 37, 76, 52, 89), ('burial', 66, 44, 96, 66), ('workshop', 61, 53, 67, 57), ('range', 14, 52, 29, 61)):
         L.trigger(key, x0, y0, x1, y1)
     W_ = lambda *a: a
     L.npc('elder', 'MATRIARCH', 49, 29, [W_(49, 29, 420, 'idle'), W_(53, 29.2, 260, 'talk'), W_(51, 26, 300, 'idle', 0)])
@@ -222,6 +226,7 @@ def emit():
     L.npc('missing2', 'VILLAGERW', 54, 34.5, [W_(54, 34.5, 600, 'sit')], inactive=True)
     L.npc('missing3', 'VILLAGER', 51, 36, [W_(51, 36, 600, 'sit')], inactive=True)
     L.npc('smithdown', 'SMITH', 25, 96.5, [W_(25, 96.5, 600, 'idle')], inactive=True)
+    L.npc('mergen', 'HUNTER', 21, 57.6, [W_(21, 57.6, 600, 'idle', 0), W_(23, 57.2, 240, 'idle', 0)])
     L.animals.extend([('COW', 9, 10), ('COW', 13, 12.5), ('COW', 22, 13), ('COW', 25, 16), ('SHEEP', 10, 13.5), ('SHEEP', 15, 9.5),
                       ('SHEEP', 21, 11), ('SHEEP', 24, 12), ('SHEEP', 12, 15), ('SHEEP', 17, 13)])
     # Enemies: 0 wolf, 1 raider (spear), 2 raider (bow), 4 shade, 5 wraith, 6 keeper.  (type, x, y, group)

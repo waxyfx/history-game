@@ -143,7 +143,7 @@ export function createQuest(G) {
           return;
         }
         if (key === 'fengliao' && !f.quiz.hun_zhangqian) return quiz('hun_zhangqian');
-        return G.say(D[key + '2']);
+        return G.say(D[key + '2'], key === 'zhizhi' ? FACTS.mode : null);
       }
       case 'shuga': case 'wusunbek': case 'merchant': {
         if (!first) return G.say(D.witnessAgain);

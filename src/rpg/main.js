@@ -44,6 +44,10 @@ const HEROES = ['aibar', 'dana', 'erlan'];
 
 let lang = getLang();
 document.documentElement.lang = lang;
+// Late eras rename and redraw the three weapon slots and the ammunition (MAP07 sabre, MAP08 flintlock, MAP09 rifle…):
+// LV.items = {1: {kk: [name, desc], ru: [...], icon}, …}. Older levels have none and keep the shared names.
+const itemList = () => { const base = ITEMS[lang], o = LV?.items; if (!o) return base; const l = base.slice(); for (const [i, v] of Object.entries(o)) if (v[lang]) l[i] = v[lang]; return l; };
+const itemIcon = i => LV?.items?.[i]?.icon || ITEM_ICONS[i];
 const t = k => (LV?.UI?.[k] && (LV.UI[k][lang] ?? LV.UI[k].kk)) ?? UI[lang][k] ?? UI.kk[k] ?? k; // level overrides first
 const L = o => o == null ? '' : typeof o === 'string' ? o : o[lang] ?? o.kk ?? '';
 const $ = id => document.getElementById(id);
@@ -359,14 +363,14 @@ async function chamber() {
 }
 function inventory() {
   const rows = [];
-  for (let item = 1; item < ITEMS[lang].length; item++) {
+  for (let item = 1; item < itemList().length; item++) {
     const n = E.tj_item_count(item); if (n <= 0) continue;
-    const type = E.tj_item_info(item, 0), [name, desc] = ITEMS[lang][item];
+    const type = E.tj_item_info(item, 0), [name, desc] = itemList()[item];
     const sel = type === 0 && E.tj_state(13) === item - 1;
     const act = type === 0 ? `<button data-use="${item}" ${sel ? 'disabled' : ''}>${esc(sel ? t('equipped') : t('equip'))}</button>`
       : type === 2 ? `<button data-use="${item}" ${CONSUMABLES[item]?.heal && !CONSUMABLES[item]?.effect && E.tj_state(8) >= E.tj_state(38) ? 'disabled' : ''}>${esc(t('use'))}</button>`
       : item === IT.arrows && party.size > 1 ? `<button data-give="1">${esc(t('give'))}</button>` : '';
-    rows.push(`<article class="inv">${iconHTML(ITEM_ICONS[item])}<div><b>${esc(name)} <span>× ${n}</span></b><p>${esc(desc)}</p></div>${act}</article>`);
+    rows.push(`<article class="inv">${iconHTML(itemIcon(item))}<div><b>${esc(name)} <span>× ${n}</span></b><p>${esc(desc)}</p></div>${act}</article>`);
   }
   openPanel(`<p class="eyebrow">${esc(t('journal'))}</p><h2>${esc(t('inventory'))}</h2><small>${esc(t('invHint'))}</small><div class="inv-list">${rows.join('')}</div><button class="primary" data-close>${esc(t('close'))}</button>`, 'inventory');
   $('panel-card').querySelectorAll('[data-use]').forEach(b => b.onclick = () => { useItem(+b.dataset.use); inventory(); });
@@ -667,7 +671,7 @@ function renderBelt() {
   const items = beltItems(), hp = E.tj_state(8), max = E.tj_state(38);
   $('belt').innerHTML = items.map((item, i) => {
     const c = CONSUMABLES[item], full = c.heal && !c.effect && hp >= max;
-    return `<button data-belt="${item}" class="${full ? 'dim' : ''}" title="${esc(ITEMS[lang][item][0])} — ${esc(ITEMS[lang][item][1])}"><kbd>${i + 4}</kbd>${iconHTML(ITEM_ICONS[item])}<b>${E.tj_item_count(item)}</b></button>`;
+    return `<button data-belt="${item}" class="${full ? 'dim' : ''}" title="${esc(itemList()[item][0])} — ${esc(itemList()[item][1])}"><kbd>${i + 4}</kbd>${iconHTML(itemIcon(item))}<b>${E.tj_item_count(item)}</b></button>`;
   }).join('');
   $('belt').hidden = !items.length;
   $('belt').querySelectorAll('[data-belt]').forEach(b => b.onclick = () => { useItem(+b.dataset.belt); canvas.focus({preventScroll: true}); });
@@ -713,8 +717,8 @@ function updateHud(force) {
   $('hp-text').textContent = hp + ' / 100';
   $('lives').textContent = '◆'.repeat(Math.max(0, lives)) + '◇'.repeat(Math.max(0, 3 - lives));
   $('arrows').textContent = arrows;
-  $('ammo-icon').innerHTML = iconHTML('arrows');
-  $('slots').innerHTML = ['sword', 'spear', 'bow'].map((n, i) => {
+  $('ammo-icon').innerHTML = iconHTML(itemIcon(4));
+  $('slots').innerHTML = [1, 2, 3].map(itemIcon).map((n, i) => {
     const has = E.tj_item_count(i + 1) > 0;
     return `<button data-weapon="${i}" class="${weapon === i ? 'on' : ''}" ${has ? '' : 'disabled'} title="${esc(t('weapon')[i])}"><kbd>${i + 1}</kbd>${iconHTML(n)}</button>`;
   }).join('');
@@ -796,7 +800,7 @@ function handleEvents() {
   E.tj_events_clear();
   for (const [type, a, b] of evs) {
     switch (type) {
-      case EV.SFX: { const d = b & 0x7fff, left = b >> 15; sfx(SFX_NAMES[a], Math.max(0, 1 - d / 400), (left ? -1 : 1) * Math.min(1, d / 260) * .6); break; }
+      case EV.SFX: { const d = b & 0x7fff, left = b >> 15; sfx(LV.sfx?.[SFX_NAMES[a]] || SFX_NAMES[a], Math.max(0, 1 - d / 400), (left ? -1 : 1) * Math.min(1, d / 260) * .6); break; }
       case EV.INTERACT: {
         if (cine || dialogBusy || panelOpen) break;
         const hold = (b & 0x10000) !== 0, id = b & 0xffff;
@@ -805,7 +809,7 @@ function handleEvents() {
       }
       case EV.TRIGGER: quest.trigger(MAP.triggers[a]); break;
       case EV.ENEMY_DIED: quest.enemyDied(a, b); break;
-      case EV.PICKUP: toast(`${t('got')}: ${ITEMS[lang][a][0]} ×${b}`); updateHud(true); pickupHint(a); break;
+      case EV.PICKUP: toast(`${t('got')}: ${itemList()[a][0]} ×${b}`); updateHud(true); pickupHint(a); break;
       case EV.EFFECT: onEffect(a, b); break;
       case EV.USED: if (b > 0) toast(`+${b} ❤`, 'good'); sfx('pickup'); updateHud(true); renderBuffs(); break;
       case EV.HURT: sfx('hurt'); break;
@@ -865,6 +869,7 @@ function loop(now) {
   handleEvents();
   E.tj_render();
   ctx.putImageData(frame, 0, 0);
+  quest?.frame?.(ctx);   // optional per-frame level logic drawn over the world (MAP02: the archery range)
   updateHud(); updatePrompt();
   $('viewport').classList.toggle('playing', !panelOpen);
   if ((now / 100 | 0) % 2 === 0) drawMinimap(now);
@@ -1067,7 +1072,7 @@ async function boot() {
     if (!loopStarted) { loopStarted = true; requestAnimationFrame(loop); }
     musicForZone(true);
     // Debug/QA handle (used by scripts/check-rpg-browser.mjs).
-    const step = n => { for (let i = 0; i < n; i++) { E.tj_tick(); handleEvents(); } E.tj_render(); ctx.putImageData(frame, 0, 0); updateHud(); updatePrompt(); drawMinimap(performance.now()); };
+    const step = n => { for (let i = 0; i < n; i++) { E.tj_tick(); handleEvents(); } E.tj_render(); ctx.putImageData(frame, 0, 0); quest?.frame?.(ctx); updateHud(); updatePrompt(); drawMinimap(performance.now()); };
     if (import.meta.env.DEV) window.__tj = {useItem, quickHeal, renderBuffs, LV, E, G, party, quest, retryEpoch, results, get official() { return official; }, save, load, newGame, skipCutscene, closePanel, advanceDialog, travel, step, inventory, coopPanel, startParty, leaveParty,
       get panelOpen() { return panelOpen; }, get cine() { return cine?.id || null; }, get dialog() { return !$('dlg').hidden; }};
   } catch (err) {

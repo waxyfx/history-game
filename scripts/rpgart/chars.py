@@ -112,6 +112,9 @@ def pose_for(anim, f, n):
 def human_frame(style, view, anim, f):
     n = FRAMES[anim]
     P = pose_for(anim, f, n)
+    # MAP08–MAP09 firearms: the bow pose holds a long gun, the spear pose a gun with a fixed bayonet.
+    if style.get('gun') and P['weapon'] and P['weapon'][0] in ('bow', 'spear'):
+        P['weapon'] = ('gun' if P['weapon'][0] == 'bow' else 'bayonet', f); P['bowdraw'] = 0
     D = body_dims(style)
     img = new(32, 32); p = Px(img)
     fx, fy = FWD[view]
@@ -266,6 +269,9 @@ def human_frame(style, view, anim, f):
                 p.set(int(hx + 3), ey + 1, c(sk, 2))
             elif view == 'e':
                 p.set(int(hx + 2), ey, c('ink', 0)); p.set(int(hx + r), ey + 1, c(sk, 3))
+            if style.get('eyefire'):   # MAP10 finale: fire in the lost eye's socket
+                ex = {'s': int(hx + 1), 'se': int(hx + 2), 'e': int(hx + 2)}.get(view)
+                if ex is not None: p.set(ex, ey, c('fire', 5)); p.set(ex, ey - 1, c('gold', 5)); p.set(ex + (1 if view != 's' else 0), ey - 2, c('fire', 3, 160))
             if style.get('paint'):
                 for k in (-1, 0, 1):
                     p.set(int(hx) + k + (1 if view != 's' else 0), ey + 2, c('red', 3))
@@ -383,6 +389,16 @@ def human_frame(style, view, anim, f):
             p.line(top[0], top[1], mx, my, c('grey', 5)); p.line(bot[0], bot[1], mx, my, c('grey', 5))
             if pull:
                 p.line(mx, my, mx + fx * 7, my + fy * 3.5, c('wood', 5)); p.set(mx + fx * 7, my + fy * 3.5, c('stone', 6))
+        elif kind in ('gun', 'bayonet'):
+            dirx, diry = (fx, fy * .55) if side else (0, fy)
+            kick = 1 if (kind == 'gun' and ph == 1) else 0
+            hx2, hy2 = hx - dirx * kick, hy - diry * kick
+            for k in range(-5, 12):
+                col = c('wood', 3 if k < 2 else 2) if k < 3 else c('stone', 2 if k % 2 else 1)
+                p.set(hx2 + dirx * k, hy2 + diry * k, col)
+            if kind == 'bayonet':
+                for k in range(12, 17): p.set(hx2 + dirx * k, hy2 + diry * k, c('grey', 5))
+            if kind == 'gun' and ph == 1: p.set(hx2 + dirx * 13, hy2 + diry * 13, c('fire', 5)); p.set(hx2 + dirx * 14, hy2 + diry * 14, c('gold', 5))
         elif kind == 'stone':
             p.rect(hx - 1, hy - 1, 3, 2, c('stone', 4)); p.set(hx, hy - 1, c('stone', 6))
         elif kind == 'page':

@@ -174,6 +174,7 @@ def emit():
     L.npc('ayan', 'AYAN', 21, 31, [W_(21, 31, 300, 'idle'), W_(24, 29, 160, 'idle'), W_(19, 33, 200, 'idle')])
     L.npc('herd', 'TURKHERD', 44, 46, [W_(44, 46, 160, 'idle'), W_(48, 55, 60, 'walk'), W_(44, 60, 120, 'idle'), W_(38, 52, 60, 'walk')])
     L.npc('tonyukuk', 'TONYUKUK', 86, 18.4, [W_(86, 18.4, 600, 'idle'), W_(84, 20, 300, 'talk', 2)])
+    L.npc('bilge', 'BILGE', 97, 14.4, [W_(97, 14.4, 520, 'idle', 6), W_(95, 16, 260, 'talk')])
     L.npc('kultegin', 'KULTEGIN', 92.4, 20, [W_(92.4, 20, 420, 'idle', 6), W_(95, 22, 260, 'talk'), W_(91, 23, 300, 'idle', 6)])
     L.npc('twin', 'TWIN', 60, 46, [W_(60, 46, 600, 'idle')], inactive=True)
     L.npc('reflect', 'TWIN', 17, 57, [W_(17, 57, 600, 'idle')], inactive=True)

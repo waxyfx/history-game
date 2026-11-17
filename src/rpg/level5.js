@@ -23,10 +23,10 @@ export default {
   // The vision (motion comic in the intro's format) after the fifth page.
   comic: async opts => (await import('../cinema/vision/index.js')).playVisionComic(opts),
   back: {label: {kk: 'Тұманды далаға оралу', ru: 'Вернуться в туманную степь'}, x: 40, y: 65},
-  passLabel: {kk: 'Дәуірлер картасы', ru: 'Карта эпох'},
+  next: 6, passLabel: {kk: 'MAP06 · Алтын Орда', ru: 'MAP06 · Золотая Орда'},
   UI: {chapter: {kk: 'MAP 05 · ТҮРКІ ҚАҒАНАТЫ', ru: 'MAP 05 · ТЮРКСКИЙ КАГАНАТ'}, title: {kk: 'Жадтың көлеңкесі', ru: 'Тень памяти'},
     complete: {kk: 'MAP 05 АЯҚТАЛДЫ', ru: 'MAP 05 ЗАВЕРШЕНА'}, completeSub: {kk: 'Шежіренің 5-парағы қалпына келді', ru: 'Пятая страница Шежіре восстановлена'},
-    stay: {kk: 'Түркі дәуірінде қалу', ru: 'Остаться в тюркской эпохе'}, nextOpened: {kk: 'MAP06 келесі тарауда ашылады', ru: 'MAP06 откроется в следующей главе'}},
+    stay: {kk: 'Түркі дәуірінде қалу', ru: 'Остаться в тюркской эпохе'}, nextOpened: {kk: 'MAP06 ашылды: Алтын Орда', ru: 'Открыта MAP06: Золотая Орда'}},
   music: (z, f) => z === 10 ? 'camp' : z >= 8 ? 'cave' : z === 1 || z === 3 ? 'village' : z === 4 || z === 5 || z === 7 || f?.b?.twin1 ? 'mystery' : 'steppe',
   ambience: (z, x, y, tile) => {
     let river = 0;

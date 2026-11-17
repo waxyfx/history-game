@@ -157,6 +157,7 @@ def place():
     o('target', *P(88, 44), 0, t('arnatarget'))
     # ---- sacred hill
     o('sakaltar', *P(62, 12.4), 0, t('altar'))
+    o('ringstone', *P(66, 14.2), 1, t('echostone'))   # the echo stone (Tomyris, 6th c. BC)
     for k in range(6):
         a = k / 6 * math.pi * 2
         o('deerstone', *P(62 + math.cos(a) * 6.5, 13.5 + math.sin(a) * 3.6))
@@ -218,6 +219,7 @@ def emit():
     I('goldwork', *P(56, 55.2), 24)
     I('target', *P(88, 44.6), 20, tag('arnatarget'))
     I('altar', *P(62, 13.2), 24, tag('altar'))
+    I('echostone', *P(66, 14.8), 20, tag('echostone'))
     I('niche', *P(57, 17.2), 18, tag('niche'))
     I('kurganseal', *P(92, 24.2), 22, tag('sealstone'))
     I('tunnel', *P(96, 23.2), 22, tag('tunnelmark'))
@@ -237,6 +239,7 @@ def emit():
     L.npc('qaraman', 'SAKAGUARD', 76, 44, [W_(76, 44, 360, 'idle', 6), W_(80, 47, 300, 'talk'), W_(72, 42, 260, 'idle', 2)])
     L.npc('arna', 'ARNA', 46, 39, [W_(46, 39, 320, 'idle'), W_(44, 44, 200, 'idle'), W_(49, 41, 240, 'talk')])
     L.npc('altynbek', 'GOLDSMITH', 61, 55, [W_(61, 55, 520, 'work', 6), W_(59, 58.5, 220, 'idle'), W_(61, 55, 420, 'work', 6)])
+    L.npc('tomyris', 'TOMYRIS', 66, 12, [W_(66, 12, 600, 'idle', 4)], inactive=True)
     L.npc('kungey', 'ABYZ', 62, 16, [W_(62, 16, 480, 'idle', 0), W_(66, 17, 260, 'talk'), W_(59, 16.5, 300, 'idle', 0)])
     L.npc('tayzhan', 'SAKABOY', 36, 21, [W_(36, 21, 260, 'idle'), W_(41, 16, 160, 'idle'), W_(31, 24, 180, 'talk')], runner=True)
     L.npc('ulpan', 'SAKAMOTHER', 41, 41, [W_(41, 41, 360, 'work', 4), W_(38, 44, 220, 'idle'), W_(45, 42, 240, 'talk')])

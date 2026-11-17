@@ -68,7 +68,11 @@ test('MAP02 score: pass mark 60 — 80, 90 and 100 pass, a wrong final (60) stil
 
 test('MAP02 quest stages follow the investigation without softlocks', () => {
   const f = {b: {}, talked: [], tracks: [], petro: [], quiz: {}};
-  assert.equal(questStage(f), 'arrive');
+  assert.equal(questStage(f), 'bow', 'first the bow lesson at the range');
+  f.b.bowGiven = true; assert.equal(questStage(f), 'bowStatic');
+  Object.assign(f.b, {bowT1: true, bowT2: true, bowT3: true}); assert.equal(questStage(f), 'bowMove');
+  f.b.bowMove = true; assert.equal(questStage(f), 'bowFight');
+  f.b.bowTrained = true; assert.equal(questStage(f), 'arrive');
   f.b.village = true; assert.equal(questStage(f), 'investigate');
   f.talked = ['guard', 'shepherd', 'villager1']; f.tracks = [1, 3]; assert.equal(questStage(f), 'investigate', 'mandatory trials first');
   f.quiz.bronze_metal = {ok: false}; f.quiz.bronze_economy = {ok: true}; assert.equal(questStage(f), 'report', 'a wrong choice still continues');

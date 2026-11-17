@@ -1,4 +1,4 @@
-// «Уақыт аномалиялары» — the team easter eggs, one per epoch (MAP01–MAP05), collected across levels.
+// «Уақыт аномалиялары» — the team easter eggs, one per epoch (MAP01–MAP10), collected across levels.
 // Optional: they never count toward score, secrets or progress; each one is also stored in its level's flags.
 // The collection lives in its own key so it survives level changes; it is validated on read.
 const KEY = 'tarikh.anomalies';
@@ -8,6 +8,11 @@ export const ANOMALIES = {
   map03: {kk: 'Ақ патша', ru: 'Белый король'},
   map04: {kk: 'Жасыл портал', ru: 'Зелёный портал'},
   map05: {kk: 'Саз әскер', ru: 'Глиняное войско'},
+  map06: {kk: 'Бес белгі', ru: 'Пять знаков'},
+  map07: {kk: 'Тоғыз ұя', ru: 'Девять лунок'},
+  map08: {kk: 'Сегіз кілт', ru: 'Восемь ключей'},
+  map09: {kk: 'Тоғыз жұлдыз', ru: 'Девять звёзд'},
+  map10: {kk: 'Он белгі', ru: 'Десять подвесок'},
 };
 const IDS = Object.keys(ANOMALIES);
 export function anomaliesFound(storage = globalThis.localStorage) {

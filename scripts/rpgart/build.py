@@ -9,7 +9,7 @@ Outputs:
 import math, os, sys, struct, zlib
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from rpgart.core import *
-from rpgart import world as W, chars as C, chars2 as C2, bronze as B, consumables as CONS, saka as SAKA, hun as HUN, turk as TURK
+from rpgart import world as W, chars as C, chars2 as C2, bronze as B, consumables as CONS, saka as SAKA, hun as HUN, turk as TURK, horde as HORDE, late as LATE
 
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -149,6 +149,8 @@ def register():
     SAKA.register(add)   # MAP03 props
     HUN.register(add)    # MAP04 props
     TURK.register(add)   # MAP05 props + team easter eggs
+    HORDE.register(add)  # MAP06 props
+    LATE.register(add)   # MAP07–MAP10 props + weapon icons
     # Props
     for v in range(2): add(f'O_poplar_{v}', W.tree_poplar(v))
     for v in range(2): add(f'O_birch_{v}', W.tree_birch(v))
@@ -255,6 +257,8 @@ ANIMAL_SHEETS = {
 HUMAN_SHEETS.update(SAKA.HUMAN_SHEETS); ANIMAL_SHEETS.update(SAKA.ANIMAL_SHEETS)   # MAP03
 HUMAN_SHEETS.update(HUN.HUMAN_SHEETS); ANIMAL_SHEETS.update(HUN.ANIMAL_SHEETS)     # MAP04
 HUMAN_SHEETS.update(TURK.HUMAN_SHEETS); ANIMAL_SHEETS.update(TURK.ANIMAL_SHEETS)   # MAP05
+HUMAN_SHEETS.update(HORDE.HUMAN_SHEETS); ANIMAL_SHEETS.update(HORDE.ANIMAL_SHEETS) # MAP06
+HUMAN_SHEETS.update(LATE.HUMAN_SHEETS); ANIMAL_SHEETS.update(LATE.ANIMAL_SHEETS)   # MAP07–MAP10
 
 def pack(items, width):
     """Shelf packer. items: list of (key, w, h). Returns {key: (x, y)}, height."""

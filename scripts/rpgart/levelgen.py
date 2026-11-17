@@ -66,6 +66,21 @@ KINDS = {
     'palisade': ('O_PALISADE_0', 2, 0, (24, 4), TALLBOX), 'burntgate': ('O_BURNTGATE', 1, 0, (0, 0), 0),
     'cradle': ('O_CRADLE', 1, 0, (7, 3), 0), 'runeboard': ('O_RUNEBOARD', 1, 0, (3, 2), 0), 'scarf': ('O_SCARF', 1, 0, (0, 0), DECAL),
     'runewall': ('O_RUNEWALL_0', 2, 0, (20, 4), LIGHT, (120, 200, 210, 34, 14)), 'tamga': ('O_TAMGA', 1, 0, (0, 0), DECAL),
+    # ---- MAP06 (Golden Horde, Saraychik)
+    'minaret': ('O_MINARET', 1, 0, (6, 4), TALL), 'iwan': ('O_IWAN', 1, 0, (30, 6), TALLBOX), 'turbe': ('O_TURBE', 1, 0, (18, 6), TALLBOX),
+    'stall': ('O_STALL_0', 3, 0, (15, 4), 0), 'coinpress': ('O_COINPRESS', 1, 0, (10, 4), 0), 'caravangate': ('O_CARAVANGATE', 1, 0, (0, 0), 0),
+    'yampost': ('O_YAMPOST', 1, 0, (4, 3), 0), 'shelves': ('O_SHELVES', 1, 0, (22, 5), TALLBOX), 'scrolltable': ('O_SCROLLTABLE', 1, 0, (16, 4), LIGHT, (240, 200, 120, 40, 14)),
+    'bowbench': ('O_BOWBENCH', 1, 0, (14, 4), 0), 'lancerack': ('O_LANCERACK', 1, 0, (12, 3), 0), 'kayraktas': ('O_KAYRAKTAS_0', 2, 0, (5, 3), 0),
+    'kiln': ('O_KILN_0', 4, 2, (9, 5), LIGHT | FLICKER, (255, 140, 60, 48, 8)), 'carpet': ('O_CARPET', 1, 0, (0, 0), DECAL),
+    # ---- MAP07–MAP10 (late eras)
+    'tuskiiz': ('O_TUSKIIZ', 1, 0, (0, 0), 0), 'kerege': ('O_KEREGE', 1, 0, (18, 4), 0), 'saba': ('O_SABA', 1, 0, (6, 3), 0),
+    'kulpytas': ('O_KULPYTAS', 1, 0, (4, 3), TALL), 'sabrerack': ('O_SABRERACK', 1, 0, (13, 3), 0),
+    'blockhouse': ('O_BLOCKHOUSE', 1, 0, (26, 7), TALLBOX), 'watchtower': ('O_WATCHTOWER', 1, 0, (12, 4), TALL), 'cannon': ('O_CANNON', 1, 0, (14, 4), 0),
+    'officedesk': ('O_OFFICEDESK', 1, 0, (15, 4), LIGHT, (240, 200, 120, 40, 14)), 'powderkeg': ('O_POWDERKEG', 1, 0, (6, 3), 0), 'burnt': ('O_BURNT', 1, 0, (0, 0), DECAL),
+    'factory': ('O_FACTORY', 1, 0, (38, 8), TALLBOX), 'lathe': ('O_LATHE', 1, 0, (15, 4), 0), 'shellcrate': ('O_SHELLCRATE', 1, 0, (11, 3), 0),
+    'loudspeaker': ('O_LOUDSPEAKER', 1, 0, (3, 2), TALL), 'wagon9': ('O_WAGON9', 1, 0, (30, 5), 0), 'poster': ('O_POSTER', 1, 0, (4, 2), 0),
+    'labpanel': ('O_LABPANEL', 1, 0, (22, 4), LIGHT, (90, 210, 230, 50, 20)), 'server': ('O_SERVER', 1, 0, (8, 3), LIGHT, (90, 210, 230, 30, 20)),
+    'apple': ('O_APPLE', 1, 0, (4, 3), TALL), 'streetlamp': ('O_STREETLAMP', 1, 0, (3, 2), LIGHT | TALL, (180, 230, 240, 70, 40)), 'bench': ('O_BENCH', 1, 0, (13, 3), 0),
     # ---- team easter eggs (MAP01–MAP05)
     'doomthrone': ('O_DOOMTHRONE', 1, 0, (14, 5), LIGHT, (90, 200, 110, 46, 20)), 'doomgear': ('O_DOOMGEAR_0', 4, 3, (10, 4), 0),
     'gpuplan': ('O_GPUPLAN_0', 2, 3, (10, 3), LIGHT, (80, 220, 120, 40, 8)), 'jacket': ('O_JACKET', 1, 0, (4, 2), 0),
@@ -125,7 +140,7 @@ class Level:
         zon = ''.join(''.join(chr(48 + L.zone[y][x]) for x in range(L.w)) for y in range(L.h))
         for name, s in (('terrain', terr), ('zones', zon)):
             lines.append(f'constexpr const char {name}[]=')
-            for y in range(L.h): lines.append('  "' + s[y * L.w:(y + 1) * L.w].replace('\\', '\\\\').replace('"', '\\"') + '"')
+            for y in range(L.h): lines.append('  "' + s[y * L.w:(y + 1) * L.w].replace('\\', '\\\\').replace('"', '\\"').replace('?', '\\?') + '"')   # escaped '?': no trigraphs (e.g. meadow next to deepwall)
             lines.append(';')
         lines.append('struct Area { short x0,y0,x1,y1; unsigned char dark,outdoor,r,g,b; };')
         lines.append('constexpr Area areas[]={' + ','.join('{%d,%d,%d,%d,%d,%d,%d,%d,%d}' % (a[1] * TS, a[2] * TS, a[3] * TS, a[4] * TS, 1 if a[5] else 0, 1 if a[6] else 0, *(a[5] or (200, 200, 200))) for a in L.areas) + '};')
@@ -171,8 +186,8 @@ class Level:
         lines.append(f'constexpr int EnemyCount={len(L.enemies)};')
         lines.append('constexpr EnemyDef enemyDefs[EnemyCount]={' + ','.join('{%d,%d,%d,%d}' % (t, g, x * TS, y * TS) for t, x, y, g in L.enemies) + '};')
         # Sprite sheet per enemy type: wolf, stranger, archer, bear, shade, wraith, keeper, rider, witness, image
-        es = [L.enemy_sheets.get(i, 'WOLF') for i in range(10)]
-        lines.append('constexpr unsigned char enemySheet[10]={' + ','.join('art::SH_' + s for s in es) + '};')
+        es = [L.enemy_sheets.get(i, 'WOLF') for i in range(12)]
+        lines.append('constexpr unsigned char enemySheet[12]={' + ','.join('art::SH_' + s for s in es) + '};')
         lines.append('struct PickupDef { short item,qty,x,y; };')
         lines.append(f'constexpr int PickupDefCount={len(L.pickups)};')
         lines.append('constexpr PickupDef pickupDefs[PickupDefCount>0?PickupDefCount:1]={' + (','.join('{%d,%d,%d,%d}' % (i, q, x * TS, y * TS) for i, q, x, y in L.pickups) or '{0,0,0,0}') + '};')

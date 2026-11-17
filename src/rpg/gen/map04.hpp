@@ -272,7 +272,7 @@ constexpr AnimalDef animalDefs[AnimalCount>0?AnimalCount:1]={{art::SH_CAMEL,1088
 struct EnemyDef { unsigned char type,group; short x,y; };
 constexpr int EnemyCount=14;
 constexpr EnemyDef enemyDefs[EnemyCount]={{2,1,256,1024},{2,1,352,1088},{1,1,304,992},{4,2,1520,320},{4,2,1616,368},{4,2,1568,416},{3,3,576,576},{3,3,608,704},{5,4,352,1584},{5,4,688,1584},{5,4,512,1616},{8,5,512,1392},{4,6,240,1456},{4,6,800,1456}};
-constexpr unsigned char enemySheet[10]={art::SH_WOLF,art::SH_HUNWARRIOR,art::SH_HUNSCOUT,art::SH_HUNRIDER,art::SH_HUNCORRUPT,art::SH_WRAITH,art::SH_KEEPER,art::SH_GOLDRIDER,art::SH_WITNESS,art::SH_WOLF};
+constexpr unsigned char enemySheet[12]={art::SH_WOLF,art::SH_HUNWARRIOR,art::SH_HUNSCOUT,art::SH_HUNRIDER,art::SH_HUNCORRUPT,art::SH_WRAITH,art::SH_KEEPER,art::SH_GOLDRIDER,art::SH_WITNESS,art::SH_WOLF,art::SH_WOLF,art::SH_WOLF};
 struct PickupDef { short item,qty,x,y; };
 constexpr int PickupDefCount=14;
 constexpr PickupDef pickupDefs[PickupDefCount>0?PickupDefCount:1]={{9,2,704,1024},{4,8,800,896},{25,2,224,384},{9,1,544,768},{23,1,96,928},{4,8,1120,736},{21,1,1344,416},{9,2,1696,128},{20,1,896,128},{22,1,512,1696},{9,2,288,1600},{21,1,736,1600},{5,1,512,1520},{4,10,224,1376}};

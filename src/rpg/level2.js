@@ -10,7 +10,7 @@ export const SAVE_WORDS_L2 = 24 + 25 + 13 * 2 + 8, PREV_SAVE_WORDS_L2 = 24 + 19 
 export const persistence = makePersistence({
   quizIds: Object.values(S.HISTORICAL_QUIZZES).map(q => q.id),
   sets: {talked: S.WITNESSES, tracks: Object.values(S.CLUES), petro: [1, 2, 3, 4]},
-  grants: ['kit', 'bracelet', 'mould', 'seal', 'tablet', 'ember', 'page'], words: [SAVE_WORDS_L2, PREV_SAVE_WORDS_L2]});
+  grants: ['kit', 'bow', 'bowkit', 'bracelet', 'mould', 'seal', 'tablet', 'ember', 'page'], words: [SAVE_WORDS_L2, PREV_SAVE_WORDS_L2]});
 
 const fireAt = (x, y, tx, ty) => Math.max(0, 1 - Math.hypot(x - tx * 16, y - ty * 16) / 150);
 export default {
@@ -23,7 +23,8 @@ export default {
   begin: quest => quest.start(),
   back: {label: {kk: 'Ауылға оралу', ru: 'Ауылға оралу'}, x: 51, y: 34},
   passLabel: {kk: 'Сақ дәуіріне өту →', ru: 'В эпоху саков →'}, next: 3,
-  UI: {
+  // Epoch weapon names (slot 1–3). Later maps rename the slots for their own arms (akinak, sabre…).
+  UI: {weapon: {kk: ['Шоқпар', 'Найза', 'Садақ'], ru: ['Дубина', 'Копьё', 'Лук']}, 
     chapter: {kk: 'MAP 02 · ҚОЛА ДӘУІРІ'}, complete: {kk: 'MAP 02 АЯҚТАЛДЫ'}, completeSub: {kk: 'Шежіренің 2-парағы қалпына келді'},
     stay: {kk: 'Қола дәуірінде қалу'},
   },

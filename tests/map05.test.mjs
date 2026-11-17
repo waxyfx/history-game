@@ -86,10 +86,10 @@ test('MAP05 saves validate and reject forged data', () => {
   assert.throws(() => persistence.validateFlags(flags({}, {quiz: {hun_script: {a: 1, t: 1}}})));
 });
 
-test('team anomalies: five ids, validated store, counted once', () => {
+test('team anomalies: ten ids, validated store, counted once', () => {
   const store = new Map(); const storage = {getItem: k => store.get(k) ?? null, setItem: (k, v) => store.set(k, v)};
   const G = {lang: () => 'kk', toast: () => {}, sfx: () => {}};
-  assert.equal(Object.keys(ANOMALIES).length, 5);
+  assert.equal(Object.keys(ANOMALIES).length, 10);
   assert.equal(anomaly(G, 'map03', storage), true); assert.equal(anomaly(G, 'map03', storage), false);
   assert.equal(anomaly(G, 'bogus', storage), false);
   store.set('tarikh.anomalies', '["map01","map01","x",5]'); assert.deepEqual(anomaliesFound(storage), ['map01']);

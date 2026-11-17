@@ -4,11 +4,13 @@ namespace tj {
 enum Weapon { Sword, Spear, Bow };
 struct WeaponSpec { int damage,windup,recovery; float range,width; };
 // Sword: wide fast arc. Spear: long narrow thrust. Bow: arrow after a draw.
-constexpr WeaponSpec weapons[]={{26,6,20,26,16},{30,10,30,44,7},{24,14,26,200,0}};
+// Base stats; a level may tune them at run time (tj_weapon_tune: MAP06 composite bow, cavalry lance).
+constexpr WeaponSpec baseWeapons[]={{26,6,20,26,16},{30,10,30,44,7},{24,14,26,200,0}};
+inline WeaponSpec weapons[]={baseWeapons[0],baseWeapons[1],baseWeapons[2]};
 struct Vec { float x,y; };
 constexpr Vec directions[]={{0,-1},{.70710678f,-.70710678f},{1,0},{.70710678f,.70710678f},
     {0,1},{-.70710678f,.70710678f},{-1,0},{-.70710678f,-.70710678f}};
-enum EnemyType { Wolf, Stranger, Archer, Bear, Shade, Wraith, Keeper, Rider, Witness, Image, EnemyTypeCount };
+enum EnemyType { Wolf, Stranger, Archer, Bear, Shade, Wraith, Keeper, Rider, Witness, Image, Herald, Zulmat, EnemyTypeCount };
 enum EnemyState { Idle, Patrol, Chase, Attacking, Hurt, Death, Circle, Retreat, Roar, Charge, Stunned, Telegraph };
 struct EnemySpec { int health,damage,windup,recovery; float speed,detection,range; };
 constexpr EnemySpec enemySpecs[EnemyTypeCount]={
@@ -21,10 +23,12 @@ constexpr EnemySpec enemySpecs[EnemyTypeCount]={
     {640,22,36,50,.58f,170,34},  // boss: distorted keeper of the sacred fire
     {720,20,30,50,.95f,190,36},  // boss: the golden-armoured rider (MAP03)
     {780,18,30,50,.8f,220,40},   // boss: the three-faced witness (MAP04)
-    {760,16,26,50,.95f,230,36}}; // boss: «Екінші бейне», the second image (MAP05)
+    {760,16,26,50,.95f,230,36},  // boss: «Екінші бейне», the second image (MAP05)
+    {820,18,28,50,1.6f,240,40},  // boss: the herald of the forged yarlyk (MAP06)
+    {1200,20,26,46,1.25f,260,40}}; // boss: Зұлмат, the two hands (MAP10)
 struct Attack {
     int age=0,weapon=0,facing=4,cooldown=0;
-    bool active=false,connected=false;
+    bool active=false,connected=false,charge=false;   // charge: a running lance thrust (MAP06)
     float x=0,y=0;
 };
 struct Projectile {
@@ -33,10 +37,10 @@ struct Projectile {
     float x=0,y=0,dx=0,dy=0,remaining=0;
 };
 constexpr int MaxProjectiles=48;
-inline bool inArc(int weapon,int facing,float x,float y,float tx,float ty) {
+inline bool inArc(int weapon,int facing,float x,float y,float tx,float ty,float extra=0) {
     auto d=directions[facing];float dx=tx-x,dy=ty-y;
     float forward=dx*d.x+dy*d.y,side=dx*d.y-dy*d.x;
-    return forward>-2&&forward<=weapons[weapon].range&&fabsf(side)<=weapons[weapon].width;
+    return forward>-2&&forward<=weapons[weapon].range+extra&&fabsf(side)<=weapons[weapon].width;
 }
 inline int heading(float dx,float dy) {
     if(fabsf(dx)>fabsf(dy)*2.414214f)return dx>0?2:6;

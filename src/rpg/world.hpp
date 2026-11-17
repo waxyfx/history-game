@@ -6,7 +6,17 @@
 #ifndef TJ_LEVEL
 #define TJ_LEVEL 1
 #endif
-#if TJ_LEVEL == 5
+#if TJ_LEVEL == 10
+#include "gen/map10.hpp"
+#elif TJ_LEVEL == 9
+#include "gen/map09.hpp"
+#elif TJ_LEVEL == 8
+#include "gen/map08.hpp"
+#elif TJ_LEVEL == 7
+#include "gen/map07.hpp"
+#elif TJ_LEVEL == 6
+#include "gen/map06.hpp"
+#elif TJ_LEVEL == 5
 #include "gen/map05.hpp"
 #elif TJ_LEVEL == 4
 #include "gen/map04.hpp"
