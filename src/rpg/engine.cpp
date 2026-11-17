@@ -361,7 +361,7 @@ void tickLocalPlayer(){
         const auto& w=weapons[a.weapon];
         if(a.age==w.windup){
             if(a.weapon==Bow){ if(game.inv.counts[IArrows-1]>0&&launch(-1,p.x,p.y-8,a.facing,outgoingDamage(w.damage))){--game.inv.counts[IArrows-1];sfx(SFX_BOW,p.x,p.y);
-                if(game.bullets){auto d=directions[a.facing];for(int i=0;i<8;++i)particle(p.x+d.x*12,p.y-8+d.y*8,d.x*(1+frand())+(frand()-.5f),d.y*(1+frand())-frand()*.5f,10,0,rgba(frand()<.5f?0xffe08a:0xc8c8c8));}
+                if(game.bullets){auto d=directions[a.facing];for(int i=0;i<8;++i)particle(p.x+d.x*12,p.y-8+d.y*8,d.x*(1+frand())+(frand()-.5f),d.y*(1+frand())-frand()*.5f,10,0,rgba(game.bullets==2?(frand()<.5f?0x7ff5e4:0xe8fdff):(frand()<.5f?0xffe08a:0xc8c8c8)));}
                 if(game.burst>1){p.burstLeft=game.burst-1;p.burstT=5;}} }
             else if(!a.connected){strikeEnemies(a);a.connected=true;}
         }
@@ -1399,7 +1399,8 @@ void render(){
             break;}
         case 6:{const Projectile& p=projectiles[d.idx];if(p.fire)renderer.sprite(art::X_FIREBOLT_0+((game.ticks/5)&1),int(p.x),int(p.y));
             else if(game.bullets&&p.owner<0){int x=int(p.x)-renderer.camX,y=int(p.y)-renderer.camY;float l=sqrtf(p.dx*p.dx+p.dy*p.dy)+.01f;
-                for(int k=0;k<7;++k)renderer.pixel(x-int(p.dx/l*k),y-int(p.dy/l*k),rgba(k<2?0xfff6c8:0xd8b070,255-k*30));}
+                bool cell=game.bullets==2;   // MAP10: energy charges of the pulse rifle
+                for(int k=0;k<(cell?9:7);++k)renderer.pixel(x-int(p.dx/l*k),y-int(p.dy/l*k),rgba(k<2?(cell?0xe8fdff:0xfff6c8):(cell?0x7ff5e4:0xd8b070),255-k*(cell?24:30)));}
             else renderer.sprite(art::X_ARROW_0+p.facing,int(p.x),int(p.y));break;}
         case 7:{int f=(game.ticks/7)&3;renderer.sprite(art::Z_SHADOW_0+f,game.shadowX,game.shadowY,false,unsigned(game.shadowAlpha));break;}
         }
@@ -1647,7 +1648,7 @@ void tj_weapon_tune(int w,int damage,int windup,int recovery,int range,int width
 void tj_lance(int on){ tj::game.lanceCharge=on?1:0; }
 // MAP07–MAP10 mechanics: sabre combo, firearms (bullet shots), burst fire (rounds per trigger), the finale's health floor.
 void tj_sabre(int on){ tj::game.sabre=on?1:0; }
-void tj_bullets(int on){ tj::game.bullets=on?1:0; }
+void tj_bullets(int on){ tj::game.bullets=on<0?0:on>2?2:on; }   // 1 lead, 2 energy
 void tj_burst(int n){ tj::game.burst=n<1?0:n>5?5:n; }
 void tj_boss_floor(int pct){ tj::game.bossFloor=pct<0?0:pct>90?90:pct; }
 void tj_quest(int kind,int id){ tj::game.questKind=kind;tj::game.questId=id; }

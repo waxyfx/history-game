@@ -94,6 +94,12 @@ def icon(kind):
         if kind == 'ppsh': p.ellipse(8, 11, 2.2, 2.2, c('stone', 3)); p.line(9, 7, 14, 5, c('stone', 4))
     elif kind == 'bayonet':
         p.line(3, 13, 13, 3, c('grey', 5)); p.line(3, 14, 6, 11, c('ink', 2)); p.set(13, 2, c('grey', 6))
+    elif kind == 'pulse':   # MAP10 pulse rifle: a white-and-teal body, a glowing barrel
+        p.rect(2, 8, 11, 4, c('grey', 5)); p.rect(4, 12, 3, 3, c('grey', 3)); p.line(12, 9, 15, 8, c('cyan', 5)); p.rect(6, 9, 4, 2, c('cyan', 4)); p.set(14, 8, c('cyan', 5))
+    elif kind == 'ionlance':
+        p.line(2, 14, 11, 5, c('grey', 5)); p.line(3, 14, 12, 5, c('stone', 3)); p.poly([(11, 2), (15, 1), (14, 5), (11, 5)], c('cyan', 5)); p.set(12, 3, c('cyan', 3))
+    elif kind == 'cells':
+        for k in range(3): p.rect(3 + k * 4, 4, 3, 9, c('grey', 4)); p.rect(4 + k * 4, 6, 1, 5, c('cyan', 5))
     elif kind == 'knife':
         p.line(5, 11, 12, 4, c('grey', 5)); p.line(3, 13, 5, 11, c('wood', 3)); p.set(6, 12, c('stone', 4))
     elif kind in ('balls', 'cartridges'):
@@ -101,7 +107,7 @@ def icon(kind):
             if kind == 'balls': p.ellipse(5 + k * 3, 10 - k % 2 * 2, 1.6, 1.6, c('grey', 4))
             else: p.rect(4 + k * 3, 4, 2, 9, c('gold', 4)); p.set(4 + k * 3, 4, c('stone', 5))
     return outline(img), (0, 0)
-ICONS = ['sabre', 'naiza', 'musket', 'rifle', 'ppsh', 'bayonet', 'knife', 'balls', 'cartridges']
+ICONS = ['sabre', 'naiza', 'musket', 'rifle', 'ppsh', 'bayonet', 'knife', 'balls', 'cartridges', 'pulse', 'ionlance', 'cells']
 
 # ---------------------------------------------------------------- props
 def tuskiiz():

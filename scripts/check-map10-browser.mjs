@@ -28,25 +28,26 @@ try {
   // The sacrifice.
   await a.use('halldoor'); assert(await a.flag('sacrifice'), 'the second Aidar holds the white page'); assert(await a.flag('twinline'));
   await a.shot('map10-02-sacrifice');
-  // The final fight.
-  await a.goTo(42, 18); await a.settle(); assert(await a.flag('bossSeen'), 'Zulmat');
+  // The final fight: Aidar enters, everyone flees the building, he loses at once (gear down to the sword, the eye),
+  // the finale comic, the merging; then the player beats Zulmat with the sword.
+  await a.shoot(42 * 16, 54 * 16, 0, {wait: 20});   // the pulse rifle works before the hall
+  await a.goTo(42, 18); await a.settle();
+  assert(await a.flag('bossSeen'), 'Zulmat'); assert(B.seen.comics > 0, 'the finale comic played');
+  assert(await a.flag('lostBow') && await a.flag('lostSpear') && await a.flag('artifactsLost'), 'gear lost in the duel');
+  assert(await a.flag('merged'), 'the merging'); assert(await a.flag('stitch'));
+  assert.deepEqual(await a.js('[1, 2, 3, 4].map(i => __tj.E.tj_item_count(i))'), [1, 0, 0, 0], 'only the sword is left');
+  assert.equal(await a.js('__tj.E.tj_state(13)'), 0, 'sword in hand');
+  const outside = await a.js(`["dana","erlan","prof","guard10","citizen"].map(k => __tj.E.tj_npc(__tj.LV.MAP.npcs.indexOf(k), 1) / 16)`);
+  assert(outside.every(y => y > 46), 'everyone left the building: ' + JSON.stringify(outside));
   await a.groupKill(3);
   const H = await a.js('__tj.LV.MAP.enemies.findIndex(e => e.type === 11)');
-  let s = await a.bossState(H), shots = 0;
-  const tickWait = n => a.js(`(() => { for (let i = 0; i < ${n}; i++) { __tj.E.tj_heal(100); __tj.step(1); } return 1; })()`);
-  for (let r = 0; r < 200 && !(await a.flag('merged')); r++) {
-    s = await a.bossStep(H, 6);
-    await tickWait(30); await delay(300);   // the 4 Hz quest tick runs on real time
-    if (await a.js('!!(__tj.cine || __tj.dialog || __tj.panelOpen || document.querySelector(".tj-intro"))')) await a.settle();
-    if (s[1] === 2 && !shots) { shots++; await a.shot('map10-03-p2'); }
-    if (s[1] === 3 && shots === 1) { shots++; await a.shot('map10-04-p3'); }
+  await a.shot('map10-03-merged');
+  for (let r = 0; r < 300 && (await a.bossState(H))[0] > 0; r++) {
+    const [x, y] = await a.js(`[__tj.E.tj_enemy(${H}, 2) / 1000, __tj.E.tj_enemy(${H}, 3) / 1000]`);
+    await a.moves([[32, 2], [0, 14], [32, 2], [0, 14], [32, 2], [0, 20]], {x, y: y + 16, face: 0, weapon: 0});
+    await a.bossStep(H, 2);
+    if (r === 20) await a.shot('map10-04-fight');
   }
-  assert(await a.flag('lostBow'), 'the bow is lost'); assert(await a.flag('lostSpear'), 'the spear is lost'); assert(await a.flag('artifactsLost'));
-  assert.deepEqual(await a.js('[1, 2, 3, 4].map(i => __tj.E.tj_item_count(i))'), [1, 0, 0, 0], 'only the sword is left');
-  assert(await a.flag('merged'), 'the merging'); assert(B.seen.comics > 0, 'the finale comic played'); assert(await a.flag('stitch'));
-  assert.equal(await a.js('__tj.E.tj_state(13)'), 0, 'sword in hand');
-  // With the fire: the floor is gone, the sword ends it.
-  for (let r = 0; r < 120 && (await a.bossState(H))[0] > 0; r++) await a.moves([[32, 2], [0, 22]], {x: (await a.js(`__tj.E.tj_enemy(${H}, 2)`)) / 1000, y: (await a.js(`__tj.E.tj_enemy(${H}, 3)`)) / 1000 + 16, face: 0, weapon: 0}).then(() => a.bossStep(H, 2));
   await a.wait('__tj.cine === "zulmatDown" || __tj.G.flags.b.zulmatDown', 10000); await a.settle();
   assert(await a.flag('zulmatDown'), 'Zulmat falls');
   await a.shot('map10-05-after');
