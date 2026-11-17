@@ -118,7 +118,8 @@ def emit():
     for key, x0, y0, x1, y1 in (('fort', 35, 21, 64, 46), ('range', 64, 46, 76, 64), ('camp', 4, 4, 28, 22), ('court', 44, 30, 58, 40)):
         L.trigger(key, x0, y0, x1, y1)
     W_ = lambda *a: a
-    L.npc('tilmash', 'TILMASH', 41.6, 25, [W_(41.6, 25, 520, 'work', 4), W_(38.6, 26.4, 260, 'talk')])
+    # The translator keeps clear of the register desk (40, 24.8), so E at the desk always reads the register.
+    L.npc('tilmash', 'TILMASH', 42.8, 25.6, [W_(42.8, 25.6, 520, 'work', 6), W_(37.2, 25.6, 260, 'talk')])
     L.npc('akbope', 'AKBOPE', 24, 42, [W_(24, 42, 520, 'work', 4), W_(22, 44, 260, 'talk')])
     L.npc('tatar', 'TATAR', 70, 33, [W_(70, 33, 420, 'idle'), W_(72, 35, 260, 'talk')])
     L.npc('sarbaz', 'SARBAZ', 20, 15, [W_(20, 15, 480, 'idle'), W_(16, 16, 260, 'talk')])

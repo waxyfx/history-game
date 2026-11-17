@@ -83,7 +83,8 @@ export function arm(E, {tunes = [], lance = 0, sabre = 0, bullets = 0, burst = 0
   for (let w = 0; w < 3; w++) E.tj_weapon_tune(w, 0, 0, 0, 0, 0);
   for (const t of tunes) E.tj_weapon_tune(...t);
   E.tj_lance(lance ? 1 : 0); E.tj_sabre(sabre ? 1 : 0); E.tj_bullets(bullets ? 1 : 0); E.tj_burst(burst || 0);
-  const s = sheetIndex(hero); if (s >= 0) E.tj_hero(s);
+  // In a party only Aidar (slot 0) changes look; Dana and Erlan keep the sheets main.js gave them.
+  const s = sheetIndex(hero); if (s >= 0 && (globalThis.__tjHeroSlot ?? 0) === 0) E.tj_hero(s);
 }
 
 // A training target is hit by a fresh melee strike started near it. Returns a per-frame watcher.

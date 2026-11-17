@@ -536,7 +536,7 @@ function startParty(code) {
         party.peers.set(m.id, {...p, eslot: i + 1, slot: m.slot});
         if (!known.has(m.id) && known.size) toast(`${SPEAKERS[HEROES[m.slot]][lang]} ${t('joined')}`);
       });
-      E.tj_hero(SH[HEROES[mySlot]] ?? 0);
+      globalThis.__tjHeroSlot = mySlot; E.tj_hero(SH[HEROES[mySlot]] ?? 0);
       E.tj_party(party.size, party.host ? 0 : 1);
       party.net?.send('fl', {flags: G.flags});
       applyWorld(G); updateHud(true);
@@ -630,12 +630,20 @@ function load(silent) {
     return false;
   }
 }
+// «Топпен ойнау» (?coop=1): the team forms first — the party panel opens before the level's first scene, and the
+// journey begins when it is closed, so everyone starts MAP01 from its beginning together.
+let coopFirst = false;
 function newGame() {
   E.tj_init();
   G.flags = newFlags(); G.local = {granted: [], attempts: {}, seen: [], crystal: 0}; G.armed = null; G.forceNpc = true;
   E.tj_party(party.size, party.host ? 0 : 1); E.tj_hero(SH[HEROES[party.slot]] ?? 0);
   applyWorld(G); lastZone = -1; updateHud(true);
-  if (party.slot === 0) { $('fade').style.transition = 'none'; $('fade').style.opacity = 1; setTimeout(() => LV.begin(quest), 200); }
+  if (party.slot === 0 && coopFirst) {
+    coopFirst = false; $('fade').style.opacity = 0;
+    const go = () => { $('fade').style.transition = 'none'; $('fade').style.opacity = 1; setTimeout(() => LV.begin(quest), 200); };
+    const waitClosed = () => (panelOpen ? setTimeout(waitClosed, 300) : go());
+    setTimeout(() => { coopPanel(); setTimeout(waitClosed, 700); }, 300);
+  } else if (party.slot === 0) { $('fade').style.transition = 'none'; $('fade').style.opacity = 1; setTimeout(() => LV.begin(quest), 200); }
   else $('fade').style.opacity = 0;
 }
 function changed() { flagsDirty = true; updateHud(true); }
@@ -720,7 +728,7 @@ function updateHud(force) {
   $('ammo-icon').innerHTML = iconHTML(itemIcon(4));
   $('slots').innerHTML = [1, 2, 3].map(itemIcon).map((n, i) => {
     const has = E.tj_item_count(i + 1) > 0;
-    return `<button data-weapon="${i}" class="${weapon === i ? 'on' : ''}" ${has ? '' : 'disabled'} title="${esc(t('weapon')[i])}"><kbd>${i + 1}</kbd>${iconHTML(n)}</button>`;
+    return `<button data-weapon="${i}" class="${weapon === i ? 'on' : ''}" ${has ? '' : 'disabled'} title="${esc(LV?.items?.[i + 1] ? itemList()[i + 1][0] : t('weapon')[i])}"><kbd>${i + 1}</kbd>${iconHTML(n)}</button>`;
   }).join('');
   $('slots').querySelectorAll('[data-weapon]').forEach(b => b.onclick = () => equip(+b.dataset.weapon));
   renderBelt();
@@ -1042,13 +1050,14 @@ async function boot() {
         if (getLang() !== lang) { lang = getLang(); document.documentElement.lang = lang; updateHud(true); }
         comicOpen = false; E.tj_pause(0); lastTime = performance.now(); acc = 0; musicForZone(true); canvas.focus({preventScroll: true});
       },
-      film: (fn, id = 'film' + LV.id) => { $('viewport').classList.add('film'); return playCutscene(id, fn); }, gotoLevel: n => { save(true); location.href = '/rpg.html' + (n > 1 ? '?level=' + n : ''); }, spawnFx: (p, type, n) => E.tj_spawn_fx(type, p[0], p[1], n),
+      film: (fn, id = 'film' + LV.id) => { $('viewport').classList.add('film'); return playCutscene(id, fn); }, gotoLevel: n => { save(true); const q = [n > 1 ? 'level=' + n : '', party.net?.code ? 'party=' + party.net.code : ''].filter(Boolean).join('&'); location.href = '/rpg.html' + (q ? '?' + q : ''); }, spawnFx: (p, type, n) => E.tj_spawn_fx(type, p[0], p[1], n),
     });
     quest = createQuest(G);
     $('loading').remove();
     resize();
     $('hotbar').addEventListener('pointerdown', e => e.stopPropagation());
     const params = new URLSearchParams(location.search);
+    coopFirst = params.has('coop');
     if (params.has('film') && LV.comic) { // Watch the level's cinematic on its own, then the level opens as usual.
       if (!load(true)) { newGame(); startOfficial(true); } else $('fade').style.opacity = 0;
       setTimeout(() => G.comic(), 300);
@@ -1063,7 +1072,7 @@ async function boot() {
       newGame(); startOfficial(true);
     } else if (load(true)) { $('fade').style.opacity = 0; startOfficial(false); }
     else { newGame(); startOfficial(true); }
-    if (params.has('coop')) setTimeout(() => !cine && coopPanel(), 400);
+    if (coopFirst) { coopFirst = false; const openCoop = () => (cine || dialogBusy || panelOpen ? setTimeout(openCoop, 500) : coopPanel()); setTimeout(openCoop, 400); }   // a saved game: the panel after the scene
     const code = new URLSearchParams(location.search).get('party');
     if (code && /^[A-Z0-9]{6}$/.test(code)) startParty(code);
     canvas.focus({preventScroll: true});

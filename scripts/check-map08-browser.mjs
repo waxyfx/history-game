@@ -56,7 +56,7 @@ try {
   assert(B.seen.comics > 0, 'the comic «Өрт» played');
   assert(await a.flag('ink'));
   await a.use('officedesk');
-  assert(await a.flag('page')); assert.equal(await a.stage(), 'home');
+  assert(await a.flag('page'), 'page: ' + JSON.stringify(await a.js('({stage: __tj.LV.questStage(__tj.G.flags), b: __tj.G.flags.b, focus: __tj.E.tj_state(6), panel: __tj.panelOpen, cine: __tj.cine})'))); assert.equal(await a.stage(), 'home');
   const res = await a.finish('gate8');
   assert.equal(res.score, '100 / 100'); assert(res.pass); assert.equal(res.page, 4); assert.equal(res.secrets, 6);
   assert.deepEqual([...new Set(B.seen.trials)].sort(), Object.keys(B.KEY).sort(), 'all eight trials');

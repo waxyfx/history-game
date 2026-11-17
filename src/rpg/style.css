@@ -47,7 +47,8 @@ html, body { height: 100%; overflow: hidden; background: #050909; }
 .ally { width: 9em; background: #0b1416cc; border-radius: .4em; padding: .2em .45em .35em; font-size: .8em; border-left: .25em solid var(--teal); }
 .ally.s1 { border-color: #86a6c8; } .ally.s2 { border-color: #f0b878; }
 .ally span { display: block; font-weight: 700; } .ally i { display: block; height: .35em; background: #4ea59a; border-radius: 1em; }
-.hud-tr { right: 1em; top: 1em; max-width: 46%; text-align: right; background: #0b1416cc; border: 1px solid #ffffff1a; border-radius: .6em; padding: .4em .7em; }
+/* Desktop: the minimap in the top-right corner, the zone name and the objective right under it. */
+.hud-tr { right: 1em; top: calc(1.6em + var(--s) * 56px); max-width: 46%; text-align: right; background: #0b1416cc; border: 1px solid #ffffff1a; border-radius: .6em; padding: .4em .7em; }
 .hud-tr small { display: block; color: var(--gold2); font-size: .72em; letter-spacing: .12em; text-transform: uppercase; }
 .hud-tr b { font-size: .95em; display: block; }
 #obj-detail { display: block; font-size: .72em; color: #cfd6c8; margin-top: .15em; }
@@ -69,8 +70,9 @@ html, body { height: 100%; overflow: hidden; background: #050909; }
 .ammo { display: flex; align-items: center; gap: .1em; background: #0b1416d9; border-radius: .45em; padding: .2em .6em .2em .2em; border: 1px solid #ffffff1a; }
 .ammo .icon { transform: scale(calc(var(--s) * .26)); margin: -.3em -.2em; }
 .icon { display: inline-block; width: 32px; height: 32px; background-image: var(--atlas); background-size: var(--atlas-size); image-rendering: pixelated; flex: none; }
-.minimap { right: 1em; bottom: 1em; width: calc(var(--s) * 56px); height: auto; image-rendering: pixelated; border: 2px solid #e2b45a99; border-radius: .4em; background: #000; opacity: .92; box-shadow: 0 .3em 1em #0008; }
+.minimap { right: 1em; top: 1em; width: calc(var(--s) * 56px); height: auto; image-rendering: pixelated; border: 2px solid #e2b45a99; border-radius: .4em; background: #000; opacity: .92; box-shadow: 0 .3em 1em #0008; }
 .minimap.hidden { display: none; }
+.viewport:has(.bars.on) .minimap { visibility: hidden; }   /* the cutscene's skip button takes that corner */
 .prompt { left: 50%; bottom: 4.6em; transform: translateX(-50%); background: #0b1416e6; border: 1px solid #e2b45a88; border-radius: 2em; padding: .35em .9em; font-weight: 700; font-size: .95em; white-space: nowrap; }
 .banner { left: 50%; top: 22%; transform: translate(-50%, -.4em); font-size: 1.8em; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; color: var(--gold2);
   text-shadow: 0 .1em 0 #000, 0 0 1em #000; opacity: 0; transition: opacity .6s, transform .6s; white-space: nowrap; }
@@ -163,6 +165,7 @@ html, body { height: 100%; overflow: hidden; background: #050909; }
   .hotbar .desk { display: none; }
   .hotbar { bottom: .4em; }
   .minimap { left: calc(1em + env(safe-area-inset-left)); right: auto; top: 3.4em; bottom: auto; width: calc(var(--s) * 38px); }
+  .hud-tr { top: 1em; }   /* on touch screens the map sits top-left, the objective keeps the top-right corner */
   .acts { bottom: 1.2em; }
   /* While a line, a panel or a cutscene is on screen the controls step aside (tap the line to continue). */
   .viewport:has(.dlg:not([hidden])) .touch, .viewport:has(.panel:not([hidden])) .touch, .viewport:has(.bars.on) .touch { visibility: hidden; }
