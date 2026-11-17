@@ -180,3 +180,18 @@ dialog.admin-modal h2 { font-size: 20px; font-weight: 600; margin-bottom: 16px; 
 .gate-card button.gate-google{background:#f1ead6;color:#1a1208;display:flex;align-items:center;justify-content:center;gap:8px}
 .gate-card button.gate-google::before{content:"G";font:900 15px/1 system-ui;color:#4285f4}
 .gate-or{margin:0;text-align:center;font-size:12px;color:#7f8f84}
+
+/* Real-data panel (src/admin/admin.js) */
+.kpi-sub{margin-top:8px;font-size:12px;color:var(--text-muted)}
+.section-title{font-size:16px;margin:8px 0 12px}
+.empty-note{padding:24px;text-align:center;color:var(--text-muted);border:1px dashed var(--border);border-radius:6px}
+.hint{font-size:12px;color:var(--text-muted);margin:0 0 14px}
+.muted{color:var(--text-muted)}
+.filter-row{display:flex;gap:8px;align-items:center;margin-bottom:14px;font-size:13px;color:var(--text-muted)}
+.filter-row select,select.role-select{background:var(--bg-sidebar);border:1px solid var(--border);color:#e9e3cf;padding:6px 10px;border-radius:4px}
+select.role-select:disabled{opacity:.6}
+td.person{display:flex;gap:10px;align-items:center}
+td.person img{width:28px;height:28px;border-radius:50%;flex:none}
+td.person small{display:block;color:var(--text-muted);font-size:11px}
+.admin-alert{margin:12px 24px 0;padding:10px 14px;border-radius:6px;border:1px solid #2f5d4a;background:#0f241d;color:#b6e8c9;font-size:13px}
+.admin-alert.error{border-color:#7f1d1d;background:#2d1a1a;color:#fca5a5}

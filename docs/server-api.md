@@ -46,7 +46,18 @@ RPC (authenticated):
   `insert into private.user_roles(user_id, role) select id, 'admin' from auth.users where email = 'admin@ваш-домен' on conflict (user_id) do update set role = 'admin';`
   Чтобы входить логином `Admin`, задайте `VITE_ADMIN_EMAIL=admin@ваш-домен`. Используйте длинный пароль: простой пароль легко подобрать.
 - **Без Supabase, только `npm run dev`:** демо-вход из `.env.local` (`VITE_DEV_ADMIN_LOGIN`, `VITE_DEV_ADMIN_PASSWORD_SHA256` — SHA-256 пароля, не сам пароль). Этот путь вырезается из production-сборки и не даёт серверных прав: панель показывает демо-данные.
-- Браузерная проверка: `ADMIN_CHECK_LOGIN=... ADMIN_CHECK_PASSWORD=... node scripts/check-admin-browser.mjs <url>`.
+- Браузерная проверка: `ADMIN_CHECK_LOGIN=... ADMIN_CHECK_PASSWORD=... node scripts/check-admin-browser.mjs <url>` (проверяет демо-панель, без Supabase).
+
+## Реальная админ-панель (018)
+
+С Supabase `gate.js` загружает `src/admin/admin.js`, без Supabase — демо `src/admin/admin-demo.js`. Реальная панель читает только данные 2D-кампании; все функции — teacher/admin (`private.require_teacher_or_admin`):
+
+- `admin_overview()` — число участников по ролям, результаты, доля прохождения, статистика по каждому уровню (попытки, игроки, прошедшие, средний/лучший %, среднее время, активные забеги), последние 10 результатов.
+- `admin_list_users(p_search, p_limit, p_offset)` — профили с ролью и сводкой результатов; email только для `admin`; поиск — буквальная подстрока по имени (и email у admin).
+- `admin_trial_stats(p_level)` — по каждому испытанию уровня: сколько ответили и сколько выбрали верно в завершённых забегах. Ключи ответов не возвращаются.
+- Плюс существующие `admin_get_level_results` (006) и `admin_set_user_role` (006, только admin; свою роль панель менять не даёт).
+
+Экраны: Басқару тақтасы, Қатысушылар (смена роли), Нәтижелер (фильтр по уровню), Деңгейлер, Сынақтар. Функции 004 (`admin_get_dashboard`, `admin_get_sessions`, `dynamic_quizzes` и т.д.) остались для совместимости, но считают таблицы старой 3D-версии. Тест: `tests/admin-real.test.mjs`.
 
 ## Соревновательная система (007)
 

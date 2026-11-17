@@ -25,8 +25,9 @@ async function serverRole() {
 }
 async function openPanel(label, role = 'admin') {
   app.innerHTML = '';
-  await import('./admin.js');
-  // Show the panel in the signed-in role (the demo panel otherwise starts as teacher).
+  // Supabase configured: the real panel (server data and roles). Otherwise the local demo panel.
+  if (db) await import('./admin.js'); else await import('./admin-demo.js');
+  // Demo panel only: show it in the signed-in role (it otherwise starts as teacher).
   const sel = document.getElementById('role-select');
   if (sel && sel.value !== role) { sel.value = role; sel.dispatchEvent(new Event('change', {bubbles: true})); }
   const bar = document.createElement('div');

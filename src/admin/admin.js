@@ -1,685 +1,259 @@
-import { escapeHtml } from './escape.js';
+// Admin panel on real data: Google-signed-in participants, official runs and results of the 2D campaign.
+// Server functions (all teacher/admin-only on the server): admin_overview, admin_list_users,
+// admin_trial_stats (migration 018), admin_get_level_results and admin_set_user_role (006), get_my_role.
+// Without Supabase the gate loads the demo panel (admin-demo.js) instead.
+import {escapeHtml as esc} from './escape.js';
 import './admin.css';
-import { ALL_EPOCHS, ALL_EPOCH_QUIZZES } from '../rpg/campaign.js';
-import { HISTORICAL_QUIZZES } from '../rpg/story.js';
+import {db} from '../api.js';
+import {ALL_EPOCHS} from '../rpg/campaign.js';
+import {LEVEL_IDS} from '../rpg/levels.js';
 
-// Reactive state for the admin panel
-const state = {
-  activeTab: 'dashboard',
-  role: 'teacher', // 'teacher' | 'admin' | 'player'
-  searchQuery: '',
-  selectedEpoch: 1,
-  sessions: [
-    { id: 'sess-001', code: 'TRK9024A1B', title: '7-сынып: Тас дәуірі және Қола', status: 'started', host: 'Айгүл Мұғалім', members: 24, created_at: '2026-11-11 14:30' },
-    { id: 'sess-002', code: 'TRK8812K9Z', title: '8-сынып: Сақтар мен Түркілер', status: 'lobby', host: 'Дәурен Ұстаз', members: 18, created_at: '2026-11-11 16:00' },
-    { id: 'sess-003', code: 'TRK7721X4M', title: 'Сынақ жарысы: Топтық бақталастық', status: 'closed', host: 'Айгүл Мұғалім', members: 32, created_at: '2026-11-10 11:15' }
-  ],
-  players: [
-    { id: 'p1', name: 'Бексұлтан Серік', role: 'player', runs: 3, score: 260, level: 3, last_active: '2026-11-11 17:40' },
-    { id: 'p2', name: 'Аружан Қанат', role: 'player', runs: 4, score: 300, level: 3, last_active: '2026-11-11 17:35' },
-    { id: 'p3', name: 'Диас Нұрлан', role: 'player', runs: 2, score: 190, level: 2, last_active: '2026-11-11 16:50' },
-    { id: 'p4', name: 'Мадина Ерлан', role: 'player', runs: 5, score: 300, level: 3, last_active: '2026-11-11 16:20' },
-    { id: 'p5', name: 'Әлішер Төлеген', role: 'player', runs: 1, score: 100, level: 1, last_active: '2026-11-11 15:10' }
-  ],
-  epochs: ALL_EPOCHS.map(e => ({ ...e, published: true })),
-  quizzes: [
-    ...Object.values(HISTORICAL_QUIZZES).map(q => ({
-      id: q.id,
-      epoch_id: 1,
-      task_id: q.questTitle,
-      question_text: q.question,
-      options: q.options,
-      correctIndex: q.correctIndex,
-      explanation: q.explanation,
-      active: true
-    })),
-    {
-      id: 'bronze_andronov',
-      epoch_id: 2,
-      task_id: 'Андронов қышы',
-      question_text: 'Андронов мәдениетінің қыш ыдыстарына тән негізгі өрнектер қандай?',
-      options: ['Геометриялық өрнектер (үшбұрыштар, сынық сызықтар)', 'Өсімдік бейнелері', 'Құс қанаттары', 'Көне жазулар'],
-      correctIndex: 0,
-      explanation: 'Андронов мәдениетінің қыштары сынық сызықты және меандрлы геометриялық оюлармен әшекейленген.',
-      active: true
-    },
-    {
-      id: 'saka_gold',
-      epoch_id: 3,
-      task_id: 'Есік обасы',
-      question_text: '1969 жылы Есік обасынан табылған Алтын адамның бас киімінде қандай аңдардың мүсіндері бейнеленген?',
-      options: ['Қанатты аттар (пырақтар), барыс, құстар', 'Қасқыр мен түйе', 'Арыстан мен піл', 'Аққу мен балық'],
-      correctIndex: 0,
-      explanation: 'Алтын адамның конус пішінді биік бас киімінде қанатты пырақтар мен аң стиліндегі алтын пластиналар бар.',
-      active: true
-    }
-  ]
+// Trial titles live in the per-level story files (plain data, loaded only for the Trials tab).
+const STORIES = {
+  1: () => import('../rpg/story.js'), 2: () => import('../rpg/story02.js'), 3: () => import('../rpg/story03.js'),
+  4: () => import('../rpg/story04.js'), 5: () => import('../rpg/story05.js'), 6: () => import('../rpg/story06.js'),
+  7: () => import('../rpg/story07.js'), 8: () => import('../rpg/story08.js'), 9: () => import('../rpg/story09.js'),
+  10: () => import('../rpg/story10.js')
+};
+const ROLE = {student: 'Оқушы', teacher: 'Мұғалім', admin: 'Әкімші'};
+const ROLE_CLASS = {student: 'player', teacher: 'teacher', admin: 'admin'};
+const KIND = {main: 'Міндетті', final: 'Қорытынды', secret: 'Құпия', bonus: 'Бонус'};
+const TABS = {
+  dashboard: ['📊 Басқару тақтасы', 'Басқару тақтасы'],
+  users: ['👥 Қатысушылар', 'Қатысушылар мен рөлдер'],
+  results: ['🏆 Нәтижелер', 'Ресми нәтижелер'],
+  levels: ['🗺 Деңгейлер', '10 дәуір: деңгейлер статистикасы'],
+  trials: ['📝 Сынақтар', 'Сынақтар статистикасы']
 };
 
+const state = {
+  tab: 'dashboard', role: null, me: null, error: '', notice: '', loading: false,
+  overview: null, users: null, search: '', results: {}, resultsLevel: 0, trials: {}, trialsLevel: 1, titles: {}
+};
 const root = document.querySelector('#admin-app');
 const $ = id => document.getElementById(id);
 
-function renderApp() {
-  root.innerHTML = `
-    <aside class="admin-sidebar">
-      <div class="sidebar-brand">
-        <div class="mark">Т</div>
-        <div>
-          <h2>TARIKH JOLY</h2>
-          <small>ӘКІМШІЛІК ПАНЕЛЬ</small>
-        </div>
-      </div>
-      <nav class="admin-nav">
-        <button class="${state.activeTab === 'dashboard' ? 'active' : ''}" data-tab="dashboard">📊 Басқару тақтасы</button>
-        <button class="${state.activeTab === 'players' ? 'active' : ''}" data-tab="players">👥 Ойыншылар</button>
-        <button class="${state.activeTab === 'teams' ? 'active' : ''}" data-tab="teams">⚔ Топтар мен рейтинг</button>
-        <button class="${state.activeTab === 'sessions' ? 'active' : ''}" data-tab="sessions">🎮 Ойын сессиялары</button>
-        <button class="${state.activeTab === 'epochs' ? 'active' : ''}" data-tab="epochs">🗺 8 Дәуір (Деңгейлер)</button>
-        <button class="${state.activeTab === 'quizzes' ? 'active' : ''}" data-tab="quizzes">📝 Квиздер мен сұрақтар</button>
-        <button class="${state.activeTab === 'analytics' ? 'active' : ''}" data-tab="analytics">📈 Аналитика</button>
-      </nav>
-      <div class="sidebar-footer">
-        <p style="margin-bottom:8px">Қазіргі рөл:</p>
-        <div style="display:flex;align-items:center;justify-content:space-between">
-          <span class="role-badge ${state.role}">${state.role === 'admin' ? 'Бас Әкімші' : state.role === 'teacher' ? 'Мұғалім' : 'Ойыншы'}</span>
-          <select id="role-select" style="background:#132223;border:1px solid #2f4543;color:#cedabe;font-size:11px;padding:3px 6px;border-radius:3px">
-            <option value="teacher" ${state.role === 'teacher' ? 'selected' : ''}>Мұғалім</option>
-            <option value="admin" ${state.role === 'admin' ? 'selected' : ''}>Әкімші</option>
-            <option value="player" ${state.role === 'player' ? 'selected' : ''}>Ойыншы</option>
-          </select>
-        </div>
-      </div>
-    </aside>
+async function call(name, args = {}) {
+  const {data, error} = await db.rpc(name, args);
+  if (error) throw new Error(error.message);
+  return data;
+}
+const era = id => ALL_EPOCHS.find(e => e.id === id);
+const levelName = id => `MAP ${String(id).padStart(2, '0')} · ${era(id)?.title || ''}`;
+const when = t => (t ? new Date(t).toLocaleString('kk-KZ', {dateStyle: 'short', timeStyle: 'short'}) : '—');
+const mmss = s => (s == null ? '—' : `${Math.floor(s / 60)}:${String(Math.round(s) % 60).padStart(2, '0')}`);
+const pct = (a, b) => (b ? Math.round((a / b) * 100) : 0);
+const num = v => Number(v || 0);
 
-    <main class="admin-content">
-      <header class="admin-topbar">
-        <h1>${getTabTitle(state.activeTab)}</h1>
-        <div class="topbar-right">
-          <a href="/rpg.html">🎮 2D RPG Ойнау</a>
-          <a href="/">Doom Beta 0.1</a>
-        </div>
-      </header>
-
-      <p role="note" style="padding:12px 24px">ДЕМО: жасанды деректер. Өзгерістер тек осы бетте сақталады. Рөл таңдауы серверлік құқық бермейді.</p>
-      <div class="admin-section">
-        ${renderContent()}
-      </div>
-    </main>
-
-    <!-- Modal for new quiz -->
-    <dialog class="admin-modal" id="quiz-modal">
-      <h2 id="modal-title">Жаңа тарихи сұрақ қосу</h2>
-      <form id="quiz-form">
-        <div class="form-group">
-          <label>Сұрақ идентификаторы (ID):</label>
-          <input type="text" id="q-id" placeholder="мысалы: quiz_stone_fire" required />
-        </div>
-        <div class="form-group">
-          <label>Тарихи дәуір:</label>
-          <select id="q-epoch">
-            ${state.epochs.map(e => `<option value="${e.id}">${e.id}. ${e.title} (${e.subtitle})</option>`).join('')}
-          </select>
-        </div>
-        <div class="form-group">
-          <label>Тапсырма тақырыбы (Task / Location):</label>
-          <input type="text" id="q-task" placeholder="мысалы: Ошақ басындағы сұрақ" required />
-        </div>
-        <div class="form-group">
-          <label>Сұрақ мәтіні:</label>
-          <textarea id="q-text" rows="3" placeholder="Сұрақты қазақ тілінде жазыңыз..." required></textarea>
-        </div>
-        <div class="form-group">
-          <label>A нұсқасы:</label>
-          <input type="text" id="q-opt-0" required />
-        </div>
-        <div class="form-group">
-          <label>B нұсқасы:</label>
-          <input type="text" id="q-opt-1" required />
-        </div>
-        <div class="form-group">
-          <label>C нұсқасы:</label>
-          <input type="text" id="q-opt-2" required />
-        </div>
-        <div class="form-group">
-          <label>D нұсқасы:</label>
-          <input type="text" id="q-opt-3" required />
-        </div>
-        <div class="form-group">
-          <label>Дұрыс нұсқаны таңдаңыз:</label>
-          <select id="q-correct">
-            <option value="0">A нұсқасы</option>
-            <option value="1">B нұсқасы</option>
-            <option value="2">C нұсқасы</option>
-            <option value="3">D нұсқасы</option>
-          </select>
-        </div>
-        <div class="form-group">
-          <label>Тарихи түсіндірме (Explanation):</label>
-          <textarea id="q-exp" rows="2" placeholder="Оқушыға дұрыс жауаптың тарихи мәнін түсіндіру..." required></textarea>
-        </div>
-        <div class="modal-actions">
-          <button type="button" class="btn btn-secondary" id="modal-cancel">Болдырмау</button>
-          <button type="submit" class="btn">Сақтау</button>
-        </div>
-      </form>
-    </dialog>
-
-    <!-- Modal for new session -->
-    <dialog class="admin-modal" id="session-modal">
-      <h2>Жаңа сыныптық сессия ашу</h2>
-      <form id="session-form">
-        <div class="form-group">
-          <label>Сессия атауы (сынып немесе топ):</label>
-          <input type="text" id="sess-title" placeholder="мысалы: 7 «А» сыныбы — Тарих сабағы" required />
-        </div>
-        <div class="form-group">
-          <label>Қосылу коды (автоматты 10 таңбалы):</label>
-          <input type="text" id="sess-code" readonly style="font-family:monospace;letter-spacing:2px;font-weight:bold" />
-        </div>
-        <div class="modal-actions">
-          <button type="button" class="btn btn-secondary" id="sess-cancel">Болдырмау</button>
-          <button type="submit" class="btn">Сессияны бастау</button>
-        </div>
-      </form>
-    </dialog>
-  `;
-
-  attachEvents();
+// ------------------------------------------------------------------ data loading
+async function load(force = false) {
+  state.loading = true; state.error = ''; render();
+  try {
+    if (state.tab === 'dashboard' || state.tab === 'levels') {
+      if (force || !state.overview) state.overview = await call('admin_overview');
+    } else if (state.tab === 'users') {
+      if (force || !state.users) state.users = await call('admin_list_users', {p_search: state.search || null, p_limit: 300, p_offset: 0});
+    } else if (state.tab === 'results') {
+      const key = state.resultsLevel;
+      if (force || !state.results[key]) state.results[key] = await call('admin_get_level_results', {p_level: key || null, p_limit: 300, p_offset: 0});
+    } else if (state.tab === 'trials') {
+      const n = state.trialsLevel;
+      if (force || !state.trials[n]) state.trials[n] = await call('admin_trial_stats', {p_level: n});
+      if (!state.titles[n] && STORIES[n]) {
+        const m = await STORIES[n]();
+        state.titles[n] = Object.fromEntries(Object.values(m.HISTORICAL_QUIZZES || {}).map(q => [q.id, typeof q.title === 'object' ? q.title.kk : q.title]));
+      }
+    }
+  } catch (e) {
+    state.error = e.message || String(e);
+  } finally {
+    state.loading = false; render();
+  }
 }
 
-function getTabTitle(tab) {
-  const titles = {
-    dashboard: 'Басқару тақтасы (Dashboard)',
-    players: 'Ойыншылар мен оқушылар',
-    teams: 'Командалық рейтинг және статистика',
-    sessions: 'Ойын сессияларын басқару',
-    epochs: '8 Тарихи дәуір (Карталар мен тапсырмалар)',
-    quizzes: 'Квиздер мен сұрақтарды басқару (CRUD)',
-    analytics: 'Оқыту аналитикасы мен нәтижелер'
-  };
-  return titles[tab] || 'Әкімшілік панель';
+// ------------------------------------------------------------------ screens
+function kpi(title, value, sub = '') {
+  return `<div class="kpi-card"><h3>${esc(title)}</h3><div class="number">${value}</div>${sub ? `<p class="kpi-sub">${sub}</p>` : ''}</div>`;
 }
+function resultBadge(passed) {
+  return `<span class="role-badge ${passed ? 'teacher' : 'player'}">${passed ? 'Өтті' : 'Өтпеді'}</span>`;
+}
+const EMPTY_RESULTS = 'Әзірге ресми нәтиже жоқ. Оқушылар Google арқылы кіріп, деңгейді аяқтағанда осында көрінеді.';
 
-function renderContent() {
-  if (state.role === 'player') {
-    return `
-      <div style="background:#2d1a1a;border:1px solid #7f1d1d;padding:24px;border-radius:6px;color:#fca5a5">
-        <h3 style="margin-bottom:8px">Құқық шектелген: Ойыншы рөлі</h3>
-        <p>Сіз қазір «Ойыншы» ретінде кіріп тұрсыз. Әкімшілік функцияларға (сұрақтарды өңдеу, сессия құру, нәтижелерді көру) тек <strong>Мұғалім</strong> немесе <strong>Әкімші</strong> қол жеткізе алады.</p>
-        <p style="margin-top:12px;font-size:12px">Төменгі сол жақтағы рөл ауыстырғыштан рөліңізді «Мұғалім» немесе «Әкімші» күйіне ауыстыра аласыз.</p>
-      </div>
-    `;
-  }
-
-  switch (state.activeTab) {
-    case 'dashboard': return renderDashboard();
-    case 'players': return renderPlayers();
-    case 'teams': return renderTeams();
-    case 'sessions': return renderSessions();
-    case 'epochs': return renderEpochs();
-    case 'quizzes': return renderQuizzes();
-    case 'analytics': return renderAnalytics();
-    default: return renderDashboard();
-  }
+function resultsTable(rows, withName = true) {
+  if (!rows.length) return `<p class="empty-note">${EMPTY_RESULTS}</p>`;
+  return `<div class="table-container"><table class="admin-table"><thead><tr>
+    ${withName ? '<th>Қатысушы</th>' : ''}<th>Деңгей</th><th>Ұпай</th><th>%</th><th>Нәтиже</th><th>Талпыныс</th><th>Уақыт</th><th>Аяқталды</th>
+  </tr></thead><tbody>${rows.map(r => `<tr>
+    ${withName ? `<td><strong>${esc(r.name || '—')}</strong></td>` : ''}
+    <td>${esc(levelName(r.level_id))}</td>
+    <td><strong style="color:var(--gold-primary)">${num(r.score)}</strong> / ${num(r.max_score)}</td>
+    <td>${Math.round(num(r.percentage))}%</td>
+    <td>${resultBadge(r.passed)}</td>
+    <td>${num(r.attempt_number)}</td>
+    <td>${mmss(r.duration_seconds)}</td>
+    <td>${esc(when(r.finished_at))}</td>
+  </tr>`).join('')}</tbody></table></div>`;
 }
 
 function renderDashboard() {
-  const totalPlayers = state.players.length;
-  const activeSessions = state.sessions.filter(s => s.status !== 'closed').length;
-  const avgScore = Math.round(state.players.reduce((a, b) => a + b.score, 0) / totalPlayers);
-  const completedRuns = state.players.filter(p => p.score >= 300).length;
-
-  return `
-    <div class="kpi-grid">
-      <div class="kpi-card">
-        <h3>Барлық оқушылар</h3>
-        <div class="number">${totalPlayers}</div>
-      </div>
-      <div class="kpi-card">
-        <h3>Белсенді сессиялар</h3>
-        <div class="number">${activeSessions}</div>
-      </div>
-      <div class="kpi-card">
-        <h3>Орташа нәтиже</h3>
-        <div class="number">${avgScore} <small style="font-size:16px;color:#95a593">/ 300</small></div>
-      </div>
-      <div class="kpi-card">
-        <h3>Аяқталған дәуірлер</h3>
-        <div class="number">${completedRuns}</div>
-      </div>
+  const o = state.overview;
+  if (!o) return '';
+  return `<div class="kpi-grid">
+      ${kpi('Тіркелгендер', num(o.users), `Оқушы ${num(o.students)} · Мұғалім ${num(o.teachers)} · Әкімші ${num(o.admins)}`)}
+      ${kpi('Ресми нәтижелер', num(o.results), `${num(o.players_with_results)} қатысушы`)}
+      ${kpi('Өткендер', num(o.passed), `${pct(num(o.passed), num(o.results))}% өту үлесі`)}
+      ${kpi('Орташа нәтиже', `${Math.round(num(o.avg_percentage))}%`)}
+      ${kpi('Қазір ойнап жатыр', num(o.runs_active), 'аяқталмаған ресми ойындар')}
     </div>
-
-    <h3 style="font-size:16px;margin-bottom:12px">Соңғы белсенді сессиялар</h3>
-    <div class="table-container">
-      <table class="admin-table">
-        <thead>
-          <tr>
-            <th>Сессия атауы</th>
-            <th>Коды</th>
-            <th>Мұғалім</th>
-            <th>Қатысушылар</th>
-            <th>Күйі</th>
-          </tr>
-        </thead>
-        <tbody>
-          ${state.sessions.map(s => `
-            <tr>
-              <td><strong>${escapeHtml(s.title)}</strong></td>
-              <td><code style="background:#0b1617;padding:2px 6px;border-radius:3px">${escapeHtml(s.code)}</code></td>
-              <td>${escapeHtml(s.host)}</td>
-              <td>${s.members} оқушы</td>
-              <td><span class="role-badge ${s.status === 'started' ? 'teacher' : s.status === 'lobby' ? 'admin' : 'player'}">${s.status === 'started' ? 'Ойналуда' : s.status === 'lobby' ? 'Күтуде' : 'Аяқталған'}</span></td>
-            </tr>
-          `).join('')}
-        </tbody>
-      </table>
-    </div>
-  `;
+    <h3 class="section-title">Соңғы нәтижелер</h3>
+    ${resultsTable(o.recent || [])}`;
 }
 
-function renderPlayers() {
-  const filtered = state.players.filter(p => p.name.toLowerCase().includes(state.searchQuery.toLowerCase()));
-  return `
-    <div class="search-bar">
-      <input type="text" id="player-search" placeholder="Оқушының атын іздеу..." value="${escapeHtml(state.searchQuery)}" />
+function renderUsers() {
+  const users = state.users || [];
+  const admin = state.role === 'admin';
+  return `<div class="search-bar">
+      <input type="search" id="user-search" placeholder="${admin ? 'Аты немесе email бойынша іздеу…' : 'Аты бойынша іздеу…'}" value="${esc(state.search)}" />
     </div>
-    <div class="table-container">
-      <table class="admin-table">
-        <thead>
-          <tr>
-            <th>Оқушының аты</th>
-            <th>Рөлі</th>
-            <th>Талпыныстар саны</th>
-            <th>Жоғары балл</th>
-            <th>Жеткен дәуірі</th>
-            <th>Соңғы белсенділік</th>
-          </tr>
-        </thead>
-        <tbody>
-          ${filtered.map(p => `
-            <tr>
-              <td><strong>${escapeHtml(p.name)}</strong></td>
-              <td><span class="role-badge ${escapeHtml(p.role)}">${escapeHtml(p.role)}</span></td>
-              <td>${p.runs} рет</td>
-              <td><strong style="color:var(--gold-primary)">${p.score}</strong></td>
-              <td>MAP 0${p.level}</td>
-              <td>${escapeHtml(p.last_active)}</td>
-            </tr>
-          `).join('')}
-        </tbody>
-      </table>
-    </div>
-  `;
+    ${admin ? '<p class="hint">Рөлді өзгерту бірден серверде сақталады. Өз рөліңізді өзгерте алмайсыз.</p>' : '<p class="hint">Рөлдерді тек Әкімші өзгерте алады.</p>'}
+    ${users.length ? `<div class="table-container"><table class="admin-table"><thead><tr>
+      <th>Қатысушы</th><th>Рөл</th><th>Талпыныстар</th><th>Өткен деңгейлер</th><th>Үздік ұпайлар қосындысы</th><th>Соңғы белсенділік</th>
+    </tr></thead><tbody>${users.map(u => `<tr>
+      <td class="person">${u.avatar_url && /^https:\/\//.test(u.avatar_url) ? `<img src="${esc(u.avatar_url)}" alt="" referrerpolicy="no-referrer">` : ''}
+        <div><strong>${esc(u.name)}</strong>${u.email ? `<small>${esc(u.email)}</small>` : ''}</div></td>
+      <td>${admin ? `<select class="role-select" data-user="${esc(u.user_id)}" ${u.user_id === state.me ? 'disabled title="Өз рөліңізді өзгерте алмайсыз"' : ''}>
+          ${Object.entries(ROLE).map(([v, l]) => `<option value="${v}" ${u.role === v ? 'selected' : ''}>${l}</option>`).join('')}
+        </select>` : `<span class="role-badge ${ROLE_CLASS[u.role] || 'player'}">${esc(ROLE[u.role] || u.role)}</span>`}</td>
+      <td>${num(u.attempts)}</td>
+      <td>${num(u.levels_passed)}${u.max_level_passed ? ` <small class="muted">(соңғысы MAP ${String(u.max_level_passed).padStart(2, '0')})</small>` : ''}</td>
+      <td><strong style="color:var(--gold-primary)">${num(u.best_total)}</strong></td>
+      <td>${esc(when(u.last_active))}</td>
+    </tr>`).join('')}</tbody></table></div>` : `<p class="empty-note">${state.search ? 'Ешкім табылмады.' : 'Әзірге ешкім кірмеген.'}</p>`}`;
 }
 
-function renderTeams() {
-  return `
-    <div class="kpi-grid">
-      <div class="kpi-card" style="border-left:4px solid #38bdf8">
-        <h3>Көк Бөрі (A тобы)</h3>
-        <div class="number">650 <small style="font-size:16px;color:#95a593">ұпай</small></div>
-        <p style="margin-top:8px;font-size:12px;color:var(--text-muted)">14 оқушы белсенді</p>
-      </div>
-      <div class="kpi-card" style="border-left:4px solid #f59e0b">
-        <h3>Алтын Қыран (B тобы)</h3>
-        <div class="number">710 <small style="font-size:16px;color:#95a593">ұпай</small></div>
-        <p style="margin-top:8px;font-size:12px;color:var(--text-muted)">16 оқушы белсенді</p>
-      </div>
-    </div>
-
-    <h3 style="font-size:16px;margin-bottom:12px">Командалық жарыс рейтингі</h3>
-    <div class="table-container">
-      <table class="admin-table">
-        <thead>
-          <tr>
-            <th>Орын</th>
-            <th>Команда</th>
-            <th>Жалпы жинаған балл</th>
-            <th>Орташа көрсеткіш</th>
-            <th>Қатысушылар</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr>
-            <td>🥇 1-орын</td>
-            <td><strong style="color:#f59e0b">Алтын Қыран (B тобы)</strong></td>
-            <td>710 ұпай</td>
-            <td>88.75%</td>
-            <td>16 оқушы</td>
-          </tr>
-          <tr>
-            <td>🥈 2-орын</td>
-            <td><strong style="color:#38bdf8">Көк Бөрі (A тобы)</strong></td>
-            <td>650 ұпай</td>
-            <td>81.25%</td>
-            <td>14 оқушы</td>
-          </tr>
-        </tbody>
-      </table>
-    </div>
-  `;
+function levelOptions(selected, withAll) {
+  return `${withAll ? `<option value="0" ${selected === 0 ? 'selected' : ''}>Барлық деңгейлер</option>` : ''}
+    ${LEVEL_IDS.map(n => `<option value="${n}" ${selected === n ? 'selected' : ''}>${esc(levelName(n))}</option>`).join('')}`;
 }
 
-function renderSessions() {
-  return `
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px">
-      <p style="font-size:13px;color:var(--text-muted)">Сыныпта сабақ өткізу үшін жаңа сессия ашып, оқушыларға қосылу кодын беріңіз.</p>
-      <button class="btn" id="create-session-btn">+ Жаңа сессия құру</button>
-    </div>
-    <div class="table-container">
-      <table class="admin-table">
-        <thead>
-          <tr>
-            <th>Сессия атауы</th>
-            <th>Қосылу коды</th>
-            <th>Мұғалім</th>
-            <th>Қатысушылар</th>
-            <th>Күйі</th>
-            <th>Әрекеттер</th>
-          </tr>
-        </thead>
-        <tbody>
-          ${state.sessions.map(s => `
-            <tr>
-              <td><strong>${escapeHtml(s.title)}</strong></td>
-              <td><code style="font-size:14px;background:#0b1617;padding:4px 8px;border-radius:4px;color:var(--gold-primary);font-weight:bold">${escapeHtml(s.code)}</code></td>
-              <td>${escapeHtml(s.host)}</td>
-              <td>${s.members} қатысушы</td>
-              <td><span class="role-badge ${s.status === 'started' ? 'teacher' : s.status === 'lobby' ? 'admin' : 'player'}">${s.status === 'started' ? 'Белсенді' : s.status === 'lobby' ? 'Күтуде' : 'Жабылған'}</span></td>
-              <td>
-                ${s.status !== 'closed' ? `<button class="btn btn-danger" style="font-size:11px;padding:4px 8px" onclick="window.adminCloseSession('${s.id}')">Жабу</button>` : '<small style="color:var(--text-muted)">Аяқталды</small>'}
-              </td>
-            </tr>
-          `).join('')}
-        </tbody>
-      </table>
-    </div>
-  `;
+function renderResults() {
+  return `<div class="filter-row"><label for="results-level">Деңгей:</label>
+      <select id="results-level">${levelOptions(state.resultsLevel, true)}</select></div>
+    ${resultsTable(state.results[state.resultsLevel] || [])}`;
 }
 
-function renderEpochs() {
-  return `
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
-      <p style="font-size:13px;color:var(--text-muted)">Tarikh Joly сегіз дәуірден тұрады. Бас әкімші дәуірлерді жариялауды немесе жасыруды басқара алады.</p>
-    </div>
-    <div class="epoch-list-grid">
-      ${state.epochs.map(e => `
-        <div class="epoch-admin-card ${e.published ? 'published' : 'draft'}">
-          <span class="role-badge ${e.published ? 'teacher' : 'player'}" style="margin-bottom:8px">${e.published ? 'Жарияланған' : 'Жабық'}</span>
-          <h4>MAP 0${e.id}: ${e.title}</h4>
-          <small style="color:var(--gold-dim);display:block;margin-bottom:6px">${e.subtitle} · ${e.period}</small>
-          <p>${e.description}</p>
-          <div class="epoch-actions">
-            <span style="font-size:11px;color:var(--text-muted)">${state.quizzes.filter(q => q.epoch_id === e.id).length} сұрақ бар</span>
-            ${state.role === 'admin' ? `
-              <button class="btn btn-secondary" style="font-size:11px;padding:4px 8px" onclick="window.adminToggleEpoch(${e.id})">
-                ${e.published ? 'Жасыру' : 'Жариялау'}
-              </button>
-            ` : ''}
-          </div>
-        </div>
-      `).join('')}
-    </div>
-  `;
+function renderLevels() {
+  const o = state.overview;
+  if (!o) return '';
+  const rows = o.levels || [];
+  return `<p class="hint">Әр деңгей 100 ұпайдан бағаланады, сервер есептейді. Мұнда барлық ресми талпыныстар бойынша статистика.</p>
+    <div class="table-container"><table class="admin-table"><thead><tr>
+      <th>Деңгей</th><th>Кезең</th><th>Өту шегі</th><th>Сынақтар</th><th>Талпыныстар</th><th>Қатысушылар</th><th>Өткендер</th><th>Орташа %</th><th>Үздік %</th><th>Орташа уақыт</th><th>Қазір ойнауда</th>
+    </tr></thead><tbody>${rows.map(l => `<tr>
+      <td><strong>${esc(levelName(l.level_id))}</strong>${LEVEL_IDS.includes(l.level_id) ? '' : ' <small class="muted">(картасы жоқ)</small>'}</td>
+      <td><small>${esc(era(l.level_id)?.period || '')}</small></td>
+      <td>${num(l.pass_score)} / ${num(l.max_score)}</td>
+      <td>${num(l.trials)}</td>
+      <td>${num(l.attempts)}</td>
+      <td>${num(l.players)}</td>
+      <td>${num(l.passed_players)}</td>
+      <td>${Math.round(num(l.avg_percentage))}%</td>
+      <td>${Math.round(num(l.best_percentage))}%</td>
+      <td>${l.attempts ? mmss(l.avg_seconds) : '—'}</td>
+      <td>${num(l.runs_active)}</td>
+    </tr>`).join('')}</tbody></table></div>`;
 }
 
-function renderQuizzes() {
-  const currentQuizzes = state.quizzes.filter(q => q.epoch_id === state.selectedEpoch);
-
-  return `
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:12px">
-      <div style="display:flex;gap:8px;align-items:center">
-        <label style="font-size:13px;color:var(--text-muted)">Дәуірді таңдаңыз:</label>
-        <select id="epoch-filter" style="background:var(--bg-sidebar);border:1px solid var(--border);color:var(--text-main);padding:6px 10px;border-radius:4px">
-          ${state.epochs.map(e => `<option value="${e.id}" ${state.selectedEpoch === e.id ? 'selected' : ''}>${e.id}. ${e.title}</option>`).join('')}
-        </select>
-      </div>
-      <button class="btn" id="add-quiz-btn">+ Жаңа сұрақ қосу</button>
-    </div>
-
-    <div class="table-container">
-      <table class="admin-table">
-        <thead>
-          <tr>
-            <th>ID / Тапсырма</th>
-            <th>Сұрақ мәтіні</th>
-            <th>Дұрыс жауап</th>
-            <th>Түсіндірме</th>
-            <th>Күйі</th>
-            <th>Әрекет</th>
-          </tr>
-        </thead>
-        <tbody>
-          ${currentQuizzes.length === 0 ? `
-            <tr><td colspan="6" style="text-align:center;padding:24px;color:var(--text-muted)">Бұл дәуірге әзірге қосымша сұрақ қосылмаған. «Жаңа сұрақ қосу» түймесін басыңыз.</td></tr>
-          ` : currentQuizzes.map(q => `
-            <tr>
-              <td><strong style="color:var(--gold-primary)">${escapeHtml(q.id)}</strong><br><small style="color:var(--text-muted)">${escapeHtml(q.task_id)}</small></td>
-              <td style="max-width:280px;line-height:1.4">${escapeHtml(q.question_text)}</td>
-              <td><span style="color:var(--accent-green);font-weight:600">${escapeHtml(q.options[q.correctIndex] || q.options[0])}</span></td>
-              <td style="max-width:260px;font-size:12px;color:var(--text-muted);line-height:1.4">${escapeHtml(q.explanation)}</td>
-              <td><span class="role-badge ${q.active ? 'teacher' : 'player'}">${q.active ? 'Белсенді' : 'Өшірулі'}</span></td>
-              <td>
-                <button class="btn btn-danger" style="font-size:11px;padding:4px 8px" data-delete-quiz="${escapeHtml(q.id)}">Өшіру</button>
-              </td>
-            </tr>
-          `).join('')}
-        </tbody>
-      </table>
-    </div>
-  `;
+function renderTrials() {
+  const n = state.trialsLevel, rows = state.trials[n] || [], titles = state.titles[n] || {};
+  return `<div class="filter-row"><label for="trials-level">Деңгей:</label>
+      <select id="trials-level">${levelOptions(n, false)}</select></div>
+    <p class="hint">Аяқталған ресми ойындар бойынша. Дұрыс нұсқалар серверде жасырын сақталады, мұнда тек статистика.</p>
+    ${rows.length ? `<div class="table-container"><table class="admin-table"><thead><tr>
+      <th>Сынақ</th><th>Түрі</th><th>Ұпай</th><th>Жауап бергендер</th><th>Дұрыс жауап</th><th>Дұрыс %</th>
+    </tr></thead><tbody>${rows.map(t => `<tr>
+      <td><strong>${esc(titles[t.quiz_id] || (/_bonus_(\d+)$/.test(t.quiz_id) ? `Құпия сұрақ ${t.quiz_id.match(/_bonus_(\d+)$/)[1]}` : t.quiz_id))}</strong><br><small class="muted">${esc(t.quiz_id)}</small></td>
+      <td>${esc(KIND[t.kind] || t.kind)}</td>
+      <td>${num(t.points)}</td>
+      <td>${num(t.answered_count)}</td>
+      <td>${num(t.right_count)}</td>
+      <td>${t.answered_count ? `${pct(num(t.right_count), num(t.answered_count))}%` : '—'}</td>
+    </tr>`).join('')}</tbody></table></div>` : '<p class="empty-note">Бұл деңгейдің сынақтары серверде әлі тіркелмеген.</p>'}`;
 }
 
-function renderAnalytics() {
-  return `
-    <div class="kpi-grid">
-      <div class="kpi-card">
-        <h3>Дұрыс жауап пайызы</h3>
-        <div class="number">78.4%</div>
-      </div>
-      <div class="kpi-card">
-        <h3>1-ші әрекеттен шешкендер</h3>
-        <div class="number">64%</div>
-      </div>
-      <div class="kpi-card">
-        <h3>Орташа уақыт</h3>
-        <div class="number">4 мин</div>
-      </div>
-      <div class="kpi-card">
-        <h3>Ең жиі қате кеткен тақырып</h3>
-        <div class="number" style="font-size:18px;margin-top:8px">Чоппер мен Бифас</div>
-      </div>
-    </div>
-
-    <h3 style="font-size:16px;margin-bottom:12px">Дәуірлер бойынша оқушылардың өту статистикасы</h3>
-    <div class="table-container">
-      <table class="admin-table">
-        <thead>
-          <tr>
-            <th>Дәуір</th>
-            <th>Сұрақтар саны</th>
-            <th>Орташа балл</th>
-            <th>Сәтті өткендер</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr>
-            <td>MAP 01: Тас дәуірі</td>
-            <td>5 сұрақ</td>
-            <td>280 / 300</td>
-            <td><strong style="color:var(--accent-green)">92%</strong></td>
-          </tr>
-          <tr>
-            <td>MAP 02: Қола дәуірі</td>
-            <td>4 сұрақ</td>
-            <td>250 / 300</td>
-            <td><strong style="color:var(--accent-green)">84%</strong></td>
-          </tr>
-          <tr>
-            <td>MAP 03: Сақ дәуірі</td>
-            <td>4 сұрақ</td>
-            <td>240 / 300</td>
-            <td><strong style="color:var(--accent-green)">80%</strong></td>
-          </tr>
-        </tbody>
-      </table>
-    </div>
-  `;
-}
-
-function attachEvents() {
-  document.querySelectorAll('[data-delete-quiz]').forEach(button => {
-    button.onclick = () => window.adminDeleteQuiz(button.dataset.deleteQuiz);
-  });
-  // Navigation tabs
-  document.querySelectorAll('nav.admin-nav button').forEach(btn => {
-    btn.onclick = () => {
-      state.activeTab = btn.dataset.tab;
-      renderApp();
-    };
-  });
-
-  // Role select
-  const roleSelect = $('role-select');
-  if (roleSelect) {
-    roleSelect.onchange = e => {
-      state.role = e.target.value;
-      renderApp();
-    };
+function renderSection() {
+  if (state.loading && !hasData()) return '<p class="empty-note">Жүктелуде…</p>';
+  switch (state.tab) {
+    case 'users': return renderUsers();
+    case 'results': return renderResults();
+    case 'levels': return renderLevels();
+    case 'trials': return renderTrials();
+    default: return renderDashboard();
   }
+}
+function hasData() {
+  return {dashboard: state.overview, levels: state.overview, users: state.users, results: state.results[state.resultsLevel], trials: state.trials[state.trialsLevel]}[state.tab];
+}
 
-  // Player search
-  const searchInput = $('player-search');
-  if (searchInput) {
-    searchInput.oninput = e => {
-      state.searchQuery = e.target.value;
-      renderApp();
-      const newSearch = $('player-search');
-      if (newSearch) {
-        newSearch.focus();
-        newSearch.setSelectionRange(newSearch.value.length, newSearch.value.length);
+function render() {
+  const focused = document.activeElement?.id === 'user-search' ? document.activeElement.selectionStart : null;
+  root.innerHTML = `
+    <aside class="admin-sidebar">
+      <div class="sidebar-brand"><div class="mark">Т</div><div><h2>TARIKH JOLY</h2><small>ӘКІМШІЛІК ПАНЕЛЬ</small></div></div>
+      <nav class="admin-nav">${Object.entries(TABS).map(([k, [label]]) => `<button class="${state.tab === k ? 'active' : ''}" data-tab="${k}">${label}</button>`).join('')}</nav>
+      <div class="sidebar-footer"><p style="margin-bottom:8px">Сіздің рөліңіз (серверден):</p>
+        <span class="role-badge ${ROLE_CLASS[state.role] || 'player'}">${esc(ROLE[state.role] || '—')}</span></div>
+    </aside>
+    <main class="admin-content">
+      <header class="admin-topbar"><h1>${esc(TABS[state.tab][1])}</h1>
+        <div class="topbar-right"><button class="btn btn-secondary" id="refresh" ${state.loading ? 'disabled' : ''}>↻ Жаңарту</button><a href="/">🎮 Ойынға</a></div></header>
+      ${state.error ? `<p class="admin-alert error" role="alert">Деректер жүктелмеді: ${esc(state.error)}</p>` : ''}
+      ${state.notice ? `<p class="admin-alert" role="status">${esc(state.notice)}</p>` : ''}
+      <div class="admin-section">${renderSection()}</div>
+    </main>`;
+  attach();
+  if (focused != null && $('user-search')) { $('user-search').focus(); $('user-search').setSelectionRange(focused, focused); }
+}
+
+// ------------------------------------------------------------------ events
+let searchTimer;
+function attach() {
+  root.querySelectorAll('nav.admin-nav button').forEach(b => { b.onclick = () => { state.tab = b.dataset.tab; state.notice = ''; load(); }; });
+  $('refresh')?.addEventListener('click', () => { state.notice = ''; load(true); });
+  $('results-level')?.addEventListener('change', e => { state.resultsLevel = Number(e.target.value); load(); });
+  $('trials-level')?.addEventListener('change', e => { state.trialsLevel = Number(e.target.value); load(); });
+  $('user-search')?.addEventListener('input', e => {
+    state.search = e.target.value;
+    clearTimeout(searchTimer);
+    searchTimer = setTimeout(() => load(true), 300);
+  });
+  root.querySelectorAll('select.role-select').forEach(sel => {
+    sel.onchange = async () => {
+      const user = (state.users || []).find(u => u.user_id === sel.dataset.user);
+      sel.disabled = true;
+      try {
+        await call('admin_set_user_role', {p_user_id: sel.dataset.user, p_role: sel.value});
+        state.notice = `Рөл сақталды: ${user?.name || ''} — ${ROLE[sel.value]}.`;
+        state.overview = null;
+        await load(true);
+      } catch (e) {
+        state.error = e.message || String(e);
+        await load(true);
       }
     };
-  }
-
-  // Epoch filter in Quizzes
-  const epochFilter = $('epoch-filter');
-  if (epochFilter) {
-    epochFilter.onchange = e => {
-      state.selectedEpoch = Number(e.target.value);
-      renderApp();
-    };
-  }
-
-  // Quiz Modal
-  const addQuizBtn = $('add-quiz-btn');
-  const quizModal = $('quiz-modal');
-  const modalCancel = $('modal-cancel');
-  const quizForm = $('quiz-form');
-
-  if (addQuizBtn && quizModal) {
-    addQuizBtn.onclick = () => {
-      $('q-id').value = `quiz_ep${state.selectedEpoch}_${Date.now().toString(36)}`;
-      $('q-epoch').value = state.selectedEpoch;
-      $('q-task').value = '';
-      $('q-text').value = '';
-      $('q-opt-0').value = '';
-      $('q-opt-1').value = '';
-      $('q-opt-2').value = '';
-      $('q-opt-3').value = '';
-      $('q-exp').value = '';
-      quizModal.showModal();
-    };
-  }
-
-  if (modalCancel && quizModal) {
-    modalCancel.onclick = () => quizModal.close();
-  }
-
-  if (quizForm && quizModal) {
-    quizForm.onsubmit = e => {
-      e.preventDefault();
-      const newQ = {
-        id: $('q-id').value.trim(),
-        epoch_id: Number($('q-epoch').value),
-        task_id: $('q-task').value.trim(),
-        question_text: $('q-text').value.trim(),
-        options: [
-          $('q-opt-0').value.trim(),
-          $('q-opt-1').value.trim(),
-          $('q-opt-2').value.trim(),
-          $('q-opt-3').value.trim()
-        ],
-        correctIndex: Number($('q-correct').value),
-        explanation: $('q-exp').value.trim(),
-        active: true
-      };
-      state.quizzes.push(newQ);
-      quizModal.close();
-      renderApp();
-    };
-  }
-
-  // Session Modal
-  const createSessionBtn = $('create-session-btn');
-  const sessionModal = $('session-modal');
-  const sessCancel = $('sess-cancel');
-  const sessionForm = $('session-form');
-
-  if (createSessionBtn && sessionModal) {
-    createSessionBtn.onclick = () => {
-      $('sess-title').value = '';
-      $('sess-code').value = 'TRK' + Math.random().toString(36).substring(2, 9).toUpperCase();
-      sessionModal.showModal();
-    };
-  }
-
-  if (sessCancel && sessionModal) {
-    sessCancel.onclick = () => sessionModal.close();
-  }
-
-  if (sessionForm && sessionModal) {
-    sessionForm.onsubmit = e => {
-      e.preventDefault();
-      const newSess = {
-        id: 'sess-' + Date.now(),
-        code: $('sess-code').value,
-        title: $('sess-title').value.trim(),
-        status: 'lobby',
-        host: state.role === 'admin' ? 'Бас Әкімші' : 'Мұғалім',
-        members: 0,
-        created_at: new Date().toISOString().substring(0, 16).replace('T', ' ')
-      };
-      state.sessions.unshift(newSess);
-      sessionModal.close();
-      renderApp();
-    };
-  }
+  });
 }
 
-// Global actions for inline button handlers
-window.adminCloseSession = id => {
-  const s = state.sessions.find(x => x.id === id);
-  if (s) {
-    s.status = 'closed';
-    renderApp();
+// ------------------------------------------------------------------ start
+async function boot() {
+  try {
+    const [{data: session}, role] = await Promise.all([db.auth.getSession(), call('get_my_role')]);
+    state.me = session?.session?.user?.id || null;
+    state.role = role;
+  } catch (e) {
+    state.error = e.message || String(e);
   }
-};
-
-window.adminToggleEpoch = id => {
-  const ep = state.epochs.find(x => x.id === id);
-  if (ep) {
-    ep.published = !ep.published;
-    renderApp();
-  }
-};
-
-window.adminDeleteQuiz = id => {
-  const q = state.quizzes.find(x => x.id === id);
-  if (q) {
-    q.active = false;
-    renderApp();
-  }
-};
-
-renderApp();
+  await load();
+}
+boot();
