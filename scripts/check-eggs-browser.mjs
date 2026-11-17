@@ -38,6 +38,7 @@ let lastChoice = null;
 const settle = async (p, pick = 0) => {
   for (let n = 0; n < 400; n++) {
     const s = await p.js(`({c: __tj.cine, d: __tj.dialog, p: __tj.panelOpen, choice: !!document.querySelector('#panel-card [data-choice]'), opt: !!document.querySelector('#panel-card [data-opt]:not(:disabled)'), close: !!document.querySelector('#panel-card [data-close]:not([hidden])')})`);
+    if (await p.js(`!!document.querySelector('.tj-intro')`)) { await p.press('Escape', 'Escape'); await delay(300); continue; }   // MAP04 opens with its comic
     if (s.c) { await p.js('__tj.skipCutscene()'); await delay(60); continue; }
     if (s.d) { await p.js('__tj.advanceDialog()'); await delay(25); continue; }
     if (s.p) { if (s.choice) { lastChoice = pick; await p.js(`document.querySelector('#panel-card [data-ch="${pick}"]').click()`); } else if (s.opt) await p.js(`document.querySelector('#panel-card [data-opt]:not(:disabled)').click()`); else if (s.close) await p.js(`document.querySelector('#panel-card [data-close]:not([hidden])').click()`); await delay(80); continue; }

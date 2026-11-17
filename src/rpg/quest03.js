@@ -147,7 +147,12 @@ export function createQuest(G) {
     const f = G.flags;
     if (trailReady(f) && !f.b.trailHint) { set('trailHint'); await G.say([D.evidenceEnough[0]]); }
   }
-  async function start() { return G.cine('camp', cutCamp); }
+  // The portal is broken: there is no Chroniclers' camp between epochs any more. Aidar steps straight into the
+  // epoch; Dana and Erlan speak over the link (the camp lines play with the camera on the hero).
+  async function start() {
+    E.tj_teleport(...P(12, 67)); E.tj_checkpoint(...P(12, 67));
+    return G.cine('arrival', async d => { const cam = d.cam; d.cam = () => {}; await cutCamp(d); d.cam = cam; return cutArrival(d); });
+  }
 
   async function talk(key) {
     const f = G.flags, B = f.b, first = !f.talked.includes(key);
@@ -217,8 +222,9 @@ export function createQuest(G) {
       case 'sakagate':
         if (!B.verdict) return G.say(D.sakagateLocked);
         G.sfx('portal');
-        await G.travel(...P(89, 99));
         if (!B.finished) return G.cine('home', cutHome);
+        if (G.levelPassed()) return G.gotoLevel(4);
+        return G.results();
         return;
       case 'campgate': if (B.finished && G.levelPassed()) return G.gotoLevel(4); return G.say(D.campgateLocked);
       case 'holo': return G.results();
@@ -473,6 +479,7 @@ export function createQuest(G) {
   }
   // 9 — home: the Chroniclers' Camp and the trembling fourth gate
   async function cutHome(d) {
+    d.cam = () => {};   // no camp: the closing lines come over the link where Aidar stands
     d.music('camp');
     d.cam(...P(89, 97), 2); await d.wait(600);
     npcGo('dana', 87, 98.4); npcGo('erlan', 91, 98.4);

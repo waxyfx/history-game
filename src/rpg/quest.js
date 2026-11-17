@@ -216,11 +216,11 @@ export function createQuest(G) {
         if (!G.local.crystal) { G.local.crystal = 1; E.tj_item_add(IT.crystal, 1); }
         return G.quiz(5);
       case 'page2': if (!B.page2 && f.quiz.stone_secret) { set('page2'); return G.cine('page', cutPage); } return;
-      case 'homegate':
+      case 'homegate':   // no camp hub between epochs: the gate leads straight on once the level is passed
         G.sfx('portal');
-        await G.travel(...P(76, 83));
-        if (!B.camp) { set('camp'); if (G.party() === 1) await G.cine('camp', cutCamp); }
-        return;
+        if (!G.levelPassed()) return G.results();
+        await G.say(D.campgateOpen);
+        return G.gotoLevel?.(2);
       case 'campgate':
         if (!G.levelPassed()) return G.say(D.campgateLocked);
         await G.say(D.campgateOpen);

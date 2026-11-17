@@ -85,9 +85,8 @@ try {
   assert(port, 'Browser launch failed');
   const a = await open(base + '/rpg.html?level=5&new=1');
   await a.wait('window.__tj && __tj.E && __tj.LV.id === 5');
-  await a.wait('__tj.cine === "camp"'); await delay(1500); await a.shot('map05-01-camp');
-  await settle(a);
-  await use(a, 'campturk');
+  // No camp hub: straight into the epoch; Dana and Erlan speak over the link during the arrival.
+  await a.wait('__tj.cine === "arrival"'); await delay(1500); await a.shot('map05-01-link');
   await a.wait('__tj.cine === "arrival" || __tj.G.flags.b.arrived'); await delay(1600); await a.shot('map05-02-arrival'); await settle(a);
   assert(await flag(a, 'arrived'), 'arrived'); assert.equal(await stage(a), 'arrive');
   // Act I — «Ты вернулся».
@@ -193,11 +192,12 @@ try {
   await a.wait('__tj.E.tj_state(35) === 0'); await settle(a);
   assert.equal(await stage(a), 'home2', 'the «home» entry rewrote itself');
   await use(a, 'turkgate');
-  await a.wait('__tj.cine === "home"'); await a.js('__tj.skipCutscene()');
+  await a.wait('__tj.G.flags.b.finished', 20000);   // the closing lines play at the gate (no camp), then the result
+  if (!(await a.js('!!document.querySelector("#go-camp,#retry-epoch")'))) await a.js('__tj.G.complete(); 1');
   for (let i = 0; i < 200 && !(await a.js('__tj.panelOpen && !!document.querySelector("#go-camp,#retry-epoch")')); i++) { await a.js('__tj.advanceDialog()'); await delay(60); }
   await a.shot('map05-12-result');
   const res = await a.js('({score: document.querySelector(".verdict .big")?.textContent, pass: !!document.querySelector("#go-camp"), secrets: __tj.LV.secretsFound(__tj.G.flags), page: __tj.LV.pageLines(__tj.G.flags), area: __tj.E.tj_state(35)})');
-  assert.equal(res.score, '100 / 100'); assert(res.pass); assert.equal(res.page, 4); assert.equal(res.area, 2);
+  assert.equal(res.score, '100 / 100'); assert(res.pass); assert.equal(res.page, 4); assert.equal(res.area, 0);
   assert.deepEqual([...new Set(seenTrials)].sort(), Object.keys(KEY).sort(), 'all eight trials');
   assert.equal(seenChoices.length, 1, 'one choice');
   assert.deepEqual(a.errors, [], 'no runtime errors');

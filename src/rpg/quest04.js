@@ -66,7 +66,7 @@ export function applyWorld(G) {
   const arr = !!b.arrived, sides = sidesDone(f);
   ia('camphun', true); ia('campgate', true); ia('holo', true); ia('hungate', true);
   tag('labseal', b.eggLabOpen); ia('labcrack', !b.eggLabOpen, 90); ia('greenportal', !!b.eggLabOpen);   // team easter egg
-  ia('tallystone', arr && !b.tallyBurned); ia('council', arr); ia('muster', arr); ia('borderstone', arr);
+  ia('tallystone', arr && !b.tallyBurned && !(b.tallyKept && f.quiz.hun_script)); ia('council', arr); ia('muster', arr); ia('borderstone', arr);
   ia('envoypost', arr && !b.envoyFree, 110); ia('whistle', true); ia('ramparts', arr); ia('wallmark', true); ia('silk', true);
   ia('cord11', true); ia('cordwest', true); ia('bell', true); ia('oldkit', true);
   ia('tombdoor', arr); ia('stairsup', true); ia('masks', b.witnessDown); ia('knotdesk', b.peace && !b.page);
@@ -121,7 +121,13 @@ export function createQuest(G) {
     if (sidesDone(G.flags) && proofsDone(G.flags)) G.toast('Үш айғақ жиналды. Елшілер тасына бар.');
   }
   const secret = async (key, lines, fact) => { if (!b()[key]) { set(key); G.sfx('secret'); } return G.say(lines, fact); };
-  async function start() { return G.cine('camp', cutCamp); }
+  // The portal is broken: there is no Chroniclers' camp between epochs any more. Aidar steps straight into the
+  // epoch; Dana and Erlan speak over the link (the camp lines play with the camera on the hero).
+  async function start() {
+    if (G.comic) await G.comic();
+    E.tj_teleport(...P(40, 69.4)); E.tj_checkpoint(...P(40, 69.4));
+    return G.cine('arrival', async d => { const cam = d.cam; d.cam = () => {}; await cutCamp(d); d.cam = cam; return cutArrival(d); });
+  }
 
   async function talk(key) {
     const f = G.flags, B = f.b, first = !f.talked.includes(key);
@@ -160,8 +166,10 @@ export function createQuest(G) {
         return;
       case 'hungate':
         if (!B.page) return G.say(D.hungateLocked);
-        G.sfx('portal'); await G.travel(...P(89, 99));
+        G.sfx('portal');
         if (!B.finished) return G.cine('home', cutHome);
+        if (G.levelPassed()) return G.gotoLevel(5);
+        return G.results();
         return;
       case 'campgate': if (B.finished && G.gotoLevel) return G.gotoLevel(5); return G.say(D.campgateLocked);
       case 'holo': return G.results();
@@ -332,6 +340,7 @@ export function createQuest(G) {
     d.final(() => { set('peace'); G.forceNpc = true; });
   }
   async function cutHome(d) {
+    d.cam = () => {};   // no camp: the closing lines come over the link where Aidar stands
     d.music('camp');
     d.cam(...P(89, 97), 2); await d.wait(600);
     npcGo('dana', 87, 98.4); npcGo('erlan', 91, 98.4);

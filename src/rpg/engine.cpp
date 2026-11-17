@@ -64,6 +64,7 @@ struct Game {
     int fog=0,fogCur=0,torch=0;
     int checkX=level::SpawnX,checkY=level::SpawnY;
     int focusKind=-1,focusId=-1;
+    int questKind=-1,questId=-1;   // the current objective (set by JS): a bobbing marker shows where to go
     unsigned triggerFired=0,triggerArmed=0xffffffffu,staticPicked=0;
     int platesMask=0,groups=0x3,kills=0,lastPickup=0,alarm=0;
     int shadowX=0,shadowY=0,shadowAlpha=0;
@@ -1232,6 +1233,12 @@ void render(){
     // World-space UI: interaction marker, NPC bubbles, health bars, hold rings, peers.
     if(game.focusKind==0){const auto& ia=interacts[game.focusId];renderer.sprite(art::X_MARK_0+((game.ticks/10)&3),ia.x,ia.y-20);}
     else if(game.focusKind==1){const Npc& c=npcs[game.focusId];renderer.sprite(art::X_MARK_0+((game.ticks/10)&3),int(c.x),int(c.y)-30);}
+    if(game.questKind>=0&&!game.cinematic&&!(game.questKind==game.focusKind&&game.questId==game.focusId)){
+        int qx=0,qy=0;bool ok=false,bob=(game.ticks/16)&1;
+        if(game.questKind==0&&game.questId<InteractCount&&world.iaEnabled[game.questId]){qx=interacts[game.questId].x;qy=interacts[game.questId].y-28;ok=true;}
+        else if(game.questKind==1&&game.questId<NpcCount&&npcs[game.questId].active&&!npcs[game.questId].hidden){qx=int(npcs[game.questId].x);qy=int(npcs[game.questId].y)-40;ok=true;}
+        if(ok){renderer.sprite(art::X_MARK_0,qx,qy-bob*2,false,200);for(int k=0;k<3;++k)renderer.pixel(qx-renderer.camX,qy+4+k-bob*2-renderer.camY,rgba(0xfff2c4,200));}
+    }
     for(const auto& c:npcs)if(c.active&&!c.hidden){
         if(c.alert)renderer.sprite(art::X_BUBBLE_ALERT,int(c.x)+6,int(c.y)-28);
         else if(c.bubble&&(game.focusKind!=1||&npcs[game.focusId]!=&c))renderer.sprite(c.bubble==2?art::X_BUBBLE_QUEST:art::X_BUBBLE_TALK,int(c.x)+6,int(c.y)-28-((game.ticks/20)%2));
@@ -1448,6 +1455,7 @@ void tj_light_now(int r,int g,int b){ tj_light(r,g,b);tj::game.amb[0]=r;tj::game
 void tj_fog(int amount){ tj::game.fog=amount; }
 void tj_torch(int on){ tj::game.torch=on; }
 void tj_shadow(int x,int y,int alpha){ tj::game.shadowX=x;tj::game.shadowY=y;tj::game.shadowAlpha=alpha; }
+void tj_quest(int kind,int id){ tj::game.questKind=kind;tj::game.questId=id; }
 void tj_pose(int anim,int ticks){ auto& p=tj::me();p.pose=anim;p.poseTime=ticks;p.animTime=0;p.anim=anim; }
 void tj_face(int facing){ tj::me().facing=facing&7; }
 void tj_walk_to(int x,int y){ auto& p=tj::me();float dx=x-p.x,dy=y-p.y,len=sqrtf(dx*dx+dy*dy);

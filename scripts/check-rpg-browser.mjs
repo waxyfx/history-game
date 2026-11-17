@@ -176,18 +176,21 @@ try {
   await a.js(`document.querySelector('#journal-back').click()`); await a.wait('!!document.querySelector("#go-camp")');
   await a.shot('map01-10-complete');
   assert(await a.js('__tj.G.flags.b.finished && __tj.E.tj_item_count(8) === 3'));
-  await a.js(`document.querySelector('#go-camp').click()`); await a.wait('__tj.E.tj_state(2) === 6', 8000); await settle(a);
-  await a.js('__tj.step(30)'); await a.shot('map01-11-camp');
+  // No camp hub any more: the button leads straight on to MAP02. Here we stay to check the save first.
+  assert.equal(await a.js('__tj.LV.next'), 2, 'the next epoch follows directly');
+  assert.match(await a.js(`document.querySelector('#go-camp').textContent`), /Қола|бронз/i);
+  await a.js(`document.querySelector('#panel-card [data-close]').click()`); await settle(a);
+  const zoneAtEnd = await a.js('__tj.E.tj_state(2)');
   const score = await a.js('Object.values(__tj.G.flags.quiz).filter(r => r.ok).length');
   // 12. Save, reload, verify.
   await a.js('__tj.save()');
   await a.call('Page.reload'); await delay(1500); await a.wait('window.__tj && __tj.E && __tj.G.flags.b.finished');
-  assert.equal(await a.js('__tj.E.tj_state(2)'), 6, 'position restored');
+  assert.equal(await a.js('__tj.E.tj_state(2)'), zoneAtEnd, 'position restored');
   assert.equal(await a.js('Object.values(__tj.G.flags.quiz).filter(r => r.ok).length'), score, 'trial choices restored');
-  // Failing branch: a wrong final choice keeps the game going, then the level ends below 90 with a retry.
-  await a.js(`__tj.G.flags.quiz.stone_secret.ok = false; __tj.G.changed(); __tj.results(); 1`);
+  // Failing branch: wrong answers keep the game going, then the level ends below 60 with a retry.
+  await a.js(`__tj.G.flags.quiz.stone_secret.ok = false; __tj.G.flags.quiz.stone_main.ok = false; __tj.G.changed(); __tj.results(); 1`);   // below the pass mark of 60
   await a.wait('!!document.querySelector("#retry-epoch")');
-  assert.match(await a.js('document.querySelector(".verdict").textContent'), /64 \/ 100/);
+  assert(+(await a.js('document.querySelector(".verdict .big").textContent')).split('/')[0] < 60, 'below 60 fails');
   await a.shot('map01-13-fail');
   await a.js(`document.querySelector('#retry-epoch').click()`); await a.wait('__tj.cine === "intro"', 8000);
   assert.equal(await a.js('Object.keys(__tj.G.flags.quiz).length'), 0, 'retry starts the epoch from zero');

@@ -55,13 +55,13 @@ export function playComic(story, {audioCtx, low = false} = {}) {
 
  // ── audio ──
  let audio = null;
- try {if (audioCtx) {audio = createAudio(audioCtx, {low, score: story.score}); audioCtx.resume?.();}} catch (e) {console.warn(e); audio = null;}
+ try {if (audioCtx) {audio = createAudio(audioCtx, {low, score: story.score}); audioCtx.resume?.()?.catch?.(() => {});}} catch (e) {console.warn(e); audio = null;}
  let muted = store.get('tarikh.introMuted') === '1';
  const cues = [...(audio?.events || []).map(e => ({t: e.t, run: w => e.fn(w)})), ...SHOTS.flatMap(s => s.cues.map(c => ({t: c.t, run: w => audio.fx(c.name, w, c.dur)})))].sort((a, b) => a.t - b.t);
  let cueIdx = 0;
  const soundBtn = $('.tj-sound');
  function audioReady() {return audio && audioCtx.state === 'running';}
- soundBtn.onclick = () => {audioCtx?.resume?.(); soundBtn.hidden = true;};
+ soundBtn.onclick = () => {audioCtx?.resume?.()?.catch?.(() => {}); soundBtn.hidden = true;};
 
  // ── clock ──
  let t = 0, last = performance.now(), paused = false, ended = false, raf = 0, shotIdx = -1, current = null, previous = null;
@@ -215,14 +215,14 @@ export function playComic(story, {audioCtx, low = false} = {}) {
  function seek(time) {t = clamp(time, 0, TOTAL - .01); holding = null; root.classList.remove('tj-holding'); nextHold = holds.findIndex(x => x.at > t); if (nextHold < 0) nextHold = holds.length; cueIdx = cues.findIndex(c => c.t >= t); if (cueIdx < 0) cueIdx = cues.length; audio?.stopAll();}
  function setPaused(p) {
   paused = p; syncButtons();
-  if (audioCtx && audio) {if (p) audioCtx.suspend?.(); else audioCtx.resume?.();}
+  if (audioCtx && audio) {if (p) audioCtx.suspend?.()?.catch?.(() => {}); else audioCtx.resume?.()?.catch?.(() => {});}
   for (const v of voices) if (!v.ended) p ? v.pause() : v.play().catch(() => {});
   root.classList.toggle('tj-paused', p);
  }
  function finish(skipped) {
   if (outro != null) return; outro = performance.now(); ended = true;
   audio?.fadeOut(skipped ? .5 : 1.2); for (const v of voices) v.pause();
-  if (audioCtx?.state === 'suspended') audioCtx.resume?.();
+  if (audioCtx?.state === 'suspended') audioCtx.resume?.()?.catch?.(() => {});   // the host may close the context right after
   root.classList.add('tj-out');
   setTimeout(() => {
    cancelAnimationFrame(raf); removeEventListener('resize', layout); removeEventListener('keydown', onKey, true); document.removeEventListener('visibilitychange', onVis);

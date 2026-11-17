@@ -14,5 +14,6 @@ export default {
   applyWorld: Q.applyWorld, createQuest: Q.createQuest, questStage: Q.questStage, questTarget: Q.questTarget,
   scoreOf: Q.scoreOf, secretsFound: Q.secretsFound, pageLines: Q.pageLines, pageTotal: 4, restoreSnapshot,
   begin: quest => quest.interact('page1'),
+  next: 2, passLabel: {kk: 'Қола дәуіріне өту →', ru: 'В бронзовый век →'},
   back: {label: {kk: 'Тас дәуіріне оралу', ru: 'Вернуться в каменный век'}, x: 30, y: 43.2},
 };

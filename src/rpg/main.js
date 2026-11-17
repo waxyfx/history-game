@@ -69,11 +69,11 @@ document.querySelector('#rpg-app').innerHTML = `
           <div class="ammo"><span id="ammo-icon"></span><b id="arrows">0</b></div>
           <div class="belt" id="belt"></div>
           <span class="sep"></span>
-          <button id="b-inv" class="hb"></button><button id="b-save" class="hb"></button><button id="b-load" class="hb"></button>
-          <button id="b-road" class="hb"></button><button id="b-help" class="hb"></button>
+          <button id="b-inv" class="hb"></button><button id="b-save" class="hb desk"></button><button id="b-load" class="hb desk"></button>
+          <button id="b-road" class="hb desk"></button><button id="b-help" class="hb desk"></button>
           <span class="sep"></span>
-          <button id="lang-btn" class="hb"></button><button id="audio-btn" class="hb"></button><button id="coop-btn" class="hb"></button>
-          <button id="fs-btn" class="hb" title="Fullscreen">⛶</button><a class="hb" href="/" title="Home">⌂</a>
+          <button id="audio-btn" class="hb"></button><button id="coop-btn" class="hb desk"></button>
+          <button id="fs-btn" class="hb" title="Fullscreen">⛶</button><button id="menu-btn" class="hb menu" title="Menu">☰</button>
         </div>
         <canvas id="minimap" class="minimap" width="112" height="72"></canvas>
         <div id="prompt" class="prompt" hidden></div>
@@ -92,8 +92,8 @@ document.querySelector('#rpg-app').innerHTML = `
       <div class="panel" id="panel" hidden><div class="panel-card" id="panel-card"></div></div>
       <p id="loading" class="loading" role="status"></p>
       <div class="touch" id="touch">
-        <div class="dpad"><button data-key="1" aria-label="up">▲</button><button data-key="4" aria-label="left">◀</button><button data-key="2" aria-label="down">▼</button><button data-key="8" aria-label="right">▶</button></div>
-        <div class="acts"><button data-key="64" aria-label="run">⇧</button><button data-key="32" aria-label="attack">⚔</button><button data-key="16" aria-label="action">E</button></div>
+        <div class="stick" id="stick"><i class="stick-base"></i><i class="stick-knob"></i></div>
+        <div class="acts"><button data-key="32" aria-label="attack">⚔</button><button data-key="16" aria-label="action">E</button></div>
       </div>
     </div>
   </section>
@@ -376,8 +376,10 @@ function help() {
   openPanel(`<p class="eyebrow">${esc(t('chapter'))}</p><h2>${esc(t('helpTitle'))}</h2><p>${esc(t('help'))}</p><p class="fiction"><b>${esc(t('fiction'))}:</b> ${lang === 'ru' ? 'персонажи и события уровня вымышлены; исторические факты отмечены отдельно и имеют источники.' : 'деңгейдің кейіпкерлері мен оқиғалары ойдан шығарылған; тарихи деректер бөлек белгіленіп, дереккөзі көрсетілген.'}</p><button class="primary" data-close>${esc(t('resume'))}</button>`);
 }
 function pauseMenu() {
-  openPanel(`<h2>${esc(t('pause'))}</h2><div class="col"><button class="primary" data-close>${esc(t('resume'))}</button><button id="pm-save">${esc(t('save'))}</button><button id="pm-load">${esc(t('load'))}</button><button id="pm-help">${esc(t('helpTitle'))}</button></div>`);
+  openPanel(`<h2>${esc(t('pause'))}</h2><div class="col"><button class="primary" data-close>${esc(t('resume'))}</button><button id="pm-save">${esc(t('save'))}</button><button id="pm-load">${esc(t('load'))}</button><button id="pm-help">${esc(t('helpTitle'))}</button><button id="pm-road">🗺 ${esc(lang === 'ru' ? 'Карта эпох' : 'Дәуірлер картасы')}</button><button id="pm-lang">🌐 ${lang === 'kk' ? 'Тіл: ҚАЗ → РУС' : 'Язык: РУС → ҚАЗ'}</button><a class="btn" href="/" id="pm-home">⌂ ${esc(lang === 'ru' ? 'На главную' : 'Басты бетке')}</a></div>`);
   $('pm-save').onclick = () => { closePanel(); save(); };
+  $('pm-lang').onclick = () => { toggleLang(); pauseMenu(); };
+  $('pm-road').onclick = () => roadmap();
   $('pm-load').onclick = () => { closePanel(); load(); };
   $('pm-help').onclick = help;
 }
@@ -725,7 +727,7 @@ function updateHud(force) {
   $('s-quiz').textContent = `${t('trials')} ${MAIN_QUIZ_ORDER.filter(n => G.flags.quiz[HISTORICAL_QUIZZES[n].id]).length}/${MAIN_QUIZ_ORDER.length}`;
   $('b-inv').innerHTML = `<kbd>I</kbd> ${esc(t('inventory'))}`; $('b-save').textContent = '💾 ' + t('save'); $('b-load').textContent = '📂 ' + t('load');
   $('b-help').textContent = '?'; $('b-help').title = t('helpTitle'); $('b-road').textContent = '🗺 ' + (lang === 'ru' ? 'Эпохи' : 'Дәуірлер');
-  $('lang-btn').textContent = t('lang'); $('audio-btn').textContent = isAudioMuted() ? '🔇' : '🔊'; $('audio-btn').title = t('mute');
+  $('menu-btn').title = t('pause'); $('audio-btn').textContent = isAudioMuted() ? '🔇' : '🔊'; $('audio-btn').title = t('mute');
   $('coop-btn').textContent = `👥${party.size > 1 ? ' ' + party.size + '/3' : ''}`; $('coop-btn').title = t('coop');
   $('allies').innerHTML = party.size > 1 ? party.members.filter(m => !m.self).map(m => {
     const p = peerByMemberSlot(m.slot), php = p?.hp ?? 100;
@@ -774,6 +776,7 @@ function drawMinimap(now) {
   for (let i = 0; i < MAP.npcs.length; i++) if (E.tj_npc(i, 2)) dot(E.tj_npc(i, 0), E.tj_npc(i, 1), '#e2b45a', 0);
   for (let i = 0; i < E.tj_enemy_count(); i++) if (E.tj_enemy(i, 6) && E.tj_enemy(i, 0) > 0 && E.tj_enemy(i, 12)) dot(E.tj_enemy(i, 2) / 1000, E.tj_enemy(i, 3) / 1000, '#e06a3f', 0);
   const tg = questTarget(G.flags);
+  E.tj_quest?.(tg ? (tg.npc != null ? 1 : 0) : -1, tg ? (tg.npc ?? tg.ia ?? -1) : -1);   // in-world objective marker
   if (tg && (now / 400 | 0) % 2) {
     let p = null;
     if (tg.npc != null && E.tj_npc(tg.npc, 2)) p = [E.tj_npc(tg.npc, 0), E.tj_npc(tg.npc, 1)];
@@ -929,22 +932,61 @@ $('b-save').onclick = () => save();
 $('b-load').onclick = () => !cine && load();
 $('b-help').onclick = () => !cine && help();
 $('b-road').onclick = () => !cine && roadmap();
-$('lang-btn').onclick = () => { lang = lang === 'kk' ? 'ru' : 'kk'; setLang(lang); document.documentElement.lang = lang; updateHud(true); if (E) banner(ZONE_NAMES[lang][E.tj_state(2)]); };
+function toggleLang() { lang = lang === 'kk' ? 'ru' : 'kk'; setLang(lang); document.documentElement.lang = lang; updateHud(true); if (E) banner(ZONE_NAMES[lang][E.tj_state(2)]); }
+$('menu-btn').onclick = () => E && !cine && !dialogBusy && !panelOpen && pauseMenu();
 $('audio-btn').onclick = () => { unlockAudio(); toggleAudioMute(); updateHud(true); };
 $('coop-btn').onclick = () => E && !cine && !dialogBusy && coopPanel();
 
+let rotated = false;
 function resize() {
-  // The game always fills the whole window (letterboxed); the HUD and hotbar live inside the frame.
-  const vp = $('viewport');
-  const s = Math.max(.5, Math.min(innerWidth / W, innerHeight / H));
-  vp.style.width = W * s + 'px'; vp.style.height = H * s + 'px';
-  vp.style.setProperty('--s', s);
+  // The game covers the whole screen on every device: the world is scaled to cover (edges may be cropped),
+  // the HUD is scaled to fit. A phone held upright gets the whole game turned sideways (landscape).
+  const app = $('rpg-app').firstElementChild || $('viewport').closest('.rpg'), vp = $('viewport');
+  rotated = matchMedia('(pointer: coarse)').matches && innerHeight > innerWidth;
+  const w = rotated ? innerHeight : innerWidth, h = rotated ? innerWidth : innerHeight;
+  Object.assign(app.style, rotated ? {width: w + 'px', height: h + 'px', transform: `translateX(${innerWidth}px) rotate(90deg)`} : {width: '', height: '', transform: ''});
+  app.classList.toggle('rot', rotated);
+  vp.style.width = w + 'px'; vp.style.height = h + 'px';
+  const coarse = matchMedia('(pointer: coarse)').matches;   // phones: the HUD stays readable on a small screen
+  vp.style.setProperty('--s', Math.max(coarse ? 1.45 : .5, Math.min(w / W, h / H)));
+  const c = Math.max(w / W, h / H);
+  Object.assign(canvas.style, {width: W * c + 'px', height: H * c + 'px', left: (w - W * c) / 2 + 'px', top: (h - H * c) / 2 + 'px'});
+  placeStick();
 }
+// Touch: a floating analog stick on the left half (8 directions; pushed to the rim = run).
+const stick = {id: null, ox: 0, oy: 0};
+const stickEl = $('stick'), stickBase = stickEl.querySelector('.stick-base'), stickKnob = stickEl.querySelector('.stick-knob');
+const stickXY = ev => { const x = rotated ? ev.clientY : ev.clientX, y = rotated ? innerWidth - ev.clientX : ev.clientY; return [x - stickEl.offsetLeft, y - stickEl.offsetTop]; };
+function placeStick(x = 64, y = stickEl.clientHeight - 64, kx = x, ky = y) {
+  stickBase.style.transform = `translate(${x}px, ${y}px)`; stickKnob.style.transform = `translate(${kx}px, ${ky}px)`;
+}
+function moveStick(ev) {
+  const [x, y] = stickXY(ev), R = 44; let dx = x - stick.ox, dy = y - stick.oy; const d = Math.hypot(dx, dy);
+  if (d > R) { dx *= R / d; dy *= R / d; }
+  placeStick(stick.ox, stick.oy, stick.ox + dx, stick.oy + dy);
+  let m = 0;
+  if (d > 10) { const oct = Math.round(Math.atan2(dy, dx) / (Math.PI / 4)) & 7; m = [8, 10, 2, 6, 4, 5, 1, 9][oct]; if (d > R * .95) m |= 64; }
+  touch.set('stick', m); input();
+}
+stickEl.addEventListener('pointerdown', ev => {
+  ev.preventDefault(); unlockAudio();
+  if (!$('dlg').hidden) { advanceDialog(); return; }
+  if (stick.id != null) return;
+  stick.id = ev.pointerId; stickEl.setPointerCapture(ev.pointerId); [stick.ox, stick.oy] = stickXY(ev);
+  stickEl.classList.add('on'); moveStick(ev);
+});
+stickEl.addEventListener('pointermove', ev => { if (ev.pointerId === stick.id) moveStick(ev); });
+for (const n of ['pointerup', 'pointercancel', 'lostpointercapture']) stickEl.addEventListener(n, ev => {
+  if (ev.pointerId !== stick.id) return;
+  stick.id = null; stickEl.classList.remove('on'); placeStick(); touch.delete('stick'); input();
+});
 // Browsers allow real fullscreen only after a user gesture: enter it on the first key/click.
 let autoFs = true;
 function enterFullscreen() {
   const el = document.documentElement;
-  if (!document.fullscreenElement && el.requestFullscreen) el.requestFullscreen({navigationUI: 'hide'}).catch(() => {});
+  const lock = () => screen.orientation?.lock?.('landscape').catch(() => {});   // phones: turn to landscape when allowed
+  if (!document.fullscreenElement && el.requestFullscreen) el.requestFullscreen({navigationUI: 'hide'}).then(lock, () => {});
+  else if (!document.fullscreenElement && el.webkitRequestFullscreen) el.webkitRequestFullscreen();
 }
 function firstGesture() { if (autoFs) { autoFs = false; enterFullscreen(); } }
 window.addEventListener('pointerdown', firstGesture, {capture: true});
@@ -990,7 +1032,7 @@ async function boot() {
         comicOpen = true; held.clear(); touch.clear(); mouseMask = 0; input(); E.tj_pause(1); music('off');
         let ctxA = null; try { ctxA = new (window.AudioContext || window.webkitAudioContext)(); } catch {}
         try { await (await LV.comic({audioCtx: ctxA})).done; } catch (e) { console.warn(e); }
-        try { ctxA?.close(); } catch {}
+        if (ctxA && ctxA.state !== 'closed') ctxA.close().catch(() => {});   // the comic may already have closed it
         // The comic has its own ҚАЗ/РУС switch (same storage key): keep the game UI in the language chosen there.
         if (getLang() !== lang) { lang = getLang(); document.documentElement.lang = lang; updateHud(true); }
         comicOpen = false; E.tj_pause(0); lastTime = performance.now(); acc = 0; musicForZone(true); canvas.focus({preventScroll: true});

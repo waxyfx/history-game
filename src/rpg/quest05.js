@@ -143,7 +143,12 @@ export function createQuest(G) {
     if (evidenceDone(G.flags) && !b().evidenceSaid) { set('evidenceSaid'); await G.say(D.evidenceDone); }
   }
   const secret = async (key, lines, fact) => { if (!b()[key]) { set(key); G.sfx('secret'); } return G.say(lines, fact); };
-  async function start() { return G.cine('camp', cutCamp); }
+  // The portal is broken: there is no Chroniclers' camp between epochs any more. Aidar steps straight into the
+  // epoch; Dana and Erlan speak over the link (the camp lines play with the camera on the hero).
+  async function start() {
+    E.tj_teleport(...P(40, 69.4)); E.tj_checkpoint(...P(40, 69.4));
+    return G.cine('arrival', async d => { const cam = d.cam; d.cam = () => {}; await cutCamp(d); d.cam = cam; return cutArrival(d); });
+  }
 
   async function talk(key) {
     const f = G.flags, B = f.b, first = !f.talked.includes(key);
@@ -202,8 +207,9 @@ export function createQuest(G) {
         return;
       case 'turkgate':
         if (!B.page) return G.say(D.turkgateLocked);
-        G.sfx('portal'); await G.travel(...P(89, 99));
+        G.sfx('portal');
         if (!B.finished) return G.cine('home', cutHome);
+        return G.results();
         return;
       case 'campgate': return G.say(D.campgateLocked);
       case 'holo': return G.results();
@@ -467,6 +473,7 @@ export function createQuest(G) {
     d.final(() => hide('twin'));
   }
   async function cutHome(d) {
+    d.cam = () => {};   // no camp: the closing lines come over the link where Aidar stands
     d.music('camp');
     d.cam(...P(89, 97), 2); await d.wait(600);
     npcGo('dana', 87, 98.4); npcGo('erlan', 91, 98.4);

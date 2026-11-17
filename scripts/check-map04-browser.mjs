@@ -83,14 +83,7 @@ try {
   assert(port, 'Browser launch failed');
   const a = await open(base + '/rpg.html?level=4&new=1');
   await a.wait('window.__tj && __tj.E && __tj.LV.id === 4');
-  await a.wait('__tj.cine === "camp"'); await delay(1500);
-  await settle(a);
-  await a.shot('map04-01-camp');
-  await talk(a, 'dana');
-  await a.js(`(() => { const [x, y] = __tj.LV.MAP.interactPos.camphun; __tj.E.tj_teleport(x, y + 14); __tj.E.tj_face(0); __tj.step(3); })()`);
-  await settle(a); await a.js(`(() => { const [x, y] = __tj.LV.MAP.interactPos.camphun; __tj.E.tj_teleport(x, y + 14); __tj.E.tj_face(0); __tj.step(2); })()`);
-  await a.press('KeyE', 'e');
-  // MAP03 → camp → the motion-comic «Түйінші» → Talas: the cinematic covers the game, then hands back.
+  // No camp hub: the level opens with the motion comic «Түйінші», then the arrival in Talas.
   await a.wait(`!!document.querySelector('.tj-intro')`, 10000); await delay(4000); await a.shot('map04-02b-comic');
   assert(await a.js('__tj.E.tj_state(37) === 0 || true'));
   await a.press('Escape', 'Escape');
@@ -200,7 +193,7 @@ try {
   for (let i=0;i<200 && !(await a.js('__tj.panelOpen && !!document.querySelector("#go-camp,#retry-epoch")'));i++) { await a.js('__tj.advanceDialog()'); await delay(60); }
   await a.shot('map04-05-result');
   const res=await a.js('({score:document.querySelector(".verdict .big")?.textContent,pass:!!document.querySelector("#go-camp"),secrets:__tj.LV.secretsFound(__tj.G.flags),page:__tj.LV.pageLines(__tj.G.flags),area:__tj.E.tj_state(35)})');
-  assert.equal(res.score,'100 / 100'); assert(res.pass); assert.equal(res.page,4); assert.equal(res.area,2);
+  assert.equal(res.score,'100 / 100'); assert(res.pass); assert.equal(res.page,4); assert.equal(res.area,0);
   assert.deepEqual([...new Set(seenTrials)].sort(),Object.keys(KEY).sort(),'all eight trials');
   assert.deepEqual(a.errors,[],'no runtime errors');
   console.log('MAP04 browser PASS',JSON.stringify(res),'choices',JSON.stringify(CHOICE));

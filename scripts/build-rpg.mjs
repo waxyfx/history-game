@@ -12,7 +12,7 @@ await mkdir('public/engine/rpg',{recursive:true});
 const names=['init','atlas','atlas_size','atlas_ready','input','tick','render','pixels','pause','ack','event_count','event','events_clear',
   'state','tile','solid','equip','item_count','item_info','item_text','item_add','use','projectile','enemy','enemy_count','enemy_set','enemy_damage',
   'groups','group_alive_reset','hero','party','peer','peer_off','peer_arrow','damage','revive','respawn','checkpoint','heal','teleport','control',
-  'cinematic','camera','shake','light','light_now','fog','torch','shadow','pose','face','walk_to','tag','ia','trigger_arm','npc','npc_set',
+  'cinematic','camera','quest','shake','light','light_now','fog','torch','shadow','pose','face','walk_to','tag','ia','trigger_arm','npc','npc_set',
   'npc_goto','npc_routine','npc_flags','npc_face','spawn_fx','spawn_item','save_buffer','save','load','effect'].map(n=>'_tj_'+n);
 const testing=process.argv.includes('--test');
 // One engine, one binary per epoch: -DTJ_LEVEL selects the generated level header.

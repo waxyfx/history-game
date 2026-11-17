@@ -92,10 +92,8 @@ try {
   await a.nav(base + '/rpg.html?level=3&new=1');
   await a.wait('window.__tj && __tj.E && __tj.LV.id === 3');
   // 1. Chroniclers' Camp
-  await a.wait('__tj.cine === "camp"'); await delay(2200); await a.shot('map03-01-camp'); await settle(a);
-  await talk(a, 'dana');
-  // 2. Through the gate: arrival in the Saka steppe
-  await use(a, 'campsaka');
+  // No camp hub (the portal is broken): the level opens straight with the arrival; the Chroniclers speak over the link.
+  await a.wait('__tj.cine === "arrival"'); await delay(2200); await a.shot('map03-01-link');
   await a.wait('__tj.cine === "arrival" || __tj.G.flags.b.arrived'); await settle(a);
   assert(await flag(a, 'arrived'), 'arrived');
   assert.equal(await a.js('__tj.E.tj_state(35)'), 0, 'world area');
@@ -219,7 +217,7 @@ try {
   for (let i = 0; i < 200 && !(await a.js('__tj.panelOpen && !!document.querySelector("#retry-epoch, #go-camp")')); i++) { await a.js('__tj.advanceDialog()'); await delay(60); }
   await a.shot('map03-13-result');
   const res = await a.js(`({score: document.querySelector('.verdict .big')?.textContent, pass: !!document.querySelector('#go-camp'), secrets: __tj.LV.secretsFound(__tj.G.flags), page: __tj.LV.pageLines(__tj.G.flags), area: __tj.E.tj_state(35)})`);
-  assert.equal(res.score, '100 / 100'); assert(res.pass); assert.equal(res.secrets, 6); assert.equal(res.page, 4); assert.equal(res.area, 2, 'back in the camp');
+  assert.equal(res.score, '100 / 100'); assert(res.pass); assert.equal(res.secrets, 6); assert.equal(res.page, 4); assert.equal(res.area, 0, 'no camp: results at the gate');
   assert.deepEqual([...new Set(seenTrials)].sort(), Object.keys(KEY).sort(), 'all eight trials played');
   assert.deepEqual(a.errors, [], 'no page errors');
   console.log('MAP03 browser check passed:', JSON.stringify(res), 'trials', seenTrials.length, 'choices', seenChoices.length, 'assembly choice', CHOICE.assembly);
