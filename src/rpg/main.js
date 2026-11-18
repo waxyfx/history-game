@@ -1067,7 +1067,8 @@ async function boot() {
       E.tj_init(); G.flags = newFlags(); G.local = {granted: [], attempts: {}, seen: [], crystal: 0}; G.armed = null; G.forceNpc = true;
       E.tj_party(1, 0); E.tj_hero(SH.aibar); $('fade').style.opacity = 0;
       setTimeout(() => LV.playDemoFilm(G).then(() => toast(lang === 'ru' ? 'Ролик окончен. Обнови страницу, чтобы посмотреть снова.' : 'Бейнеролик аяқталды. Қайта көру үшін бетті жаңарт.')), 400);
-    } else if (params.has('new')) { // Started from the intro comic: a fresh journey into MAP.
+    } else if (params.has('new') || (params.has('final') && LV.id === 10)) { // Started from the intro comic: a fresh journey into MAP (or ?final: MAP10 at the hall).
+      G.jumpFinal = params.has('final');
       try { const old = localStorage.getItem(SAVE_KEY); if (old) localStorage.setItem(SAVE_KEY + '.prev', old); localStorage.removeItem(SAVE_KEY); } catch {}
       history.replaceState(null, '', location.pathname + levelQS(params.get('party') ? 'party=' + params.get('party') : ''));
       newGame(); startOfficial(true);

@@ -42,7 +42,7 @@ struct Npc {
     int way=0,wait=0,mode=0; // 0 routine, 1 scripted goto, 2 hold position
     float gx=0,gy=0; bool run=false; int holdAnim=art::A_IDLE,bubble=0,alert=0,greeted=0;
 };
-struct Animal { bool active=true; int sheet; float x,y,hx,hy,vx=0,vy=0,tvx=0,tvy=0; int facing=2,anim=art::A_IDLE,animTime=0,timer=0,flee=0,calm=0; };
+struct Animal { bool active=true; int sheet; float x,y,hx,hy,vx=0,vy=0,tvx=0,tvy=0; int facing=2,anim=art::A_IDLE,animTime=0,timer=0,flee=0,calm=0,turn=0,bump=0; };
 struct Enemy {
     bool active=true,enabled=true;
     int type=0,group=0,hp=0,state=Idle,facing=4,timer=0,anim=art::A_IDLE,animTime=0,target=-1,alerted=0,seed=0,hitFlash=0,showBar=0,phase=1,special=0,illusions=0;
@@ -311,7 +311,9 @@ void updateFocus(){
     for(int i=0;i<NpcCount;++i){const auto& n=npcs[i];
         if(!n.active||n.hidden||!n.talk)continue;
         float dx=n.x-p.x,dy=n.y-p.y,d=dx*dx+dy*dy;
-        if(d<26*26&&d*.8f<best){best=d*.8f;game.focusKind=1;game.focusId=i;}
+        // People win over a nearby marker (a hearth, a pole) unless the marker is much closer: E talks to the person.
+        float dot=(dx*fd.x+dy*fd.y)/(sqrtf(d)+.01f),score=d*.4f*(dot<-.2f?2.2f:1);
+        if(d<26*26&&score<best){best=score;game.focusKind=1;game.focusId=i;}
     }
     for(int s=1;s<MaxPlayers;++s){const auto& o=players[s];
         if(!o.active||!o.down)continue;
@@ -480,11 +482,14 @@ void tickAnimals(){
     for(auto& a:animals){if(!a.active)continue;
         ++a.animTime;
         bool hare=a.sheet==art::SH_HARE;
-        float px=0,py=0,best=1e9;
-        for(auto& p:players)if(p.active){float dx=a.x-p.x,dy=a.y-p.y,d=dx*dx+dy*dy;if(d<best){best=d;px=p.x;py=p.y;}}
+        float px=0,py=0,best=1e9;bool moving=false;
+        for(auto& p:players)if(p.active){float dx=a.x-p.x,dy=a.y-p.y,d=dx*dx+dy*dy;if(d<best){best=d;px=p.x;py=p.y;moving=p.moving;}}
         if(a.calm>0)--a.calm;
+        if(a.turn>0)--a.turn;
+        if(a.bump>0)--a.bump;
         float scare=hare?64.f:40.f;
-        if(!a.flee&&!a.calm&&best<scare*scare)a.flee=hare?60:45;
+        // Only a stranger walking up startles the herd; someone standing still among them is left alone.
+        if(!a.flee&&!a.calm&&moving&&best<scare*scare)a.flee=hare?60:45;
         float topSpeed;
         if(a.flee>0){
             if(--a.flee==0)a.calm=90;   // a pause before they can be scared again
@@ -509,11 +514,14 @@ void tickAnimals(){
         if(speed>.05f){
             bool bx=blockedFeet(a.x+a.vx,a.y,4,2),by=blockedFeet(a.x,a.y+a.vy,4,2);
             if(!bx)a.x+=a.vx; if(!by)a.y+=a.vy;
-            if(bx&&by){   // a wall or a fence: turn away instead of pushing against it
-                float ang=atan2f(a.vy,a.vx)+3.1416f*(.5f+frand());
-                a.tvx=cosf(ang)*topSpeed;a.tvy=sinf(ang)*topSpeed*.7f;a.vx*=.3f;a.vy*=.3f;
+            if(bx&&by){   // a wall or a fence: turn away once, then let the new heading ease in (no spinning on the spot)
+                if(!a.bump){float ang=atan2f(a.vy,a.vx)+3.1416f*(.5f+frand());
+                    a.tvx=cosf(ang)*topSpeed;a.tvy=sinf(ang)*topSpeed*.7f;a.bump=40;}
+                a.vx*=.3f;a.vy*=.3f;
             } else if(bx){a.tvx=-a.tvx*.5f;a.vx=0;} else if(by){a.tvy=-a.tvy*.5f;a.vy=0;}
-            if(speed>.12f)a.facing=heading(a.vx,a.vy);   // no flicker while easing in/out
+            // Turn only when clearly moving and not more often than every 20 ticks: no flicker between
+            // neighbouring directions on a diagonal or while easing in/out.
+            if(speed>.12f&&!a.turn){int h=heading(a.vx,a.vy);if(h!=a.facing){a.facing=h;a.turn=20;}}
             setAnim(a.anim,a.animTime,a.flee>0&&speed>.8f?art::A_RUN:art::A_WALK);
             if(!hare&&a.flee>0&&a.flee%34==0)sfx(SFX_HOOVES,a.x,a.y);
         } else setAnim(a.anim,a.animTime,(!hare&&a.timer%240<170)?art::A_GRAZE:art::A_IDLE);

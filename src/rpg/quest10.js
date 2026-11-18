@@ -91,6 +91,13 @@ export function createQuest(G) {
   const proof = async id => { if (addTo('tracks', id)) { G.sfx('secret'); if (truthDone(G.flags) && !b().truthSaid) { set('truthSaid'); await G.say(D.truthDone); } } };
 
   async function start() {
+    if (G.jumpFinal) {   // rpg.html?level=10&final: straight to the doors of the hall, everything before it done
+      G.jumpFinal = false;
+      for (const k of ['arrived', 'squareSeen', 'met', 'lobbySeen', 'erased', 'truthSaid', 'sacrifice', 'twinline']) set(k);
+      for (const k of STEPS) addTo('tracks', PROOFS[k]);
+      E.tj_teleport(...P(42, 24.5)); E.tj_checkpoint(...P(42, 24.5)); G.forceNpc = true; applyWorld(G); G.save(true);
+      return G.toast?.(G.lang?.() === 'ru' ? 'Финальная битва: иди вверх, в зал Врат.' : 'Соңғы шайқас: жоғары, Қақпа залына жүр.');
+    }
     E.tj_teleport(...P(42, 66.4)); E.tj_checkpoint(...P(42, 66.4));
     return G.cine('arrival', cutArrival);
   }

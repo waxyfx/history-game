@@ -517,5 +517,12 @@ export function createQuest(G) {
     const s = {welcome: cutWelcome, assembly: cutAssembly, trail: cutTrail, boss: cutBoss, verdict: cutVerdict, home: cutHome}[id];
     if (s) G.cine(id, s);
   }
-  return {start, talk, interact, trigger, plates, enemyDied, mirror};
+  // The welcome also starts when the hero reaches the settlement some other way than past the outskirts
+  // (across the square, between the yurts): until it plays, nobody in the settlement talks to a stranger.
+  function tick() {
+    const B = b(); if (!B.arrived || B.welcomed || G.busy?.()) return;
+    const [x, y] = G.heroPos(); const tx = x / TS, ty = y / TS;
+    if (tx > 25 && tx < 67 && ty > 31 && ty < 57) G.cine('welcome', cutWelcome);
+  }
+  return {start, talk, interact, trigger, plates, enemyDied, mirror, tick};
 }
