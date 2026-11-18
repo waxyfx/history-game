@@ -1,6 +1,9 @@
 // MAP01 «Алғашқы іздер» bindings for the shared RPG runtime (main.js). Content stays in story.js/quest.js.
 import {MAP01} from './gen/map01.js';
 import * as S from './story.js';
+import RU from './ru/map01.js';
+import {applyRu} from './ru-pack.js';
+applyRu(S, RU);   // Russian for the parts written only in Kazakh
 import * as Q from './quest.js';
 import {restoreSnapshot} from './persistence.js';
 import {INTERACT_LABEL} from './i18n.js';

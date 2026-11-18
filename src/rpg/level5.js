@@ -1,6 +1,9 @@
 // MAP05 «Жадтың көлеңкесі» bindings for the shared RPG runtime (same engine, same UI, own content).
 import {MAP05} from './gen/map05.js';
 import * as S from './story05.js';
+import RU from './ru/map05.js';
+import {applyRu} from './ru-pack.js';
+applyRu(S, RU);   // Russian for the parts written only in Kazakh
 import * as Q from './quest05.js';
 import {makePersistence} from './persistence.js';
 

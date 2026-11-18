@@ -41,7 +41,8 @@ test('Combat: enemies detect, chase and damage the player; solo death and respaw
   e.fixture_player(X, Y, 2); e.fixture_enemy(0, X + 60, Y);
   tick(e, 400);
   assert(e.fixture_hp() < 100, 'wolf attacks');
-  tick(e, 60); events(e); e.tj_damage(200); tick(e, 120);
+  tick(e, 60); for (let i = 0; i < 90 && e.tj_state(17); i++) tick(e, 1);   // wait out the invulnerability of the last bite
+  events(e); e.tj_damage(200); tick(e, 120);
   assert(events(e).some(([t]) => t === 8), 'EV_DEAD after the death animation');
   e.tj_respawn(1);
   assert.equal(e.tj_state(8), 100); assert.equal(e.tj_state(9), 2);

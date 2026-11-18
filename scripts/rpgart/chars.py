@@ -487,10 +487,10 @@ def human_sheet(name, anims):
 
 # ------------------------------------------------------------------ animals
 SPECIES = {
-    'wolf': dict(ramp='wolf', cell=32, L=9, H=4.2, leg=5, head=3.2, ears=True, tail='bushy', belly='grey', snout=3),
+    'wolf': dict(ramp='wolf', cell=40, L=9, H=4.2, leg=5, head=3.2, ears=True, tail='bushy', belly='grey', snout=3),
     'saiga': dict(ramp='saiga', cell=32, L=8, H=4.5, leg=7, head=3.0, ears=False, tail='short', belly='sand', snout=2, nose=True, horns=True),
     'bear': dict(ramp='bear', cell=48, L=14, H=8, leg=6, head=5.2, ears=True, tail='none', belly='bear', snout=3, hump=True),
-    'hare': dict(ramp='fur', cell=16, L=4, H=2.5, leg=2, head=2, ears=True, tail='puff', belly='grey', snout=1, longears=True),
+    'hare': dict(ramp='fur', cell=24, L=4, H=2.5, leg=2, head=2, ears=True, tail='puff', belly='grey', snout=1, longears=True),
 }
 
 def animal_frame(sp, view, anim, f):

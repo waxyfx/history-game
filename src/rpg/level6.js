@@ -1,6 +1,9 @@
 // MAP06 «Алтын Орда» bindings for the shared RPG runtime (same engine, same UI, own content).
 import {MAP06} from './gen/map06.js';
 import * as S from './story06.js';
+import RU from './ru/map06.js';
+import {applyRu} from './ru-pack.js';
+applyRu(S, RU);   // Russian for the parts written only in Kazakh
 import * as Q from './quest06.js';
 import {makePersistence} from './persistence.js';
 

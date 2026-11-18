@@ -5,9 +5,10 @@ import {decodePNG, browserInflate} from './png.js';
 import {ATLAS_RECTS} from './gen/atlas.js';
 import {UI, ITEMS, ITEM_ICONS, INTERACT_LABEL, getLang, setLang} from './i18n.js';
 import {loadLevel, levelFromURL, localPassed, TEMP_UNLOCK_ALL, LEVEL_IDS} from './levels.js';
+import {localQuiz, TRIAL_LEVELS_RU} from './ru-pack.js';
 import {ALL_EPOCHS} from './campaign.js';
 import {EFFECTS, CONSUMABLES, BELT_ORDER, QUICK_HEAL, HINTS} from './effects.js';
-import {sfx, music, ambience, toggleAudioMute, isAudioMuted, unlockAudio} from './audio.js';
+import {sfx, music, ambience, toggleAudioMute, isAudioMuted, unlockAudio, playSong, stopSong, songPlaying} from './audio.js';
 import {createParty, makeCode, MAX_PARTY} from './net.js';
 import {db, rpc as rpcNamed} from '../api.js';
 // Official-run RPCs are written with positional arguments (as in the SQL tests); Supabase needs named ones.
@@ -291,7 +292,7 @@ const evidenceHTML = list => list && list.length ? `<div class="evidence"><small
 // chronicle journal after the level. In an official run the server records the choice and scores it.
 async function trial(def) {
   const done = G.flags.quiz[def.id];
-  const head = `<p class="eyebrow">${esc(def.questTitle)} · ${esc(t('trial'))}${def.level ? ' · ' + esc(TRIAL_LEVELS[def.level]) : ''}</p><h2>${esc(def.title)}</h2>`;
+  const head = `<p class="eyebrow">${esc(def.questTitle)} · ${esc(t('trial'))}${def.level ? ' · ' + esc((lang === 'ru' ? TRIAL_LEVELS_RU : TRIAL_LEVELS)[def.level]) : ''}</p><h2>${esc(def.title)}</h2>`;
   if (done) {
     openPanel(`${head}<p>${esc(t('decided'))}</p><button class="primary" data-close>${esc(t('next'))} →</button>`, 'quiz');
     await panelDone();
@@ -332,7 +333,7 @@ function choose(def) {
 }
 const quiz = n => {
   const q = HISTORICAL_QUIZZES[n];
-  return trial({...q, question: q.question});
+  return trial(localQuiz(q, lang));
 };
 function bonusDef(i) {
   const q = BONUS_QUIZ.questions[i], m = BONUS_META[i];
@@ -411,7 +412,7 @@ function resultsHTML() {
 }
 // Chronicle journal: after the level every trial shows the verdict and the historical logic.
 function journalHTML() {
-  const rows = [...MAIN_QUIZ_ORDER.map(n => HISTORICAL_QUIZZES[n]), ...BONUS_META.map((m, i) => ({...bonusDef(i), explanation: L(BONUS_QUIZ.questions[i].e), tier: 'secret'}))];
+  const rows = [...MAIN_QUIZ_ORDER.map(n => localQuiz(HISTORICAL_QUIZZES[n], lang)), ...BONUS_META.map((m, i) => ({...bonusDef(i), explanation: L(BONUS_QUIZ.questions[i].e), tier: 'secret'}))];
   return `<div class="journal-list">${rows.map(q => {
     const r = G.flags.quiz[q.id];
     const state = !r ? '·' : r.ok ? '✓' : '✗';
@@ -1037,14 +1038,14 @@ async function boot() {
     Object.assign(G, {
       say, quiz, choose, bonusTrial, chamber, journal, levelPassed, results, complete, travel, toast, changed, heroPos, save: s => save(s),
       cine: (id, fn) => playCutscene(id, fn), sfx,
-      music: m => music(m), musicZone: () => musicForZone(true), busy: () => !!(cine || dialogBusy || panelOpen || comicOpen),
+      music: m => music(m), song: (url, v) => playSong(url, v), stopSong: ms => stopSong(ms), songPlaying, musicZone: () => musicForZone(true), busy: () => !!(cine || dialogBusy || panelOpen || comicOpen),
       // A cinematic film rendered in the engine: wide letterbox, grain, timed subtitles, no dialogue boxes.
       // Motion-comic cinematic in the intro's format: the game pauses underneath and resumes afterwards.
       comic: async () => {
         if (!LV.comic || comicOpen) return;
         comicOpen = true; held.clear(); touch.clear(); mouseMask = 0; input(); E.tj_pause(1); music('off');
         let ctxA = null; try { ctxA = new (window.AudioContext || window.webkitAudioContext)(); } catch {}
-        try { await (await LV.comic({audioCtx: ctxA})).done; } catch (e) { console.warn(e); }
+        try { await (await LV.comic({audioCtx: ctxA, noScore: songPlaying()})).done; } catch (e) { console.warn(e); }
         if (ctxA && ctxA.state !== 'closed') ctxA.close().catch(() => {});   // the comic may already have closed it
         // The comic has its own ҚАЗ/РУС switch (same storage key): keep the game UI in the language chosen there.
         if (getLang() !== lang) { lang = getLang(); document.documentElement.lang = lang; updateHud(true); }

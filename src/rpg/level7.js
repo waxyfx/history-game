@@ -1,6 +1,9 @@
 // MAP07 «Жеті ата» — the Kazakh Khanate (shared runtime, own content).
 import {MAP07} from './gen/map07.js';
 import * as S from './story07.js';
+import RU from './ru/map07.js';
+import {applyRu} from './ru-pack.js';
+applyRu(S, RU);   // Russian for the parts written only in Kazakh
 import * as Q from './quest07.js';
 import {levelDescriptor, STORY_DEFAULTS} from './epochkit.js';
 

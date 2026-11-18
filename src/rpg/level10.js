@@ -1,6 +1,9 @@
 // MAP10 «Он бірінші тігіс» — independent Kazakhstan, Almaty 2087: the finale (shared runtime, own content).
 import {MAP10} from './gen/map10.js';
 import * as S from './story10.js';
+import RU from './ru/map10.js';
+import {applyRu} from './ru-pack.js';
+applyRu(S, RU);   // Russian for the parts written only in Kazakh
 import * as Q from './quest10.js';
 import {levelDescriptor, STORY_DEFAULTS} from './epochkit.js';
 

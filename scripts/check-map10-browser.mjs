@@ -34,7 +34,7 @@ try {
   await a.goTo(42, 18); await a.settle();
   assert(await a.flag('bossSeen'), 'Zulmat'); assert(B.seen.comics > 0, 'the finale comic played');
   assert(await a.flag('lostBow') && await a.flag('lostSpear') && await a.flag('artifactsLost'), 'gear lost in the duel');
-  assert(await a.flag('merged'), 'the merging'); assert(await a.flag('stitch'));
+  assert(await a.flag('merged'), 'the merging'); assert(await a.flag('stitch')); assert(await a.js('__tj.G.songPlaying()'), 'the finale song plays through the fight');
   assert.deepEqual(await a.js('[1, 2, 3, 4].map(i => __tj.E.tj_item_count(i))'), [1, 0, 0, 0], 'only the sword is left');
   assert.equal(await a.js('__tj.E.tj_state(13)'), 0, 'sword in hand');
   const outside = await a.js(`["dana","erlan","prof","guard10","citizen"].map(k => __tj.E.tj_npc(__tj.LV.MAP.npcs.indexOf(k), 1) / 16)`);
@@ -49,7 +49,7 @@ try {
     if (r === 20) await a.shot('map10-04-fight');
   }
   await a.wait('__tj.cine === "zulmatDown" || __tj.G.flags.b.zulmatDown', 10000); await a.settle();
-  assert(await a.flag('zulmatDown'), 'Zulmat falls');
+  assert(await a.flag('zulmatDown'), 'Zulmat falls'); assert(!(await a.js('__tj.G.songPlaying()')), 'the song fades out when Zulmat falls');
   await a.shot('map10-05-after');
   await a.use('gatecore'); assert(await a.flag('page')); assert.equal(await a.stage(), 'done');
   const res = await a.finish('gate10');

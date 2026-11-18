@@ -1,6 +1,9 @@
 // MAP08 «Өрт» — the Russian Empire, Akmola 1838 (shared runtime, own content).
 import {MAP08} from './gen/map08.js';
 import * as S from './story08.js';
+import RU from './ru/map08.js';
+import {applyRu} from './ru-pack.js';
+applyRu(S, RU);   // Russian for the parts written only in Kazakh
 import * as Q from './quest08.js';
 import {levelDescriptor, STORY_DEFAULTS} from './epochkit.js';
 

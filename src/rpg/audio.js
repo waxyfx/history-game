@@ -21,10 +21,28 @@ function C() {
   if (ctx.state === 'suspended') ctx.resume().catch(() => {});
   return ctx;
 }
-export function unlockAudio() { C(); }
+export function unlockAudio() { C(); if (song && song.paused) song.play().catch(() => {}); }   // a song blocked by autoplay starts on the first input
+// A recorded track (the finale): it replaces the procedural music until stopSong(); music() calls meanwhile only remember the mode.
+let song = null;
+export function playSong(url, volume = .6) {
+  if (song && song.dataset.url === url) { if (song.paused) song.play().catch(() => {}); return; }
+  stopSong(0);
+  song = new Audio(url); song.dataset.url = url; song.loop = true; song.volume = volume; song.muted = muted;
+  song.play().catch(() => {});
+  clearTimeout(musicTimer); drone(false, 196);
+}
+export function stopSong(fadeMs = 1800) {
+  if (!song) return;
+  const s = song; song = null; const v0 = s.volume, t0 = performance.now();
+  const step = () => { const k = fadeMs ? Math.min(1, (performance.now() - t0) / fadeMs) : 1; s.volume = v0 * (1 - k); if (k < 1) requestAnimationFrame(step); else { s.pause(); s.src = ''; } };
+  step();
+  const m = musicMode; musicMode = ''; if (m && m !== 'off') music(m);
+}
+export function songPlaying() { return !!song; }
 export function toggleAudioMute() {
   muted = !muted;
   if (master) master.gain.setTargetAtTime(muted ? 0 : .55, ctx.currentTime, .05);
+  if (song) song.muted = muted;
   return muted;
 }
 export function isAudioMuted() { return muted; }
@@ -123,14 +141,20 @@ export function ambience(level) {
   const c = C(); if (!c) return;
   const t = c.currentTime;
   const w = loopNoise('wind', {type: 'bandpass', f: 500, q: .6});
-  const fi = loopNoise('fire', {type: 'highpass', f: 1800, q: .5});
+  // The campfire: a soft low roar under small, irregular crackles (the old bed was a steady high hiss).
+  const fi = loopNoise('fire', {type: 'lowpass', f: 420, q: .8});
   const r = loopNoise('river', {type: 'lowpass', f: 900, q: .3});
   const cv = loopNoise('cave', {type: 'lowpass', f: 180, q: 1});
   if (!w) return;
   const gust = .6 + .4 * Math.sin(t * .23) * Math.sin(t * .071 + 1);
   w.g.gain.setTargetAtTime(.12 * (level.wind || 0) * gust, t, .4);
   w.fl.frequency.setTargetAtTime(380 + 420 * gust, t, .5);
-  fi.g.gain.setTargetAtTime(.09 * (level.fire || 0) * (.6 + Math.random() * .8), t, .05);
+  const fl = level.fire || 0;
+  fi.g.gain.setTargetAtTime(.07 * fl * (.8 + .2 * Math.sin(t * 1.7)), t, .3);
+  if (!muted && fl > .05 && Math.random() < .09 * fl) {   // crackles and the odd pop of a log
+    const pop = Math.random() < .15;
+    noise(pop ? .07 : .018 + Math.random() * .025, (pop ? .05 : .022) * fl, {f: pop ? 900 : 1800 + Math.random() * 2600, q: pop ? 2 : 5, bus: ambBus, pan: (Math.random() - .5) * .4});
+  }
   r.g.gain.setTargetAtTime(.1 * (level.river || 0), t, .3);
   cv.g.gain.setTargetAtTime(.22 * (level.cave || 0), t, .6);
   // Occasional ambient voices: larks by day, drips in the cave.
@@ -188,6 +212,7 @@ export function music(mode) {
   if (mode === musicMode) return;
   musicMode = mode; musicStep = 0;
   clearTimeout(musicTimer);
+  if (song) { drone(false, 196); return; }   // the recorded song has the floor
   const roots = {explore: 196, village: 220, danger: 174.6, cave: 146.8, mystery: 130.8, camp: 246.9, steppe: 185, witness: 164.8, film: 110};
   drone(mode !== 'off', roots[mode] || 196);
   if (mode === 'off') return;

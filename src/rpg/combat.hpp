@@ -17,15 +17,15 @@ constexpr EnemySpec enemySpecs[EnemyTypeCount]={
     {48,9,16,54,1.25f,112,17},   // wolf: fast pack hunter, circles then lunges
     {72,15,22,62,.82f,104,30},   // stranger with spear
     {56,11,32,84,.78f,150,128},  // stranger archer keeps distance
-    {280,24,28,70,.62f,128,28},  // cave bear: roar, charge, swipe
+    {280,24,28,70,.85f,175,32},  // cave bear: roar, charge, swipe (faster, notices from farther)
     {64,14,16,50,1.05f,124,22},  // shade-touched warrior: lunging cut
     {42,12,30,72,.72f,150,118},  // ash wraith: floats, throws fire bolts
-    {640,22,36,50,.58f,170,34},  // boss: distorted keeper of the sacred fire
-    {720,20,30,50,.95f,190,36},  // boss: the golden-armoured rider (MAP03)
-    {780,18,30,50,.8f,220,40},   // boss: the three-faced witness (MAP04)
+    {640,22,36,50,.82f,230,40},  // boss: distorted keeper of the sacred fire
+    {720,20,30,50,1.15f,220,42}, // boss: the golden-armoured rider (MAP03)
+    {780,18,30,50,1.0f,240,46},  // boss: the three-faced witness (MAP04)
     {760,16,26,50,.95f,230,36},  // boss: «Екінші бейне», the second image (MAP05)
     {820,18,28,50,1.6f,240,40},  // boss: the herald of the forged yarlyk (MAP06)
-    {1200,20,26,46,1.25f,260,40}}; // boss: Зұлмат, the two hands (MAP10)
+    {1200,20,26,46,1.4f,260,46}};  // boss: Зұлмат, the two hands (MAP10)
 struct Attack {
     int age=0,weapon=0,facing=4,cooldown=0;
     bool active=false,connected=false,charge=false;   // charge: a running lance thrust (MAP06)

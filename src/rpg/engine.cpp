@@ -42,11 +42,12 @@ struct Npc {
     int way=0,wait=0,mode=0; // 0 routine, 1 scripted goto, 2 hold position
     float gx=0,gy=0; bool run=false; int holdAnim=art::A_IDLE,bubble=0,alert=0,greeted=0;
 };
-struct Animal { bool active=true; int sheet; float x,y,hx,hy,vx=0,vy=0; int facing=2,anim=art::A_IDLE,animTime=0,timer=0,flee=0; };
+struct Animal { bool active=true; int sheet; float x,y,hx,hy,vx=0,vy=0,tvx=0,tvy=0; int facing=2,anim=art::A_IDLE,animTime=0,timer=0,flee=0,calm=0; };
 struct Enemy {
     bool active=true,enabled=true;
     int type=0,group=0,hp=0,state=Idle,facing=4,timer=0,anim=art::A_IDLE,animTime=0,target=-1,alerted=0,seed=0,hitFlash=0,showBar=0,phase=1,special=0,illusions=0;
     float px[3]{},py[3]{};
+    int leash=0;   // ticks of walking home after giving up the chase (no re-alert, no shout)
     float x=0,y=0,homeX=0,homeY=0,dx=0,dy=0,nx=0,ny=0,lx=0,ly=0; // lx/ly: the hero a tick ago (MAP05 prediction)
     int aux=0;
     Attack attack;
@@ -290,7 +291,7 @@ void playerStrike(){
             if(p.combo>=3){p.combo=0;p.attack.charge=true;game.shake=4;auto d=directions[p.facing];for(int i=0;i<12;++i)particle(p.x+d.x*10,p.y-8,d.x*(1.5f+frand()),d.y*(1.5f+frand())-.4f,16,0,rgba(0xfff2c4));}}
         if(p.attack.charge){auto d=directions[p.facing];for(int i=0;i<10;++i)particle(p.x-d.x*6,p.y-2,(frand()-.5f)*.8f-d.x,-frand()*.6f,18,2);}
         sfx(p.weapon==Sword?SFX_SWORD:p.weapon==Spear?SFX_SPEAR:SFX_BOWSTRING,p.x,p.y);
-        for(auto& a:animals){float dx=a.x-p.x,dy=a.y-p.y;if(dx*dx+dy*dy<110*110)a.flee=90;}
+        for(auto& a:animals){float dx=a.x-p.x,dy=a.y-p.y;if(!a.flee&&dx*dx+dy*dy<110*110)a.flee=70;}
     }
 }
 void updateFocus(){
@@ -392,7 +393,8 @@ void tickLocalPlayer(){
                 if(p.stepAcc>(p.running?13:16)){p.stepAcc=0;sfx(stepSfx(p.x,p.y),p.x,p.y);
                     if(t==Shallow)for(int i=0;i<4;++i)particle(p.x,p.y-1,(frand()-.5f)*1.4f,-frand()*1.2f,14,0,rgba(0xd4efe2,200));
                     else if(p.running&&(t==Dirt||t==Sand||t==Steppe))particle(p.x-directions[p.facing].x*4,p.y,0,-.2f,20,2);}
-                for(auto& an:animals){float ax=an.x-p.x,ay=an.y-p.y;if(ax*ax+ay*ay<(p.running?90*90:62*62))an.flee=80;}
+                // Footsteps: a running hero startles the herd; a calm walk lets him pass close (no endless re-scare).
+                if(p.running)for(auto& an:animals){float ax=an.x-p.x,ay=an.y-p.y;if(!an.flee&&!an.calm&&ax*ax+ay*ay<80*80)an.flee=60;}
             }
         }
     }
@@ -472,36 +474,49 @@ void tickNpcs(){
         }
     }
 }
+// Animals move like animals: velocity eases toward a goal (no instant turns), they face where they actually go, a blocked
+// path makes them pick another heading instead of treading in place, and a scare runs its course before they calm down.
 void tickAnimals(){
     for(auto& a:animals){if(!a.active)continue;
         ++a.animTime;
         bool hare=a.sheet==art::SH_HARE;
-        // Flee from the nearest player.
         float px=0,py=0,best=1e9;
         for(auto& p:players)if(p.active){float dx=a.x-p.x,dy=a.y-p.y,d=dx*dx+dy*dy;if(d<best){best=d;px=p.x;py=p.y;}}
-        if(best<(hare?70*70:60*60))a.flee=a.flee>40?a.flee:70;
+        if(a.calm>0)--a.calm;
+        float scare=hare?64.f:40.f;
+        if(!a.flee&&!a.calm&&best<scare*scare)a.flee=hare?60:45;
+        float topSpeed;
         if(a.flee>0){
-            --a.flee;
+            if(--a.flee==0)a.calm=90;   // a pause before they can be scared again
             float dx=a.x-px,dy=a.y-py,len=sqrtf(dx*dx+dy*dy)+.01f;
-            float sp=hare?2.4f:2.0f;
-            float nx=a.x+dx/len*sp,ny=a.y+dy/len*sp;
-            float hx=nx-a.hx,hy=ny-a.hy;
-            if(hx*hx+hy*hy>220*220){nx=a.x+(a.hx-a.x)*.01f;ny=a.y+(a.hy-a.y)*.01f;}
-            if(!blockedFeet(nx,a.y,4,2))a.x=nx; if(!blockedFeet(a.x,ny,4,2))a.y=ny;
-            a.facing=heading(dx,dy);setAnim(a.anim,a.animTime,art::A_RUN);
-            if(!hare&&a.flee%30==0)sfx(SFX_HOOVES,a.x,a.y);
-            continue;
+            topSpeed=hare?2.2f:1.3f;
+            a.tvx=dx/len*topSpeed;a.tvy=dy/len*topSpeed*.8f;
+            float hx=a.x-a.hx,hy=a.y-a.hy;
+            if(hx*hx+hy*hy>200*200){a.tvx=-hx/200*topSpeed*.6f;a.tvy=-hy/200*topSpeed*.6f;}
+        } else {
+            topSpeed=hare?.6f:.32f;
+            if(--a.timer<=0){
+                a.timer=150+int(rng()%260);
+                if(rng()%5<2){a.tvx=0;a.tvy=0;}   // stand and graze
+                else{float ang=frand()*6.283f;a.tvx=cosf(ang)*topSpeed;a.tvy=sinf(ang)*topSpeed*.7f;
+                    float hx=a.hx-a.x,hy=a.hy-a.y,d=sqrtf(hx*hx+hy*hy);
+                    if(d>56){a.tvx=hx/d*topSpeed;a.tvy=hy/d*topSpeed*.7f;}}
+            }
         }
-        if(--a.timer<=0){
-            a.timer=120+int(rng()%240);
-            if(rng()%3==0){a.vx=0;a.vy=0;}
-            else{float ang=frand()*6.283f;a.vx=cosf(ang)*.35f;a.vy=sinf(ang)*.25f;
-                if((a.x-a.hx)*(a.x-a.hx)+(a.y-a.hy)*(a.y-a.hy)>60*60){a.vx=(a.hx-a.x)*.006f;a.vy=(a.hy-a.y)*.006f;}}
-        }
-        if(a.vx!=0||a.vy!=0){
-            if(!blockedFeet(a.x+a.vx,a.y,4,2))a.x+=a.vx; if(!blockedFeet(a.x,a.y+a.vy,4,2))a.y+=a.vy;
-            a.facing=heading(a.vx,a.vy);setAnim(a.anim,a.animTime,art::A_WALK);
-        } else setAnim(a.anim,a.animTime,(!hare&&a.timer%240<150)?art::A_GRAZE:art::A_IDLE);
+        float k=a.flee>0?.12f:.04f;   // ease the velocity toward the goal
+        a.vx+=(a.tvx-a.vx)*k;a.vy+=(a.tvy-a.vy)*k;
+        float speed=sqrtf(a.vx*a.vx+a.vy*a.vy);
+        if(speed>.05f){
+            bool bx=blockedFeet(a.x+a.vx,a.y,4,2),by=blockedFeet(a.x,a.y+a.vy,4,2);
+            if(!bx)a.x+=a.vx; if(!by)a.y+=a.vy;
+            if(bx&&by){   // a wall or a fence: turn away instead of pushing against it
+                float ang=atan2f(a.vy,a.vx)+3.1416f*(.5f+frand());
+                a.tvx=cosf(ang)*topSpeed;a.tvy=sinf(ang)*topSpeed*.7f;a.vx*=.3f;a.vy*=.3f;
+            } else if(bx){a.tvx=-a.tvx*.5f;a.vx=0;} else if(by){a.tvy=-a.tvy*.5f;a.vy=0;}
+            if(speed>.12f)a.facing=heading(a.vx,a.vy);   // no flicker while easing in/out
+            setAnim(a.anim,a.animTime,a.flee>0&&speed>.8f?art::A_RUN:art::A_WALK);
+            if(!hare&&a.flee>0&&a.flee%34==0)sfx(SFX_HOOVES,a.x,a.y);
+        } else setAnim(a.anim,a.animTime,(!hare&&a.timer%240<170)?art::A_GRAZE:art::A_IDLE);
     }
 }
 
@@ -580,7 +595,7 @@ void tickKeeper(Enemy& e){
     switch(e.special){
     case 1: // slam telegraph -> impact
         setAnim(e.anim,e.animTime,art::A_SWIPE);
-        if(--e.timer<=0){keeperHitArea(e.x,e.y,54,spec.damage+2);game.shake=16;sfx(SFX_IMPACT,e.x,e.y);
+        if(--e.timer<=0){keeperHitArea(e.x,e.y,66,spec.damage+2);game.shake=16;sfx(SFX_IMPACT,e.x,e.y);
             for(int i=0;i<36;++i){float a=i/36.f*6.283f;particle(e.x+cosf(a)*20,e.y+sinf(a)*12,cosf(a)*2.2f,sinf(a)*1.4f,26,2);}
             e.special=0;e.attack.cooldown=phase==3?50:70;}
         return;
@@ -591,7 +606,7 @@ void tickKeeper(Enemy& e){
     case 3: // fire stream
         setAnim(e.anim,e.animTime,art::A_ROAR);
         if(e.timer%3==0){auto d=directions[e.facing];for(int i=0;i<3;++i)particle(e.x+d.x*12,e.y-12+d.y*8,d.x*(3+frand()*2)+(frand()-.5f),d.y*(3+frand()*2)+(frand()-.5f),26,0,rgba(frand()<.5f?0xffd24a:0xe0621f));}
-        if(e.timer%9==0)for(int s=0;s<MaxPlayers;++s){auto& q=players[s];if(q.active&&q.hp>0&&!q.down&&inCone(e,q.x,q.y,96,.82f))hitPlayer(s,7);}
+        if(e.timer%9==0)for(int s=0;s<MaxPlayers;++s){auto& q=players[s];if(q.active&&q.hp>0&&!q.down&&inCone(e,q.x,q.y,130,.8f))hitPlayer(s,8);}
         if(--e.timer<=0){e.special=0;e.attack.cooldown=phase==3?40:60;}
         return;
     case 4: // fire pillars telegraph -> eruption
@@ -606,10 +621,10 @@ void tickKeeper(Enemy& e){
         if(phase==3&&dist>40&&(e.seed++%3)==0){e.special=4;e.timer=50;
             for(int k=0;k<3;++k){const Player& q=players[k<MaxPlayers&&players[k].active?k:target];e.px[k]=q.x+(k==0?0:(frand()-.5f)*60);e.py[k]=q.y+(k==0?0:(frand()-.5f)*40);}
             sfx(SFX_ROAR,e.x,e.y);return;}
-        if(dist<52){e.special=1;e.timer=tele;sfx(SFX_GROWL,e.x,e.y);return;}
-        if(dist<140){e.special=2;e.timer=tele-6;sfx(SFX_ROAR,e.x,e.y);return;}
+        if(dist<62){e.special=1;e.timer=tele;sfx(SFX_GROWL,e.x,e.y);return;}
+        if(dist<190){e.special=2;e.timer=tele-6;sfx(SFX_ROAR,e.x,e.y);return;}
     }
-    if(dist>30){walkEnemy(e,p.x,p.y,speed);setAnim(e.anim,e.animTime,art::A_WALK);}
+    if(dist>30){walkEnemy(e,p.x,p.y,dist>110?speed*1.6f:speed);setAnim(e.anim,e.animTime,dist>110?art::A_CHARGE:art::A_WALK);}
     else setAnim(e.anim,e.animTime,art::A_IDLE);
 }
 // ------------------------------------------------------------------ boss: the golden-armoured rider (MAP03)
@@ -1064,6 +1079,7 @@ void tickEnemy(Enemy& e){
         return;
     }
     float dist;int target=nearestPlayer(e,dist);
+    if(e.leash>0){--e.leash;target=-1;}
     e.target=target;
     if(target<0){
         e.alerted=e.alerted>0&&e.state==Chase?e.alerted:0;
@@ -1084,13 +1100,13 @@ void tickEnemy(Enemy& e){
         else sfx(e.type==Wolf?SFX_HOWL:SFX_SHOUT,e.x,e.y);}
     // Leash: give up when the target drags them far away from home.
     float hx=p.x-e.homeX,hy=p.y-e.homeY;
-    if(hx*hx+hy*hy>260*260&&e.type!=Bear){e.alerted=0;e.state=Patrol;return;}
+    if(hx*hx+hy*hy>260*260&&e.type!=Bear){e.alerted=0;e.state=Patrol;e.leash=240;return;}
     if(e.state==Roar){ e.facing=heading(dx,dy); setAnim(e.anim,e.animTime,art::A_ROAR); if(--e.timer<=0){e.state=Chase;e.timer=90;} return; }
     if(e.type==Bear){
         if(e.state==Telegraph){ setAnim(e.anim,e.animTime,art::A_ROAR); if(--e.timer<=0){e.state=Charge;e.timer=55;float len=sqrtf(dx*dx+dy*dy)+.01f;e.dx=dx/len;e.dy=dy/len;e.facing=heading(dx,dy);sfx(SFX_ROAR,e.x,e.y);} return; }
         if(e.state==Charge){
             setAnim(e.anim,e.animTime,art::A_CHARGE);
-            float nx=e.x+e.dx*2.9f,ny=e.y+e.dy*2.9f;
+            float nx=e.x+e.dx*3.4f,ny=e.y+e.dy*3.4f;
             if(blockedFeet(nx,ny,8,3)){e.state=Stunned;e.timer=110;game.shake=14;sfx(SFX_IMPACT,e.x,e.y);
                 for(int i=0;i<10;++i)particle(e.x+e.dx*12,e.y,(frand()-.5f)*2,-frand()*1.5f,24,2);return;}
             for(int s=0;s<MaxPlayers;++s){auto& q=players[s];if(q.active&&q.hp>0&&!q.down&&fabsf(q.x-nx)<14&&fabsf(q.y-ny)<10){hitPlayer(s,30);e.state=Chase;e.timer=80;a.cooldown=60;return;}}
@@ -1098,7 +1114,7 @@ void tickEnemy(Enemy& e){
             if(--e.timer<=0){e.state=Chase;e.timer=100;}
             return;
         }
-        if(dist>46&&dist<150&&e.timer<=0&&!a.cooldown){e.state=Telegraph;e.timer=34;e.facing=heading(dx,dy);return;}
+        if(dist>46&&dist<230&&e.timer<=0&&!a.cooldown){e.state=Telegraph;e.timer=30;e.facing=heading(dx,dy);return;}
         if(e.timer>0)--e.timer;
     }
     if(e.type==Archer||e.type==Wraith){
@@ -1150,7 +1166,7 @@ void tickProjectiles(){
             if(p.owner<0){
                 for(int i=0;i<EnemyCount;++i){auto& e=enemies[i];
                     float hh=e.type==Bear?16:9;
-                    if(e.enabled&&e.hp>0&&fabsf(e.x-p.x)<(e.type==Bear?13:8)&&p.y>e.y-hh-12&&p.y<e.y+2){playerHitsEnemy(i,p.damage,p.x-p.dx*3,p.y-p.dy*3);p.active=false;sfx(SFX_ARROW_HIT,p.x,p.y);break;}}
+                    if(e.enabled&&e.hp>0&&fabsf(e.x-p.x)<(e.type==Bear?13:8)&&p.y>e.y-hh-12&&p.y<e.y+2){playerHitsEnemy(i,(isBossType(e.type)||e.type==Bear)?p.damage*3/5:p.damage,p.x-p.dx*3,p.y-p.dy*3);p.active=false;sfx(SFX_ARROW_HIT,p.x,p.y);break;}}
             } else if(game.netRole==0){
                 for(int s=0;s<MaxPlayers;++s){auto& q=players[s];
                     if(q.active&&q.hp>0&&!q.down&&fabsf(q.x-p.x)<6&&p.y>q.y-22&&p.y<q.y+2){hitPlayer(s,p.damage);p.active=false;break;}}
@@ -1381,6 +1397,10 @@ void render(){
             unsigned alpha=e.state==Death&&e.timer<60?unsigned(e.timer*4):255;
             uint32_t tint=e.type==Bear&&e.state==Telegraph&&(game.ticks/4)%2?rgba(0xe06a3f,90):0;
             int sheet=enemySheet[e.type];
+            if(e.type==Shade&&e.state!=Death){   // the shade's touch: a violet aura round an ordinary villager
+                int ax=int(e.x)-renderer.camX,ay=int(e.y)-renderer.camY-12;unsigned pul=46+unsigned(18*sinf(game.ticks*.12f+d.idx));
+                renderer.ellipse(ax,ay,11,16,rgba(0x8e44c8,pul));renderer.ellipse(ax,ay+12,9,3,rgba(0x5b2a8a,pul+30));
+                if(game.ticks%7==d.idx%7)particle(e.x+(frand()-.5f)*14,e.y-6-frand()*20,(frand()-.5f)*.3f,-.4f-frand()*.4f,26,0,rgba(0xb07ee0,180));}
             if(e.type==Witness&&e.phase==2)for(int k=0;k<3;++k)if(e.illusions&(1<<k))renderer.sprite(art::O_BANNER_0+k,int(e.px[k]),int(e.py[k]));
             if(e.type==Image&&e.phase==2&&e.state!=Death)for(int k=0;k<3;++k)if(e.illusions&(1<<k)){const Player& L0=me();   // copies look away; no shadow
                 drawActor(sheet,e.anim,f,(heading(L0.x-e.px[k],L0.y-e.py[k])+4)&7,e.px[k],e.py[k],unsigned(190+30*((game.ticks/8+k)%2)),0,rgba(0x86cdbd,70),false);}

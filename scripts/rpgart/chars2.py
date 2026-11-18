@@ -19,8 +19,9 @@ C.STYLES.update({
                      boots='fur', bare_arms=True),
     'villagerw': dict(skin='skin2', hair='black', hairstyle='braid', top='ochre', topkind='dress', trim='gold', legs='ochre', legshade=1,
                       boots='hide'),
+    # Shade-touched villagers look like ordinary people; the engine draws their violet aura.
     'shade': dict(skin='skin', hair='black', hairstyle='crop', top='dirt', topkind='tunic', trim='ochre', legs='hide', legshade=1,
-                  boots='fur', bare_arms=True, shade=True),
+                  boots='fur', bare_arms=True),
     'raider': dict(skin='skin2', hair='black', hairstyle='tail', top='fur', topkind='tunic', trim='red', legs='wolf', legshade=0,
                    boots='fur', headband='red', paint=True, pack='bowback'),
 })
@@ -51,7 +52,7 @@ def human_frame(style, view, anim, f):
 C.human_frame = human_frame
 
 C.SPECIES.update({
-    'cow': dict(ramp='hide', cell=32, L=12, H=6.5, leg=7, head=4, ears=True, tail='short', belly='bark', snout=3, horns=True),
+    'cow': dict(ramp='hide', cell=48, L=12, H=6.5, leg=7, head=4, ears=True, tail='short', belly='bark', snout=3, horns=True),
     'sheep': dict(ramp='grey', cell=32, L=8.5, H=6, leg=4, head=3, ears=True, tail='puff', belly='grey', snout=2),
 })
 

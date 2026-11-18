@@ -1,6 +1,9 @@
 // MAP09 «Хат» — Soviet Kazakhstan, Alma-Ata 1941 (shared runtime, own content).
 import {MAP09} from './gen/map09.js';
 import * as S from './story09.js';
+import RU from './ru/map09.js';
+import {applyRu} from './ru-pack.js';
+applyRu(S, RU);   // Russian for the parts written only in Kazakh
 import * as Q from './quest09.js';
 import {levelDescriptor, STORY_DEFAULTS} from './epochkit.js';
 

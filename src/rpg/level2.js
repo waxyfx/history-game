@@ -1,6 +1,9 @@
 // MAP02 «Күлге көмілген шындық» bindings for the shared RPG runtime (same engine, same UI, own content).
 import {MAP02} from './gen/map02.js';
 import * as S from './story02.js';
+import RU from './ru/map02.js';
+import {applyRu} from './ru-pack.js';
+applyRu(S, RU);   // Russian for the parts written only in Kazakh
 import * as Q from './quest02.js';
 import {makePersistence} from './persistence.js';
 import {EGG_NAMES, EGG_LABELS} from './eggs.js';

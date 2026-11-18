@@ -1,6 +1,9 @@
 // MAP04 «Ғұндар дәуірі» bindings for the shared RPG runtime (same engine, same UI, own content).
 import {MAP04} from './gen/map04.js';
 import * as S from './story04.js';
+import RU from './ru/map04.js';
+import {applyRu} from './ru-pack.js';
+applyRu(S, RU);   // Russian for the parts written only in Kazakh
 import * as Q from './quest04.js';
 import {makePersistence} from './persistence.js';
 import {EGG_NAMES, EGG_LABELS} from './eggs.js';

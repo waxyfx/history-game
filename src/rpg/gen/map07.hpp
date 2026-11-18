@@ -183,6 +183,6 @@ constexpr EnemyDef enemyDefs[EnemyCount]={{0,1,96,1024},{0,1,160,1056},{1,2,352,
 constexpr unsigned char enemySheet[12]={art::SH_WOLF,art::SH_JUNGAR,art::SH_JUNGARARCHER,art::SH_BEAR,art::SH_SHADE,art::SH_WRAITH,art::SH_WOLF,art::SH_WOLF,art::SH_NOYON,art::SH_WOLF,art::SH_WOLF,art::SH_WOLF};
 struct PickupDef { short item,qty,x,y; };
 constexpr int PickupDefCount=8;
-constexpr PickupDef pickupDefs[PickupDefCount>0?PickupDefCount:1]={{9,2,480,544},{4,8,800,832},{25,2,224,768},{21,1,960,416},{23,1,1120,832},{9,2,1280,480},{22,1,640,192},{20,1,1376,960}};
+constexpr PickupDef pickupDefs[PickupDefCount>0?PickupDefCount:1]={{9,2,496,544},{4,8,800,832},{25,2,224,768},{21,1,960,416},{23,1,1120,832},{9,2,1280,480},{22,1,640,192},{20,1,1376,960}};
 constexpr int SpawnX=704, SpawnY=1094;
 }}

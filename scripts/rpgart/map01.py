@@ -375,7 +375,7 @@ def emit():
     # item ids: 4 arrows, 5 kit, 9 herbs; shared consumables 20 big herb, 21 strength, 22 guard, 23 swift.
     # New entries are appended so the pickup bits of existing saves keep their meaning.
     LV.pickups = [(9, 2, 9, 45), (4, 6, 62.5, 50), (9, 1, 70, 61), (5, 1, 27, 22), (4, 8, 84, 26),
-                  (9, 2, 30, 97), (4, 6, 37, 92), (9, 2, 66, 29), (4, 5, 104, 40), (9, 1, 18, 24),
+                  (9, 2, 30, 97), (4, 6, 37, 92), (9, 2, 66, 29), (4, 5, 104, 40), (9, 1, 17, 23.5),
                   (21, 1, 86, 30),   # strength: on the path from the last track to the strangers' camp
                   (22, 1, 28, 102),  # guard: cave entrance, before the bear
                   (23, 1, 95, 26),   # swift: exploration, the far edge of the ravine

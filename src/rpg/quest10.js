@@ -166,10 +166,12 @@ export function createQuest(G) {
 
   // ---------------------------------------------------------------- the duel: lose first (scripted), then win (played)
   const T = {zone: -1, busy: false};
+  const FINAL_SONG = '/audio/final-battle.m4a';
   async function duel() {
     if (T.busy) return;
     T.busy = true;
     await G.cine('duel', cutDuel);            // the hall, the evacuation, the defeat: gear lost, the wound
+    G.song?.(FINAL_SONG);                     // the finale's song: it starts with the comic and carries the fight
     if (G.comic) await G.comic();             // Түйінші, the reveal, the transfer, the merging, the fire
     set('merged'); K.artifact('stitch'); E.tj_heal(100); applyWorld(G); E.tj_equip(0);
     await G.say([...D.afterComic, ...D.experience]);
@@ -181,6 +183,7 @@ export function createQuest(G) {
     const B = b(), z = E.tj_state(2);
     if (z !== T.zone) { T.zone = z; applyWorld(G); }
     if (B.bossSeen && !B.merged && !B.zulmatDown) duel();   // a save made in the middle of the duel resumes it
+    else if (B.merged && !B.zulmatDown && !G.songPlaying?.()) G.song?.(FINAL_SONG);   // a reload in the middle of the fight
   }
 
   // ---------------------------------------------------------------- cutscenes
@@ -234,7 +237,7 @@ export function createQuest(G) {
     d.final(() => { G.evacRunning = false; set('bossSeen'); set('lostBow'); set('lostSpear'); set('artifactsLost'); G.forceNpc = true; applyWorld(G); });
   }
   async function cutZulmatDown(d) {
-    d.music('off');
+    G.stopSong?.(2500); d.music('off');
     const ex = E.tj_enemy(BOSS, 2) / 1000 || P(42, 12)[0], ey = E.tj_enemy(BOSS, 3) / 1000 || P(42, 12)[1];
     d.cam(ex, ey - 10, 1.6); await d.wait(600);
     d.fx(ex, ey - 12, 2, 30); E.tj_shake(10);

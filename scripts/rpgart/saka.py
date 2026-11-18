@@ -94,7 +94,7 @@ C.portrait = portrait
 # ---------------------------------------------------------------- animals
 C.SPECIES.update({
     'horse': dict(ramp='hide', cell=48, L=13, H=6.5, leg=10, head=4.2, ears=True, tail='bushy', belly='hide', snout=4),
-    'leopard': dict(ramp='sand', cell=32, L=10, H=4, leg=5, head=3.4, ears=True, tail='bushy', belly='grey', snout=2),
+    'leopard': dict(ramp='sand', cell=40, L=10, H=4, leg=5, head=3.4, ears=True, tail='bushy', belly='grey', snout=2),
 })
 _prev_animal = C.animal_frame
 def animal_frame(sp, view, anim, f):

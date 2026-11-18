@@ -1,6 +1,9 @@
 // MAP03 «Сақтар әлемі» bindings for the shared RPG runtime (same engine, same UI, own content).
 import {MAP03} from './gen/map03.js';
 import * as S from './story03.js';
+import RU from './ru/map03.js';
+import {applyRu} from './ru-pack.js';
+applyRu(S, RU);   // Russian for the parts written only in Kazakh
 import * as Q from './quest03.js';
 import {makePersistence} from './persistence.js';
 import {EGG_NAMES, EGG_LABELS} from './eggs.js';
