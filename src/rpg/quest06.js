@@ -11,6 +11,7 @@ import {A, TS, IT} from './quest.js';
 import {DIALOGUES as D, HISTORICAL_QUIZZES, QUESTS, SECRETS, PROOFS, FACTS, CHOICES, ARTIFACTS} from './story06.js';
 import {anomaly} from './anomalies.js';
 import {makeArrowWatch} from './range.js';
+import {arsenal, FIRE, MELEE} from './weapons.js';
 
 export const IA = Object.fromEntries(MAP06.interacts.map((n, i) => [n, i]));
 export const NPC = Object.fromEntries(MAP06.npcs.map((n, i) => [n, i]));
@@ -81,6 +82,8 @@ function worldLight(G, zone) {
 export function applyWeapons(E, b) {
   if (b.bowMade) E.tj_weapon_tune(...COMPOSITE_BOW); else E.tj_weapon_tune(2, 0, 0, 0, 0, 0);
   if (b.lanceLesson) { E.tj_weapon_tune(...CAVALRY_LANCE); E.tj_lance(1); } else { E.tj_weapon_tune(1, 0, 0, 0, 0, 0); E.tj_lance(0); }
+  // Composite bow: a faster, flatter arrow (still drawn and aimed); the lance charges at a run, the spear only thrusts.
+  arsenal(E, {fire: b.bowMade ? FIRE.compositeBow : FIRE.bow, blade: MELEE.institute, pole: b.lanceLesson ? MELEE.lance : MELEE.spear});
 }
 
 export function applyWorld(G) {

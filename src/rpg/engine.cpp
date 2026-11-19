@@ -7,16 +7,18 @@
 #include "effects.hpp"
 namespace tj {
 Renderer renderer;
-enum Keys { Up=1, Down=2, Left=4, Right=8, Interact=16, Strike=32, Run=64 };
+enum Keys { Up=1, Down=2, Left=4, Right=8, Interact=16, Strike=32, Run=64, Reload=128, Parry=256 };
 constexpr int MaxPlayers=3;
 
 // ------------------------------------------------------------------ events (polled by JS)
 enum EventType { EV_NONE, EV_SFX, EV_INTERACT, EV_TRIGGER, EV_ENEMY_DIED, EV_PICKUP, EV_HURT, EV_DOWN, EV_DEAD,
                  EV_REVIVED, EV_ZONE, EV_ENEMY_HIT, EV_PEER_HIT, EV_REVIVE_PEER, EV_PLATES, EV_ALERT, EV_HOLD_START, EV_NOAMMO,
-                 EV_EFFECT /* a=effect id, b=1 start, 2 refreshed, 0 ended */, EV_USED /* a=item, b=healed hp */ };
+                 EV_EFFECT /* a=effect id, b=1 start, 2 refreshed, 0 ended */, EV_USED /* a=item, b=healed hp */,
+                 EV_RELOAD /* a=1 started, 0 done */, EV_PARRY, EV_IMPACT /* a=x, b=y: where a player's round stopped */ };
 enum Sfx { SFX_STEP_GRASS, SFX_STEP_DIRT, SFX_STEP_WATER, SFX_STEP_CAVE, SFX_SWORD, SFX_SPEAR, SFX_BOW, SFX_ARROW_HIT,
            SFX_ENEMY_HURT, SFX_ENEMY_DIE, SFX_HOWL, SFX_GROWL, SFX_ROAR, SFX_SWIPE, SFX_SHOUT, SFX_PICKUP, SFX_SPLASH,
-           SFX_HOOVES, SFX_BLOCK, SFX_DOWN, SFX_REVIVE, SFX_IMPACT, SFX_BOWSTRING };
+           SFX_HOOVES, SFX_BLOCK, SFX_DOWN, SFX_REVIVE, SFX_IMPACT, SFX_BOWSTRING,
+           SFX_MUSKET, SFX_RIFLE, SFX_SMG, SFX_PULSE, SFX_RELOAD, SFX_BOLT, SFX_DRY, SFX_VENT, SFX_PARRY, SFX_RICOCHET };
 struct Event { int type,a,b; };
 Event events[96]; int eventCount=0;
 void emit(int type,int a=0,int b=0){ if(eventCount<96)events[eventCount++]={type,a,b}; }
@@ -34,7 +36,11 @@ struct Player {
     float stepAcc=0;
     int holdKind=-1,holdId=-1,holdTicks=0,holdNeed=0;
     int netFrame=0;
-    int burstLeft=0,burstT=0,combo=0,lastStrike=-999;   // MAP09 burst fire, MAP07 sabre combo
+    int burstLeft=0,burstT=0,combo=0,lastStrike=-999,combo_last=-999;   // burst fire, quick chain clock, the three-cut series clock
+    // Ranged slot state: rounds in the weapon (taken from the cartridges), reload / bolt / overheat timers.
+    int mag=0,reloadT=0,cycleT=0,fireCd=0,aimT=0,autoN=0,overheat=0,dryT=0; float heat=0;
+    int parryT=0,parryCd=0,counterT=0;   // MAP05 sabre: the parry window, its cooldown, the counter-cut window
+    int loadOnGrant=0;   // a gun handed over before its cartridges: it is loaded with the first ones given
 };
 struct Npc {
     bool active=true,hidden=false,talk=true;
@@ -66,14 +72,15 @@ struct Game {
     int fog=0,fogCur=0,torch=0;
     int checkX=level::SpawnX,checkY=level::SpawnY;
     int focusKind=-1,focusId=-1;
-    int lanceCharge=0;   // MAP06: a running spear thrust becomes a lance charge
-    int bullets=0,burst=0,sabre=0,bossFloor=0;   // MAP08–MAP10: firearms, burst fire, sabre combo, the finale's health floor (%)
+    int bullets=0,burst=0,bossFloor=0;   // MAP08–MAP10: firearms, burst fire, sabre combo, the finale's health floor (%)
     int questKind=-1,questId=-1;   // the current objective (set by JS): a bobbing marker shows where to go
     unsigned triggerFired=0,triggerArmed=0xffffffffu,staticPicked=0;
     int platesMask=0,groups=0x3,kills=0,lastPickup=0,alarm=0;
     int shadowX=0,shadowY=0,shadowAlpha=0;
     unsigned completedTasks=0,storyEvents=0;
     int prevKeys=0,interactCooldown=0,hurtFlash=0;
+    int hitRanged=0; float knockNow=0;   // the hit being resolved: from a projectile (no parry) / a heavy blow's extra push
+    float flashX=0,flashY=0; int flashT=0,flashKind=0;   // the last muzzle flash
     ActiveEffect fx[MaxEffects]; int useCooldown=0;
 } game;
 Player players[MaxPlayers];
@@ -128,14 +135,28 @@ void initCloud(){
 
 // ------------------------------------------------------------------ combat helpers
 bool launch(int owner,float x,float y,int facing,int damage,bool cosmetic=false,bool fire=false){
-    for(auto& p:projectiles)if(!p.active){auto d=directions[facing];float sp=fire?2.6f:owner<0&&game.bullets?6.4f:4.2f;
-        p.active=true;p.cosmetic=cosmetic;p.fire=fire;p.owner=owner;p.damage=damage;p.facing=facing;p.x=x+d.x*6;p.y=y+d.y*6;p.dx=d.x*sp;p.dy=d.y*sp;
+    for(auto& p:projectiles)if(!p.active){auto d=directions[facing];float sp=fire?2.6f:4.2f;
+        p.active=true;p.cosmetic=cosmetic;p.fire=fire;p.bullet=0;p.owner=owner;p.damage=damage;p.facing=facing;p.x=x+d.x*6;p.y=y+d.y*6;p.dx=d.x*sp;p.dy=d.y*sp;
         p.remaining=owner<0?weapons[Bow].range+20:220;return true;}
+    return false;
+}
+// The hero's arrow: a fuller draw flies faster and farther and hits harder.
+bool launchArrow(float x,float y,int facing,int damage,int draw){
+    for(auto& p:projectiles)if(!p.active){auto d=directions[facing];float sp=fire.speed+draw*.04f;
+        p=Projectile{};p.active=true;p.owner=-1;p.damage=damage*(80+draw)/80;p.facing=facing;p.x=x+d.x*6;p.y=y+d.y*6;p.dx=d.x*sp;p.dy=d.y*sp;
+        p.remaining=weapons[Bow].range+20+draw*2;return true;}
+    return false;
+}
+// A lead round: several times an arrow's speed, a free angle (spread), its own range.
+bool launchBullet(float x,float y,float dx,float dy,int damage){
+    for(auto& p:projectiles)if(!p.active){
+        p=Projectile{};p.active=true;p.bullet=1;p.owner=-1;p.damage=damage;p.facing=heading(dx,dy);p.x=x;p.y=y;p.dx=dx*fire.speed;p.dy=dy*fire.speed;
+        p.remaining=weapons[Bow].range;return true;}
     return false;
 }
 bool startAttack(Attack& a,int weapon,int facing,float x,float y){
     if(a.cooldown||a.active)return false;
-    a.age=0;a.weapon=weapon;a.facing=facing;a.cooldown=weapons[weapon].windup+weapons[weapon].recovery;a.active=true;a.connected=false;a.x=x;a.y=y;return true;
+    a.age=0;a.weapon=weapon;a.facing=facing;a.cooldown=weapons[weapon].windup+weapons[weapon].recovery;a.active=true;a.connected=false;a.counter=false;a.draw=0;a.x=x;a.y=y;return true;
 }
 // ------------------------------------------------------------------ timed effects (data in effects.hpp)
 int effectSum(int kind){ int s=0; for(const auto& f:game.fx)if(f.id&&effectDefs[f.id].kind==kind)s+=effectDefs[f.id].magnitude; return s>KindCap[kind]?KindCap[kind]:s; }
@@ -225,13 +246,13 @@ void hurtEnemy(Enemy& e,int damage,float fromX,float fromY){
     e.hp=e.hp>damage?e.hp-damage:0;e.hitFlash=8;e.showBar=240;
     alertGroup(e.group);e.alerted=1;
     float dx=e.x-fromX,dy=e.y-fromY,len=sqrtf(dx*dx+dy*dy)+.01f;
-    float kb=e.type==Bear?2:7;
+    float kb=e.type==Bear?2:7+(isBossType(e.type)?0:game.knockNow);
     if(!blockedFeet(e.x+dx/len*kb,e.y,5,3))e.x+=dx/len*kb;
     if(!blockedFeet(e.x,e.y+dy/len*kb,5,3))e.y+=dy/len*kb;
     for(int i=0;i<5;++i)particle(e.x,e.y-8,(frand()-.5f)*2,-frand()*1.5f,18,0,rgba(0xf3d68b));
     if(e.hp==0){e.state=Death;e.timer=isBossType(e.type)?200:150;e.illusions=0;e.attack.active=false;e.animTime=0;++game.kills;dropLoot(e);
         sfx(SFX_ENEMY_DIE,e.x,e.y);emit(EV_ENEMY_DIED,int(&e-enemies),e.type);}
-    else { if(!isBossType(e.type)&&(e.type!=Bear||e.state!=Charge)){e.state=Hurt;e.timer=12;e.attack.active=false;} sfx(SFX_ENEMY_HURT,e.x,e.y); }
+    else { if(!isBossType(e.type)&&(e.type!=Bear||e.state!=Charge)){e.state=Hurt;e.timer=12+int(game.knockNow*1.5f);e.attack.active=false;} sfx(SFX_ENEMY_HURT,e.x,e.y); }
 }
 // Player-side hit on an enemy: the host applies it, a network client only predicts the flash.
 void playerHitsEnemy(int index,int damage,float fx,float fy){
@@ -239,9 +260,22 @@ void playerHitsEnemy(int index,int damage,float fx,float fy){
     if(game.netRole==1){e.hitFlash=8;e.showBar=240;emit(EV_ENEMY_HIT,index,damage);sfx(SFX_ENEMY_HURT,e.x,e.y);return;}
     hurtEnemy(e,damage,fx,fy);
 }
+void parryFx(Player& p){
+    auto d=directions[p.facing];
+    for(int i=0;i<14;++i)particle(p.x+d.x*10,p.y-12+d.y*4,(frand()-.5f)*3+d.x,(frand()-.5f)*2-1,14,0,rgba(frand()<.5f?0xfff6c8:0xffd24a));
+    sfx(SFX_PARRY,p.x,p.y);game.shake=3;emit(EV_PARRY);
+}
 void damageLocal(int damage){
     Player& p=me();
     if(damage<=0||p.hp<=0||p.invuln||p.down||p.dead||game.cinematic)return;
+    if(p.parryT>0&&!game.hitRanged){   // MAP05 sabre: the blade meets the blow; the attacker is thrown off balance
+        p.parryT=0;p.counterT=50;p.invuln=12;parryFx(p);
+        auto d=directions[p.facing];
+        for(auto& e:enemies)if(e.enabled&&e.hp>0){float dx=e.x-p.x,dy=e.y-p.y,l=sqrtf(dx*dx+dy*dy)+.01f;
+            if(l<48&&(dx*d.x+dy*d.y)/l>-.2f){ if(!isBossType(e.type)&&e.type!=Bear){e.state=Stunned;e.timer=70;e.attack.active=false;}
+                else {e.showBar=240;e.hitFlash=6;} }}
+        return;
+    }
     damage=incomingDamage(damage);
     if(effectSum(KindDefense))burst(p.x,p.y,0x8fc3ee,6);
     p.hp=damage>=p.hp?0:p.hp-damage;p.invuln=50;p.hurt=12;p.attack.active=false;p.holdTicks=0;game.hurtFlash=14;game.shake=6;
@@ -259,7 +293,9 @@ void hitPlayer(int slot,int damage){
 }
 void strikeEnemies(const Attack& a){
     for(int i=0;i<EnemyCount;++i){auto& e=enemies[i];
-        if(e.enabled&&e.hp>0&&inArc(a.weapon,a.facing,a.x,a.y-4,e.x,e.y-4,a.charge?14:0)&&lineClear(a.x,a.y,e.x,e.y))playerHitsEnemy(i,outgoingDamage(weapons[a.weapon].damage)*(a.charge?3:2)/2,a.x,a.y);}
+        if(e.enabled&&e.hp>0&&inArc(a.weapon,a.facing,a.x,a.y-4,e.x,e.y-4,a.charge?14:a.counter?8:0)&&lineClear(a.x,a.y,e.x,e.y)){
+            game.knockNow=a.weapon<2?melee[a.weapon].knock:0;
+            playerHitsEnemy(i,outgoingDamage(weapons[a.weapon].damage)*(a.charge?3:a.counter?4:2)/2,a.x,a.y);game.knockNow=0;}}
     // MAP06: only a lance charge breaks the herald's tamga seals.
     if(a.charge)for(auto& e:enemies)if(e.type==Herald&&e.phase==2&&e.enabled&&e.illusions&&e.hp>0)for(int k=0;k<3;++k)if((e.illusions&(1<<k))&&inArc(a.weapon,a.facing,a.x,a.y-4,e.px[k],e.py[k]-4,14)){
         e.illusions&=~(1<<k);sfx(SFX_IMPACT,e.px[k],e.py[k]);game.shake=6;for(int i=0;i<22;++i)particle(e.px[k],e.py[k]-8,(frand()-.5f)*3,(frand()-.5f)*3,30,0,rgba(0xffd24a));}
@@ -280,14 +316,93 @@ void setAnim(int& anim,int& t,int next){ if(anim!=next){anim=next;t=0;} }
 int stepSfx(float x,float y){int t=terrainAt(int(x)/Tile,int(y)/Tile);
     return t==Shallow||t==Water?SFX_STEP_WATER:t==Cave?SFX_STEP_CAVE:(t==Dirt||t==Sand||t==Camp)?SFX_STEP_DIRT:SFX_STEP_GRASS;}
 
+// ---------------------------------------------------------------- firearms (the ranged slot when it is not a bow)
+void startReload(Player& p){
+    int ammo=game.inv.counts[IArrows-1];
+    if(fire.kind==FireBow||fire.kind==FireBeam||p.reloadT||p.mag>=fire.mag||ammo<=p.mag)return;
+    p.reloadT=fire.reload;p.burstLeft=0;p.autoN=0;p.loadOnGrant=0;sfx(SFX_RELOAD,p.x,p.y);emit(EV_RELOAD,1);
+}
+void dryFire(Player& p){ if(!p.dryT){emit(EV_NOAMMO);sfx(SFX_DRY,p.x,p.y);p.dryT=30;} }
+// A beam: instant, along the line of sight, through up to fire.pierce+1 enemies, stopped by walls.
+struct Beam { float x0,y0,x1,y1; int life; } beams[4];
+void fireBeam(float x,float y,float dx,float dy,int damage){
+    bool hit[EnemyCount]={};int hits=0;float cx=x,cy=y;
+    for(float t=0;t<weapons[Bow].range;t+=3){
+        cx=x+dx*t;cy=y+dy*t;
+        if(solidAt(cx,cy+6)){for(int i=0;i<6;++i)particle(cx,cy,(frand()-.5f)*1.6f,-frand()*1.4f,12,0,rgba(0x7ff5e4));break;}
+        bool stop=false;
+        for(int i=0;i<EnemyCount;++i){auto& e=enemies[i];if(hit[i]||!e.enabled||e.hp<=0)continue;
+            float hh=e.type==Bear?16:9;
+            if(fabsf(e.x-cx)<(e.type==Bear?13:8)&&cy>e.y-hh-12&&cy<e.y+2){hit[i]=true;
+                playerHitsEnemy(i,isBossType(e.type)||e.type==Bear?damage*3/5:damage,cx-dx*8,cy-dy*8);
+                for(int k=0;k<8;++k)particle(cx,cy,(frand()-.5f)*2.4f,(frand()-.5f)*2.4f,14,0,rgba(frand()<.5f?0xe8fdff:0x7ff5e4));
+                if(++hits>fire.pierce){stop=true;break;}}}
+        if(stop)break;
+    }
+    for(auto& b:beams)if(b.life<=0){b={x,y,cx,cy,9};break;}
+    emit(EV_IMPACT,int(cx),int(cy));
+}
+// One round leaves the weapon: muzzle flash, smoke, recoil, the report; then the weapon's own cycle.
+bool fireRound(Player& p,int facing){
+    int& ammo=game.inv.counts[IArrows-1];
+    if(ammo<=0){dryFire(p);return false;}
+    if(fire.kind==FireBeam){ if(p.overheat)return false; }
+    else if(p.mag<=0){startReload(p);return false;}
+    --ammo; if(fire.kind!=FireBeam)--p.mag;
+    auto d=directions[facing];
+    float ang=atan2f(d.y,d.x),spread=fire.spread*(p.moving?1.8f:1.f)+(fire.kind==FireAuto?(p.autoN<12?p.autoN:12)*.012f:0);
+    ang+=(frand()-.5f)*spread;
+    float dx=cosf(ang),dy=sinf(ang),mx=p.x+d.x*11,my=p.y-9+d.y*6;
+    int dmg=outgoingDamage(weapons[Bow].damage);
+    if(fire.kind==FireBeam)fireBeam(mx,my,dx,dy,dmg); else launchBullet(mx,my,dx,dy,dmg);
+    // flash
+    game.flashX=mx;game.flashY=my;game.flashT=fire.kind==FireAuto?3:5;game.flashKind=fire.kind;
+    uint32_t hot=fire.kind==FireBeam?0xe8fdff:0xfff2b0,warm=fire.kind==FireBeam?0x7ff5e4:0xffa030;
+    for(int i=0;i<(fire.kind==FireAuto?4:9);++i)particle(mx+d.x*2,my,d.x*(1.2f+frand()*1.6f)+(frand()-.5f)*.8f,d.y*(1.2f+frand()*1.6f)+(frand()-.5f)*.8f,4+int(frand()*4),0,rgba(frand()<.5f?hot:warm));
+    // smoke: black powder billows, the rifle puffs, the sub-machine gun wisps, the beam vents nothing
+    int puffs=fire.kind==FireMusket?6:fire.kind==FireRifle?2:fire.kind==FireAuto?(p.autoN%3==0):0;
+    for(int i=0;i<puffs;++i)particle(mx+d.x*(4+i*3)+(frand()-.5f)*4,my-2+(frand()-.5f)*3,d.x*.35f+(frand()-.5f)*.3f,-.18f-frand()*.25f,50+int(frand()*30),1);
+    // recoil: the shooter is pushed back, the view kicks
+    float r=fire.recoil;
+    if(r>0){ if(!blockedFeet(p.x-d.x*r,p.y))p.x-=d.x*r; if(!blockedFeet(p.x,p.y-d.y*r))p.y-=d.y*r; int k=int(r*1.6f+.5f); if(game.shake<k)game.shake=k; }
+    sfx(fire.kind==FireMusket?SFX_MUSKET:fire.kind==FireRifle?SFX_RIFLE:fire.kind==FireAuto?SFX_SMG:SFX_PULSE,p.x,p.y);
+    p.aimT=fire.kind==FireAuto?10:20;
+    if(fire.kind==FireRifle)p.cycleT=fire.cycle;                       // work the bolt
+    if(fire.kind==FireBeam){p.heat+=fire.cycle;if(p.heat>=100){p.heat=100;p.overheat=fire.reload;sfx(SFX_VENT,p.x,p.y);}}
+    if(fire.kind==FireAuto)++p.autoN;
+    for(auto& an:animals){float ax=an.x-p.x,ay=an.y-p.y;if(!an.flee&&ax*ax+ay*ay<160*160)an.flee=80;}
+    for(auto& n:npcs)if(n.active&&!n.hidden){float ax=n.x-p.x,ay=n.y-p.y;if(ax*ax+ay*ay<90*90)n.alert=90;}
+    return true;
+}
+// The trigger. Single-shot weapons fire after the trigger delay (attack windup: the flintlock's flash in the pan);
+// the sub-machine gun fires as long as the trigger is held (a tap still sends a short burst of three).
+void pullTrigger(Player& p){
+    if(p.reloadT||p.cycleT||p.overheat||p.attack.active||p.fireCd)return;
+    if(game.inv.counts[IArrows-1]<=0){dryFire(p);return;}
+    if(fire.kind!=FireBeam&&p.mag<=0){startReload(p);return;}
+    if(fire.kind==FireAuto){
+        if(!(game.prevKeys&Strike)&&p.burstLeft<2)p.burstLeft=3;
+        if(fireRound(p,p.facing)){p.fireCd=fire.gap;if(p.burstLeft)--p.burstLeft;}
+        return;
+    }
+    if(startAttack(p.attack,Bow,p.facing,p.x,p.y)){p.fireCd=p.attack.cooldown;if(fire.kind==FireMusket)sfx(SFX_BOWSTRING,p.x,p.y);}
+}
 void playerStrike(){
     Player& p=me();
     if(game.paused||game.cinematic||!game.control||p.hp<=0||p.down||p.dead||p.hurt)return;
+    if(p.weapon==Bow&&fire.kind!=FireBow){pullTrigger(p);return;}
     if(p.weapon==Bow&&game.inv.counts[IArrows-1]==0){ if(!p.attack.cooldown){emit(EV_NOAMMO);p.attack.cooldown=30;} return; }
     if(startAttack(p.attack,p.weapon,p.facing,p.x,p.y)){
-        p.attack.charge=game.lanceCharge&&p.weapon==Spear&&p.running&&p.moving;
-        if(game.sabre&&p.weapon==Sword){   // MAP07 sabre: the third quick cut of a series is a finishing blow
-            p.combo=game.ticks-p.lastStrike<48?p.combo+1:1;p.lastStrike=game.ticks;
+        auto& A=p.attack;const auto& w=weapons[p.weapon];
+        A.charge=melee[1].mode==1&&p.weapon==Spear&&p.running&&p.moving;
+        if(p.weapon==Sword&&p.counterT>0){   // the counter-cut after a parry: at once, wider, twice as hard
+            A.counter=true;p.counterT=0;A.age=w.windup>2?w.windup-2:0;A.cooldown=A.cooldown>A.age?A.cooldown-A.age:0;
+            auto d=directions[p.facing];for(int i=0;i<10;++i)particle(p.x+d.x*12,p.y-10,d.x*(1.5f+frand()),d.y*(1.5f+frand())-.3f,14,0,rgba(0xfff6c8));}
+        else if(p.weapon==Sword&&melee[0].mode==3&&game.ticks-p.lastStrike<30){   // akinakes / knife: the follow-up cut comes at once
+            A.age=w.windup>2?w.windup-2:0;A.cooldown=A.cooldown>A.age?A.cooldown-A.age:0;}
+        if(p.weapon==Sword)p.lastStrike=game.ticks;
+        if(melee[0].mode==1&&p.weapon==Sword){   // MAP07 sabre: the third quick cut of a series is a finishing blow
+            p.combo=game.ticks-p.combo_last<48?p.combo+1:1;p.combo_last=game.ticks;
             if(p.combo>=3){p.combo=0;p.attack.charge=true;game.shake=4;auto d=directions[p.facing];for(int i=0;i<12;++i)particle(p.x+d.x*10,p.y-8,d.x*(1.5f+frand()),d.y*(1.5f+frand())-.4f,16,0,rgba(0xfff2c4));}}
         if(p.attack.charge){auto d=directions[p.facing];for(int i=0;i<10;++i)particle(p.x-d.x*6,p.y-2,(frand()-.5f)*.8f-d.x,-frand()*.6f,18,2);}
         sfx(p.weapon==Sword?SFX_SWORD:p.weapon==Spear?SFX_SPEAR:SFX_BOWSTRING,p.x,p.y);
@@ -357,32 +472,52 @@ void tickLocalPlayer(){
     if(p.poseTime>0&&--p.poseTime==0)p.pose=-1;
     auto& a=p.attack;
     if(a.cooldown)--a.cooldown;
+    if(p.fireCd)--p.fireCd; if(p.aimT)--p.aimT; if(p.dryT)--p.dryT; if(p.parryT)--p.parryT; if(p.parryCd)--p.parryCd; if(p.counterT)--p.counterT;
+    if(p.cycleT){ if(--p.cycleT==fire.cycle/2)sfx(SFX_BOLT,p.x,p.y); }
+    if(p.overheat){ if(p.overheat%8==0)particle(p.x+(frand()-.5f)*6,p.y-14,(frand()-.5f)*.4f,-.5f,30,1); if(--p.overheat==0)p.heat=0; }
+    else if(p.heat>0){ p.heat-=.6f; if(p.heat<0)p.heat=0; }
+    if(p.reloadT&&(p.weapon!=Bow||fire.kind==FireBow||fire.kind==FireBeam))p.reloadT=0;   // switched away: the reload is abandoned
+    if(p.reloadT&&--p.reloadT==0){ int ammo=game.inv.counts[IArrows-1]; p.mag=ammo<fire.mag?ammo:fire.mag; sfx(SFX_BOLT,p.x,p.y); emit(EV_RELOAD,0); }
+    if(!(p.keys&Strike)&&!p.burstLeft&&p.fireCd==0)p.autoN=0;
     if(p.dead){ if(--p.dead==0)emit(EV_DEAD); setAnim(p.anim,p.animTime,art::A_DEATH); return; }
     if(p.down){ if(--p.down==0){emit(EV_DEAD);} setAnim(p.anim,p.animTime,art::A_DEATH); return; }
     if(a.active){
         ++a.age;
         const auto& w=weapons[a.weapon];
+        // The bow is drawn while the button is held (up to 40 ticks past the draw): aim with the arrows, release to loose.
+        if(a.weapon==Bow&&fire.kind==FireBow&&a.age==w.windup&&(p.keys&Strike)&&a.draw<40&&game.inv.counts[IArrows-1]>0){
+            ++a.draw;--a.age;++a.cooldown; if(a.draw==40)for(int i=0;i<4;++i)particle(p.x+directions[a.facing].x*8,p.y-12,(frand()-.5f)*.6f,-frand()*.6f,10,0,rgba(0xfff2c4)); }
+        // Bayonet: a step into the thrust.
+        if(a.weapon==Spear&&melee[1].mode==2&&a.age<w.windup){auto d=directions[a.facing];float s=1.6f;
+            if(!blockedFeet(p.x+d.x*s,p.y))p.x+=d.x*s; if(!blockedFeet(p.x,p.y+d.y*s))p.y+=d.y*s;}
         if(a.age==w.windup){
-            if(a.weapon==Bow){ if(game.inv.counts[IArrows-1]>0&&launch(-1,p.x,p.y-8,a.facing,outgoingDamage(w.damage))){--game.inv.counts[IArrows-1];sfx(SFX_BOW,p.x,p.y);
-                if(game.bullets){auto d=directions[a.facing];for(int i=0;i<8;++i)particle(p.x+d.x*12,p.y-8+d.y*8,d.x*(1+frand())+(frand()-.5f),d.y*(1+frand())-frand()*.5f,10,0,rgba(game.bullets==2?(frand()<.5f?0x7ff5e4:0xe8fdff):(frand()<.5f?0xffe08a:0xc8c8c8)));}
-                if(game.burst>1){p.burstLeft=game.burst-1;p.burstT=5;}} }
+            if(a.weapon==Bow&&fire.kind==FireBow){ if(game.inv.counts[IArrows-1]>0&&launchArrow(p.x,p.y-8,a.facing,outgoingDamage(w.damage),a.draw)){--game.inv.counts[IArrows-1];sfx(SFX_BOW,p.x,p.y);} }
+            else if(a.weapon==Bow){ fireRound(p,a.facing); }
             else if(!a.connected){strikeEnemies(a);a.connected=true;}
         }
-        if(a.age>=w.windup+12)a.active=false;
+        if(a.age>=w.windup+(a.weapon==Bow&&fire.kind!=FireBow?6:12))a.active=false;
     }
-    if(p.burstLeft&&--p.burstT<=0){   // burst fire: the rest of the burst follows the first round
-        if(game.inv.counts[IArrows-1]>0&&launch(-1,p.x,p.y-8,p.facing,outgoingDamage(weapons[Bow].damage))){--game.inv.counts[IArrows-1];sfx(SFX_BOW,p.x,p.y);--p.burstLeft;p.burstT=5;}
-        else p.burstLeft=0;}
+    // Sub-machine gun: a tap's burst continues after the trigger is released.
+    if(p.burstLeft&&fire.kind==FireAuto&&p.weapon==Bow&&!(p.keys&Strike)&&!p.fireCd&&!p.reloadT){
+        if(fireRound(p,p.facing)){--p.burstLeft;p.fireCd=fire.gap;} else p.burstLeft=0;}
+    // An empty weapon starts reloading by itself once the shot has settled; R reloads a part-empty one.
+    if(p.weapon==Bow&&fire.kind!=FireBow&&fire.kind!=FireBeam&&!p.reloadT&&!a.active&&!p.aimT&&!p.cycleT&&!p.burstLeft){
+        if(p.mag==0&&game.inv.counts[IArrows-1]>0)startReload(p);
+        else if((p.keys&Reload)&&!(game.prevKeys&Reload))startReload(p);}
+    // Parry (MAP05 sabre): F raises the blade for a short window.
+    if(melee[0].mode==2&&p.weapon==Sword&&(p.keys&Parry)&&!(game.prevKeys&Parry)&&!p.parryCd&&!a.active&&!p.hurt&&!p.dead&&!p.down){
+        p.parryT=14;p.parryCd=42;sfx(SFX_SWORD,p.x,p.y);}
     if(game.paused||!game.control||game.cinematic){p.moving=false;}
     else {
         if((p.keys&Strike))playerStrike();
         int dx=((p.keys&Right)!=0)-((p.keys&Left)!=0);
         int dy=((p.keys&Down)!=0)-((p.keys&Up)!=0);
         p.moving=false;
+        if(a.active&&a.weapon==Bow&&fire.kind==FireBow&&a.draw>0&&(dx||dy)){int f=dy<0?(dx<0?7:dx>0?1:0):dy>0?(dx<0?5:dx>0?3:4):(dx<0?6:2);p.facing=f;a.facing=f;}
         if(!a.active&&!p.hurt&&(dx||dy)&&p.holdTicks==0){
             p.facing=dy<0?(dx<0?7:dx>0?1:0):dy>0?(dx<0?5:dx>0?3:4):(dx<0?6:2);
             p.running=(p.keys&Run)!=0;
-            float speed=(p.running?1.8f:1.15f)*speedFactor();
+            float speed=(p.running&&!p.reloadT?1.8f:1.15f)*speedFactor()*(p.reloadT&&fire.kind==FireMusket?.55f:1.f);
             int t=terrainAt(int(p.x)/Tile,int(p.y)/Tile);
             if(t==Shallow)speed*=.6f;
             if(dx&&dy)speed*=.70710678f;
@@ -403,7 +538,10 @@ void tickLocalPlayer(){
     // Animation selection.
     int next=art::A_IDLE;
     if(a.active)next=a.weapon==Sword?art::A_SWORD:a.weapon==Spear?art::A_SPEAR:art::A_BOW;
+    else if(p.parryT>0)next=art::A_SWORD;
     else if(p.hurt)next=art::A_HURT;
+    else if(p.aimT>0&&p.weapon==Bow&&!p.moving)next=art::A_BOW;
+    else if(p.reloadT>0&&!p.moving)next=art::A_INTERACT;
     else if(p.holdTicks>0)next=game.focusKind==2?art::A_REVIVE:art::A_INTERACT;
     else if(p.pose>=0)next=p.pose;
     else if(p.moving)next=p.running?art::A_RUN:art::A_WALK;
@@ -411,6 +549,8 @@ void tickLocalPlayer(){
     ++p.animTime;
 }
 int playerFrame(const Player& p){
+    if(p.anim==art::A_SWORD&&!p.attack.active&&p.parryT>0)return 0;   // guard raised
+    if(p.anim==art::A_BOW&&!p.attack.active)return 2;                  // holding the aim after a shot
     if(p.anim==art::A_SWORD||p.anim==art::A_SPEAR||p.anim==art::A_BOW){
         const auto& w=weapons[p.attack.weapon];int age=p.attack.age;
         if(age<w.windup*2/3)return 0; if(age<w.windup)return 1; if(age<w.windup+6)return 2; return 3;
@@ -1166,18 +1306,27 @@ void tickEnemies(){
 }
 void tickProjectiles(){
     for(auto& p:projectiles)if(p.active){
+        float stepLen=sqrtf(p.dx*p.dx+p.dy*p.dy)/4;
         for(int step=0;step<4&&p.active;++step){
-            p.x+=p.dx/4;p.y+=p.dy/4;p.remaining-=1.05f;
-            if(p.remaining<=0){p.active=false;break;}
-            if(solidAt(p.x,p.y+6)){p.active=false;sfx(SFX_ARROW_HIT,p.x,p.y);for(int i=0;i<3;++i)particle(p.x,p.y,(frand()-.5f),-frand(),12,0,rgba(0xcfc8b0));break;}
+            p.x+=p.dx/4;p.y+=p.dy/4;p.remaining-=stepLen;
+            if(p.remaining<=0){p.active=false;if(p.bullet)emit(EV_IMPACT,int(p.x),int(p.y));break;}
+            if(solidAt(p.x,p.y+6)){p.active=false;
+                if(p.bullet){emit(EV_IMPACT,int(p.x),int(p.y));sfx(SFX_RICOCHET,p.x,p.y);for(int i=0;i<5;++i)particle(p.x,p.y,(frand()-.5f)*2.2f,-frand()*1.8f,10,0,rgba(frand()<.5f?0xfff2b0:0xb8b0a0));particle(p.x,p.y,0,-.2f,18,2);}
+                else {sfx(SFX_ARROW_HIT,p.x,p.y);for(int i=0;i<3;++i)particle(p.x,p.y,(frand()-.5f),-frand(),12,0,rgba(0xcfc8b0));}
+                break;}
             if(p.cosmetic)continue;
             if(p.owner<0){
                 for(int i=0;i<EnemyCount;++i){auto& e=enemies[i];
                     float hh=e.type==Bear?16:9;
-                    if(e.enabled&&e.hp>0&&fabsf(e.x-p.x)<(e.type==Bear?13:8)&&p.y>e.y-hh-12&&p.y<e.y+2){playerHitsEnemy(i,(isBossType(e.type)||e.type==Bear)?p.damage*3/5:p.damage,p.x-p.dx*3,p.y-p.dy*3);p.active=false;sfx(SFX_ARROW_HIT,p.x,p.y);break;}}
+                    if(e.enabled&&e.hp>0&&fabsf(e.x-p.x)<(e.type==Bear?13:8)&&p.y>e.y-hh-12&&p.y<e.y+2){
+                        float l=sqrtf(p.dx*p.dx+p.dy*p.dy)+.01f;   // knock back along the flight, as far as an arrow would
+                        playerHitsEnemy(i,(isBossType(e.type)||e.type==Bear)?p.damage*3/5:p.damage,p.x-p.dx/l*12,p.y-p.dy/l*12);p.active=false;
+                        if(p.bullet)emit(EV_IMPACT,int(p.x),int(p.y));
+                        if(p.bullet)for(int k=0;k<6;++k)particle(p.x,p.y,(frand()-.5f)*2+p.dx/l,(frand()-.5f)*2-.5f,10,0,rgba(frand()<.5f?0xfff2b0:0xc04030));
+                        else sfx(SFX_ARROW_HIT,p.x,p.y);break;}}
             } else if(game.netRole==0){
                 for(int s=0;s<MaxPlayers;++s){auto& q=players[s];
-                    if(q.active&&q.hp>0&&!q.down&&fabsf(q.x-p.x)<6&&p.y>q.y-22&&p.y<q.y+2){hitPlayer(s,p.damage);p.active=false;break;}}
+                    if(q.active&&q.hp>0&&!q.down&&fabsf(q.x-p.x)<6&&p.y>q.y-22&&p.y<q.y+2){game.hitRanged=1;hitPlayer(s,p.damage);game.hitRanged=0;p.active=false;break;}}
             }
         }
     }
@@ -1426,13 +1575,23 @@ void render(){
             if((k.bob/20)%3==0)renderer.pixel(int(k.x)+3-cx,int(k.y)-14-cy,rgba(0xfff2c4));
             break;}
         case 6:{const Projectile& p=projectiles[d.idx];if(p.fire)renderer.sprite(art::X_FIREBOLT_0+((game.ticks/5)&1),int(p.x),int(p.y));
-            else if(game.bullets&&p.owner<0){int x=int(p.x)-renderer.camX,y=int(p.y)-renderer.camY;float l=sqrtf(p.dx*p.dx+p.dy*p.dy)+.01f;
-                bool cell=game.bullets==2;   // MAP10: energy charges of the pulse rifle
-                for(int k=0;k<(cell?9:7);++k)renderer.pixel(x-int(p.dx/l*k),y-int(p.dy/l*k),rgba(k<2?(cell?0xe8fdff:0xfff6c8):(cell?0x7ff5e4:0xd8b070),255-k*(cell?24:30)));}
+            else if(p.bullet){int x=int(p.x)-renderer.camX,y=int(p.y)-renderer.camY;float l=sqrtf(p.dx*p.dx+p.dy*p.dy)+.01f;
+                for(int k=0;k<10;++k)renderer.pixel(x-int(p.dx/l*k),y-int(p.dy/l*k),rgba(k<2?0xfffbe0:0xffd890,230-k*22));}   // a tracer streak, not an arrow
             else renderer.sprite(art::X_ARROW_0+p.facing,int(p.x),int(p.y));break;}
         case 7:{int f=(game.ticks/7)&3;renderer.sprite(art::Z_SHADOW_0+f,game.shadowX,game.shadowY,false,unsigned(game.shadowAlpha));break;}
         }
     }
+    // Pulse-rifle beams and the muzzle flash.
+    for(auto& b:beams)if(b.life>0){
+        float dx=b.x1-b.x0,dy=b.y1-b.y0,l=sqrtf(dx*dx+dy*dy)+.01f;int n=int(l);unsigned al=unsigned(255*b.life/9);
+        for(int k=0;k<=n;k+=1){int x=int(b.x0+dx*k/l)-cx,y=int(b.y0+dy*k/l)-cy;renderer.pixel(x,y,rgba(0xe8fdff,al));
+            if((k+game.ticks)%3==0){renderer.pixel(x,y-1,rgba(0x7ff5e4,al*2/3));renderer.pixel(x,y+1,rgba(0x7ff5e4,al*2/3));}}
+        --b.life;}
+    if(game.flashT>0){int x=int(game.flashX)-cx,y=int(game.flashY)-cy,r=game.flashT>2?3:2;
+        uint32_t core=game.flashKind==FireBeam?0xe8fdff:0xfffbe0,rim=game.flashKind==FireBeam?0x7ff5e4:0xffa030;
+        for(int k=-r;k<=r;++k){renderer.pixel(x+k,y,rgba(k==0?core:rim,230));renderer.pixel(x,y+k,rgba(k==0?core:rim,230));}
+        renderer.pixel(x+1,y+1,rgba(core,200));renderer.pixel(x-1,y-1,rgba(core,200));renderer.pixel(x+1,y-1,rgba(rim,180));renderer.pixel(x-1,y+1,rgba(rim,180));
+        --game.flashT;}
     // Particles.
     for(const auto& q:particles)if(q.life>0){
         int x=int(q.x),y=int(q.y);
@@ -1542,7 +1701,7 @@ void tj_init(){ static bool once=false; if(!once){tj::initCloud();once=true;} tj
 uintptr_t tj_atlas(){ return reinterpret_cast<uintptr_t>(tj::atlasPixels); }
 int tj_atlas_size(int field){ return field==0?tj::art::AtlasW:tj::art::AtlasH; }
 void tj_atlas_ready(int ready){ tj::atlasReady=ready; }
-void tj_input(int mask){ tj::me().keys=tj::game.paused?0:(mask&127); }
+void tj_input(int mask){ tj::me().keys=tj::game.paused?0:(mask&511); }   // + R reload (128), F parry (256)
 void tj_tick(){ tj::tick(); }
 void tj_render(){ tj::render(); }
 uintptr_t tj_pixels(){ return reinterpret_cast<uintptr_t>(tj::renderer.pixels); }
@@ -1563,6 +1722,11 @@ int tj_state(int field){
         case 30:return int(g.camY);case 31:return g.platesMask;case 32:return g.kills;case 33:return p.moving;case 34:return p.running;
         case 35:return tj::areaIndex();case 36:return g.triggerFired;case 37:return g.cinematic;case 38:return p.maxhp;case 39:return g.staticPicked;
         case 40:return g.useCooldown;case 41:return tj::effectSum(tj::KindDamage);case 42:return tj::effectSum(tj::KindDefense);case 43:return tj::effectSum(tj::KindSpeed);
+        // weapon state (HUD, tests): 50 ranged kind, 51 rounds loaded, 52 magazine, 53 reload left, 54 reload time, 55 bolt left,
+        // 56 heat %, 57 overheat left, 58 parry window, 59 counter window, 60 bow draw, 61 melee mode (blade), 62 pole mode
+        case 50:return tj::fire.kind;case 51:return p.mag;case 52:return tj::fire.mag;case 53:return p.reloadT;case 54:return tj::fire.reload;
+        case 55:return p.cycleT;case 56:return int(p.heat);case 57:return p.overheat;case 58:return p.parryT;case 59:return p.counterT;
+        case 60:return p.attack.draw;case 61:return tj::melee[0].mode;case 62:return tj::melee[1].mode;
         default:return -1;
     }
 }
@@ -1572,6 +1736,7 @@ int tj_equip(int weapon){
     auto& p=tj::me();
     if(weapon<0||weapon>2||p.hp<=0||p.attack.active||p.attack.cooldown)return 0;
     if(tj::game.inv.counts[weapon]<=0)return 0;
+    if(weapon!=p.weapon){p.reloadT=0;p.burstLeft=0;p.autoN=0;p.aimT=0;p.parryT=0;p.counterT=0;p.fireCd=0;}   // nothing carries over to the new weapon
     p.weapon=weapon;return 1;
 }
 int tj_item_count(int item){ return item>=1&&item<=tj::ItemCount?tj::game.inv.counts[item-1]:-1; }
@@ -1582,7 +1747,10 @@ uintptr_t tj_item_text(int item,int field){
 }
 int tj_item_add(int item,int count){
     if(item<1||item>tj::ItemCount)return 0;int& c=tj::game.inv.counts[item-1];int lim=tj::items[item-1].limit;
-    int before=c;c+=count;if(c>lim)c=lim;if(c<0)c=0;return c-before;
+    int before=c;c+=count;if(c>lim)c=lim;if(c<0)c=0;
+    auto& p=tj::me();
+    if(item==tj::IArrows&&p.loadOnGrant&&c>0){p.mag=c<tj::fire.mag?c:tj::fire.mag;p.loadOnGrant=0;}
+    return c-before;
 }
 int tj_use(int item){
     auto& g=tj::game;auto& p=tj::me();
@@ -1607,7 +1775,7 @@ int tj_effect(int slot,int field){
 }
 int tj_projectile(int index,int field){
     if(index<0||index>=tj::MaxProjectiles)return -1;const auto& p=tj::projectiles[index];
-    switch(field){case 0:return p.active;case 1:return int(p.x*1000);case 2:return int(p.y*1000);case 3:return p.owner;default:return -1;}
+    switch(field){case 0:return p.active;case 1:return int(p.x*1000);case 2:return int(p.y*1000);case 3:return p.owner;case 4:return p.bullet;default:return -1;}
 }
 int tj_enemy(int index,int field){
     if(index<0||index>=tj::EnemyCount)return -1;const auto& e=tj::enemies[index];
@@ -1652,6 +1820,8 @@ void tj_respawn(int loseLife){
     if(!g.lives){g.gameover=1;return;}
     tj::clearEffects();
     p.dead=0;p.down=0;p.hp=p.maxhp;p.invuln=150;p.x=g.checkX;p.y=g.checkY;p.attack=tj::Attack{};
+    p.reloadT=p.cycleT=p.fireCd=p.aimT=p.burstLeft=p.autoN=p.overheat=p.parryT=p.parryCd=p.counterT=0;p.heat=0;
+    { int ammo=g.inv.counts[tj::IArrows-1]; p.mag=ammo<tj::fire.mag?ammo:tj::fire.mag; }   // back at the checkpoint with a loaded weapon
     g.zone=tj::zoneAt(p.x,p.y);
     for(auto& e:tj::enemies)if(e.hp>0){e.x=e.homeX;e.y=e.homeY;e.alerted=0;e.state=tj::Idle;e.attack.active=false;}
     for(auto& q:tj::projectiles)q.active=false;
@@ -1673,9 +1843,20 @@ void tj_shadow(int x,int y,int alpha){ tj::game.shadowX=x;tj::game.shadowY=y;tj:
 // MAP06 weapon progression: a level re-tunes a slot (and the lance charge) from its own flags after every load.
 void tj_weapon_tune(int w,int damage,int windup,int recovery,int range,int width){ if(w<0||w>2)return; auto& s=tj::weapons[w];
     if(damage<=0){s=tj::baseWeapons[w];return;} s.damage=damage;s.windup=windup;s.recovery=recovery;s.range=float(range);s.width=float(width); }
-void tj_lance(int on){ tj::game.lanceCharge=on?1:0; }
+void tj_lance(int on){ tj::melee[1].mode=on?1:0; }
 // MAP07–MAP10 mechanics: sabre combo, firearms (bullet shots), burst fire (rounds per trigger), the finale's health floor.
-void tj_sabre(int on){ tj::game.sabre=on?1:0; }
+void tj_sabre(int on){ tj::melee[0].mode=on?1:0; }
+// Weapon profiles (src/rpg/weapons.js). Ranged: kind (FireKind), magazine, reload / vent ticks, bolt ticks or heat per
+// shot, ticks between automatic rounds, enemies pierced, speed ×100, spread (radians ×1000), recoil ×100.
+void tj_fire(int kind,int mag,int reload,int cycle,int gap,int pierce,int speed,int spread,int recoil,int empty){
+    using namespace tj;auto& f=fire;auto& p=me();int old=f.kind;
+    f.kind=kind<0?0:kind>4?4:kind;f.mag=mag<0?0:mag;f.reload=reload;f.cycle=cycle;f.gap=gap<1?1:gap;f.pierce=pierce;
+    f.speed=speed>0?speed/100.f:4.2f;f.spread=spread/1000.f;f.recoil=recoil/100.f;
+    int ammo=tj::game.inv.counts[tj::IArrows-1];
+    // A weapon the story hands over comes loaded; one taken up by swapping (empty=1) has to be loaded first.
+    if(old!=f.kind||p.mag>f.mag){p.mag=empty?0:ammo<f.mag?ammo:f.mag;p.reloadT=0;p.burstLeft=0;p.cycleT=0;p.overheat=0;p.heat=0;p.loadOnGrant=!empty&&!ammo&&f.mag>0;}
+}
+void tj_melee(int slot,int mode,int knock){ if(slot<0||slot>1)return; tj::melee[slot].mode=mode;tj::melee[slot].knock=float(knock); }
 void tj_bullets(int on){ tj::game.bullets=on<0?0:on>2?2:on; }   // 1 lead, 2 energy
 void tj_burst(int n){ tj::game.burst=n<1?0:n>5?5:n; }
 void tj_boss_floor(int pct){ tj::game.bossFloor=pct<0?0:pct>90?90:pct; }

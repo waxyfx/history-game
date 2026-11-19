@@ -235,3 +235,13 @@ html, body { height: 100%; overflow: hidden; background: #050909; }
 .title-card { position: absolute; inset: 0; z-index: 6; display: grid; place-items: center; text-align: center; color: #efe6cf;
   font-size: calc(var(--s) * 12px); letter-spacing: .3em; text-shadow: 0 0 18px #000; transition: opacity .7s; pointer-events: none; }
 .title-card.out { opacity: 0; }
+
+/* firearm / parry gauge next to the cartridges */
+.gun { display: flex; flex-direction: column; gap: 2px; margin-left: .45em; min-width: 4.2em; font-size: .72em; line-height: 1; }
+.gun i { font-style: normal; font-weight: 700; color: #f3e6c4; letter-spacing: .02em; white-space: nowrap; }
+.gun-bar { display: block; height: 4px; background: #ffffff1f; border-radius: 2px; overflow: hidden; }
+.gun-bar span { display: block; height: 100%; width: 0; background: #f3d68b; transition: width .08s linear; }
+.gun.reload .gun-bar span { background: #9fc6e8; } .gun.empty i { color: #ff8a70; }
+.gun.cool .gun-bar span { background: #7ff5e4; } .gun.warm .gun-bar span { background: #ffb347; } .gun.hot i, .gun.hot .gun-bar span { color: #ff6a50; background: #ff6a50; }
+.acts .t-parry, .acts .t-reload { display: none; width: 44px; height: 44px; font-size: 15px; }
+body.has-parry .acts .t-parry, body.has-reload .acts .t-reload { display: block; }

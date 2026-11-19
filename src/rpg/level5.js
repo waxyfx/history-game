@@ -15,8 +15,12 @@ export const persistence = makePersistence({
   grants: ['kit', 'page'], words: [SAVE_WORDS_L5]});
 
 const near = (x, y, tx, ty, r = 150) => Math.max(0, 1 - Math.hypot(x - tx * 16, y - ty * 16) / r);
+import {arsenal, FIRE, MELEE} from './weapons.js';
 export default {
   id: 5, title: 'Жадтың көлеңкесі', wasm: '/engine/rpg/tarikh-rpg-5.wasm', saveKey: 'tarikh.rpg.v3.L5', MAP: MAP05, requires: 4,
+  // Turkic Khaganate: the sabre — F raises the blade to parry; a parried attacker is thrown off balance, the next cut is a counter.
+  arsenal: E => { E.tj_weapon_tune(0, 26, 5, 16, 28, 16); arsenal(E, {fire: FIRE.bow, blade: MELEE.turkSabre, pole: MELEE.spear}); },
+  items: {1: {kk: ['Түрік қылышы', 'Иілген жүз: F — қағып тастау, содан кейін қарсы соққы.'], ru: ['Тюркская сабля', 'Изогнутый клинок: F — парировать, затем встречный удар.'], icon: 'sabre'}},
   SPEAKERS: S.SPEAKERS, ZONE_NAMES: S.ZONE_NAMES, QUESTS: S.QUESTS, HISTORICAL_QUIZZES: S.HISTORICAL_QUIZZES, BONUS_QUIZ: S.BONUS_QUIZ,
   BONUS_META: S.BONUS_META, CHAMBER_FAIL: S.CHAMBER_FAIL, TRIAL_LEVELS: S.TRIAL_LEVELS, MAIN_QUIZ_ORDER: S.MAIN_QUIZ_ORDER,
   SECRETS: S.SECRETS, DIALOGUES: S.DIALOGUES, NAMES: S.NAMES, LABELS: S.LABELS,

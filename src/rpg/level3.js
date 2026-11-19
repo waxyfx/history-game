@@ -16,8 +16,12 @@ export const persistence = makePersistence({
   grants: ['kit', 'arnagift', 'page'], words: [SAVE_WORDS_L3]});
 
 const near = (x, y, tx, ty, r = 150) => Math.max(0, 1 - Math.hypot(x - tx * 16, y - ty * 16) / r);
+import {arsenal, FIRE, MELEE} from './weapons.js';
 export default {
   id: 3, title: 'Сақтар әлемі', wasm: '/engine/rpg/tarikh-rpg-3.wasm', saveKey: 'tarikh.rpg.v3.L3', MAP: MAP03, requires: 2,
+  // Saka: the akinakes — short reach, quick, the follow-up cut comes almost at once (quick chain).
+  arsenal: E => { E.tj_weapon_tune(0, 22, 4, 12, 22, 12); arsenal(E, {fire: FIRE.bow, blade: MELEE.akinakes, pole: MELEE.spear}); },
+  items: {1: {kk: ['Ақинақ', 'Сақтың қысқа семсері: қысқа әрі жылдам, екінші соққы бірден келеді.'], ru: ['Акинак', 'Короткий меч саков: близко и быстро, второй удар следует сразу.'], icon: 'knife'}},
   SPEAKERS: S.SPEAKERS, ZONE_NAMES: S.ZONE_NAMES, QUESTS: S.QUESTS, HISTORICAL_QUIZZES: S.HISTORICAL_QUIZZES, BONUS_QUIZ: S.BONUS_QUIZ,
   BONUS_META: S.BONUS_META, CHAMBER_FAIL: S.CHAMBER_FAIL, TRIAL_LEVELS: S.TRIAL_LEVELS, MAIN_QUIZ_ORDER: S.MAIN_QUIZ_ORDER,
   SECRETS: S.SECRETS, DIALOGUES: S.DIALOGUES, NAMES: {...S.NAMES, ...EGG_NAMES}, LABELS: {...S.LABELS, ...EGG_LABELS},

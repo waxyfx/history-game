@@ -5,6 +5,7 @@
 // comic shows Түйінші, the reveal, the transfer, the merging and the fire in the socket. Then, with the fire, he ends it.
 import {MAP10} from './gen/map10.js';
 import {A, TS, IT, P, indexes, scoring, kit, arm} from './epochkit.js';
+import {FIRE, MELEE} from './weapons.js';
 import {DIALOGUES as D, HISTORICAL_QUIZZES, QUESTS, SECRETS, PROOFS, FACTS, ARTIFACTS, PAGE_IDS, STEPS} from './story10.js';
 
 export const {IA, NPC, TRIG, TAG} = indexes(MAP10);
@@ -13,7 +14,7 @@ export const {MAX_SCORE, PASS_SCORE, TRIAL_POINTS, scoreOf, pageLines, secretsFo
 export const BOSS = MAP10.enemies.findIndex(e => e.type === 11);
 // The finale (author's direction, 2026-11-17): Aidar enters the hall, meets Zulmat and loses at once — gear stripped to
 // the sword, the wound, the eye; the comic (Түйінші, the merging, the fire); then the player beats Zulmat himself.
-export const PULSE = [2, 34, 8, 22, 280, 0], ION = [1, 36, 8, 22, 54, 8], MERGED_SWORD = [0, 38, 5, 14, 30, 17];
+export const PULSE = [2, 34, 4, 14, 280, 0], ION = [1, 36, 8, 22, 54, 8], MERGED_SWORD = [0, 38, 5, 14, 30, 17];
 export const STREET = {dana: [36, 54], erlan: [40, 54], prof: [44, 54], guard10: [48, 54], citizen: [52, 54]};
 export const ARTIFACT_FLAGS = ['twinline', 'erased'];
 
@@ -43,7 +44,8 @@ export function questTarget(f) {
 
 const ZONE_LIGHT = [[206, 212, 222], [212, 214, 222], [196, 214, 226], [176, 200, 220], [150, 160, 196], [214, 220, 214]];
 export function applyWeapons(E, b) {
-  arm(E, b.merged ? {tunes: [MERGED_SWORD], sabre: 1, lance: 1, bullets: 2, hero: 'aibarfire'} : {tunes: [ION, PULSE], lance: 1, bullets: 2, hero: 'aibar'});
+  arm(E, b.merged ? {tunes: [MERGED_SWORD], sabre: 1, lance: 1, bullets: 2, hero: 'aibarfire', blade: MELEE.merged, pole: MELEE.ionLance}
+    : {tunes: [ION, PULSE], lance: 1, bullets: 2, hero: 'aibar', fire: FIRE.pulse, pole: MELEE.ionLance});
   E.tj_boss_floor(0);
 }
 export function applyWorld(G) {

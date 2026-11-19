@@ -8,7 +8,8 @@ import {loadLevel, levelFromURL, localPassed, TEMP_UNLOCK_ALL, LEVEL_IDS} from '
 import {localQuiz, TRIAL_LEVELS_RU} from './ru-pack.js';
 import {ALL_EPOCHS} from './campaign.js';
 import {EFFECTS, CONSUMABLES, BELT_ORDER, QUICK_HEAL, HINTS} from './effects.js';
-import {sfx, music, ambience, toggleAudioMute, isAudioMuted, unlockAudio, playSong, stopSong, songPlaying} from './audio.js';
+import {noteImpact} from './range.js';
+import {sfx, music, ambience, toggleAudioMute, isAudioMuted, unlockAudio, playSong, stopSong, songPlaying, recordedBanks} from './audio.js';
 import {createParty, makeCode, MAX_PARTY} from './net.js';
 import {db, rpc as rpcNamed} from '../api.js';
 // Official-run RPCs are written with positional arguments (as in the SQL tests); Supabase needs named ones.
@@ -24,14 +25,17 @@ function bindLevel(lv) {
   LV = lv;
   ({MAP, SPEAKERS, ZONE_NAMES, QUESTS, HISTORICAL_QUIZZES, BONUS_QUIZ, BONUS_META, CHAMBER_FAIL, TRIAL_LEVELS, MAIN_QUIZ_ORDER, SECRETS, DIALOGUES,
     applyWorld, createQuest, questStage, questTarget, scoreOf, secretsFound, pageLines, restoreSnapshot} = lv);
+  // The era's arsenal (src/rpg/weapons.js) rides along with the world: MAP06–MAP10 set it in their own applyWorld.
+  if (lv.arsenal) { const base = applyWorld; applyWorld = G => { base(G); lv.arsenal(G.E, G.flags); }; }
   SAVE_KEY = lv.saveKey;
 }
 const levelQS = (extra = '') => { const q = [LV?.id > 1 ? 'level=' + LV.id : '', extra].filter(Boolean).join('&'); return q ? '?' + q : ''; };
 
 const W = 480, H = 320, RESULTS_KEY = 'tarikh.rpg.results';
 let SAVE_KEY = 'tarikh.rpg.v3';
-const SFX_NAMES = ['step_grass', 'step_dirt', 'step_water', 'step_cave', 'sword', 'spear', 'bow', 'arrow_hit', 'enemy_hurt', 'enemy_die', 'howl', 'growl', 'roar', 'swipe', 'shout', 'pickup', 'splash', 'hooves', 'block', 'down', 'revive', 'impact', 'bowstring'];
-const EV = {SFX: 1, INTERACT: 2, TRIGGER: 3, ENEMY_DIED: 4, PICKUP: 5, HURT: 6, DOWN: 7, DEAD: 8, REVIVED: 9, ZONE: 10, ENEMY_HIT: 11, PEER_HIT: 12, REVIVE_PEER: 13, PLATES: 14, ALERT: 15, HOLD: 16, NOAMMO: 17, EFFECT: 18, USED: 19};
+const SFX_NAMES = ['step_grass', 'step_dirt', 'step_water', 'step_cave', 'sword', 'spear', 'bow', 'arrow_hit', 'enemy_hurt', 'enemy_die', 'howl', 'growl', 'roar', 'swipe', 'shout', 'pickup', 'splash', 'hooves', 'block', 'down', 'revive', 'impact', 'bowstring',
+  'musket', 'rifle', 'smg', 'pulse', 'reload', 'bolt', 'dry', 'vent', 'parry', 'ricochet'];
+const EV = {SFX: 1, INTERACT: 2, TRIGGER: 3, ENEMY_DIED: 4, PICKUP: 5, HURT: 6, DOWN: 7, DEAD: 8, REVIVED: 9, ZONE: 10, ENEMY_HIT: 11, PEER_HIT: 12, REVIVE_PEER: 13, PLATES: 14, ALERT: 15, HOLD: 16, NOAMMO: 17, EFFECT: 18, USED: 19, RELOAD: 20, PARRY: 21, IMPACT: 22};
 const NAMES = {
   kk: {page1: 'Жарқыраған үзінді', track1: 'Із', track2: 'Сынған жебе', track3: 'Сүйреткен із', track4: 'Қорамсақ', toolpile: 'Шақпақтың құралдары', firepit: 'Ошақ', thicket: 'Қалың бұта',
     cachebush: 'Бұта', cache: 'Жасырын қойма', rope: 'Арқан', boulder: 'Үлкен тас', lever: 'Бөрене-тұтқа', cavemouth: 'Суретті үңгір', caveexit: 'Шығу', petro1: 'Жартас суреті', petro2: 'Жартас суреті',
@@ -71,7 +75,7 @@ document.querySelector('#rpg-app').innerHTML = `
           <span class="stats"><i id="s-score"></i><i id="s-secrets"></i><i id="s-quiz"></i></span></div>
         <div class="hotbar" id="hotbar">
           <div class="slots" id="slots"></div>
-          <div class="ammo"><span id="ammo-icon"></span><b id="arrows">0</b></div>
+          <div class="ammo"><span id="ammo-icon"></span><b id="arrows">0</b><span id="gun" class="gun" hidden><i id="gun-mag"></i><span class="gun-bar"><span id="gun-fill"></span></span></span></div>
           <div class="belt" id="belt"></div>
           <span class="sep"></span>
           <button id="b-inv" class="hb"></button><button id="b-save" class="hb desk"></button><button id="b-load" class="hb desk"></button>
@@ -98,7 +102,7 @@ document.querySelector('#rpg-app').innerHTML = `
       <p id="loading" class="loading" role="status"></p>
       <div class="touch" id="touch">
         <div class="stick" id="stick"><i class="stick-base"></i><i class="stick-knob"></i></div>
-        <div class="acts"><button data-key="32" aria-label="attack">⚔</button><button data-key="16" aria-label="action">E</button></div>
+        <div class="acts"><button data-key="32" aria-label="attack">⚔</button><button data-key="16" aria-label="action">E</button><button data-key="256" aria-label="parry" class="t-parry">F</button><button data-key="128" aria-label="reload" class="t-reload">R</button></div>
       </div>
     </div>
   </section>
@@ -119,7 +123,7 @@ let comicOpen = false; // a motion-comic cinematic is covering the game (input a
 let lastTime = 0, acc = 0, hudKey = '', lastZone = -1, lastSave = 0, flagsDirty = false, minimapArea = -1, miniBase = null;
 const held = new Set(), touch = new Map();
 let mouseMask = 0, lastWheel = 0;   // mouse: left = strike, right = interact (see «mouse controls»)
-const keyBits = {KeyW: 1, ArrowUp: 1, KeyS: 2, ArrowDown: 2, KeyA: 4, ArrowLeft: 4, KeyD: 8, ArrowRight: 8, KeyE: 16, Space: 32, ShiftLeft: 64, ShiftRight: 64};
+const keyBits = {KeyW: 1, ArrowUp: 1, KeyS: 2, ArrowDown: 2, KeyA: 4, ArrowLeft: 4, KeyD: 8, ArrowRight: 8, KeyE: 16, Space: 32, ShiftLeft: 64, ShiftRight: 64, KeyR: 128, KeyF: 256};
 
 function input() {
   if (!E) return;
@@ -631,6 +635,31 @@ function load(silent) {
     return false;
   }
 }
+// ?egg: a fresh game that skips the opening scene and puts the hero next to the level's time anomaly (the team
+// easter egg), facing it. The egg itself is not opened: the crack still wants E held, the chess still wants the mate.
+const EGG_SPOT = {1: 'doomcrack', 2: 'chipcrack', 3: 'chess', 4: 'labcrack', 5: 'qincrack', 6: 'fivemarks', 7: 'ninepits', 8: 'keys', 9: 'ninestars', 10: 'tencharms'};
+function goEgg(tries = 0) {
+  if (!E || tries > 200) return;
+  if (cine) { skipCutscene(); return setTimeout(() => goEgg(tries + 1), 150); }
+  if (!$('dlg').hidden) { advanceDialog(); return setTimeout(() => goEgg(tries + 1), 80); }
+  if (panelOpen) { closePanel(); return setTimeout(() => goEgg(tries + 1), 150); }
+  const key = EGG_SPOT[LV.id], at = MAP.interactPos?.[key], want = MAP.interacts.indexOf(key); if (!at) return;
+  // Scenes the hero would set off on the way (MAP01: the bear's den) stay asleep for this visit.
+  for (let i = 0; i < (MAP.triggers?.length || 0); i++) E.tj_trigger_arm(i, 0);
+  const [x, y] = at, spots = [];
+  for (let r = 4; r <= 40; r += 2) for (const [dx, dy, f] of [[0, 1, 0], [0, -1, 4], [1, 0, 6], [-1, 0, 2], [1, 1, 7], [-1, 1, 1], [1, -1, 5], [-1, -1, 3]])
+    if (!E.tj_solid(Math.round(x + dx * r), Math.round(y + dy * r))) spots.push([Math.round(x + dx * r), Math.round(y + dy * r), f]);
+  // Try the free spots nearest first until the egg is the one E would use (its marker shows over it).
+  const tryAt = k => {
+    if (k > 0 && E.tj_state(25) === 0 && E.tj_state(26) === want) {
+      E.tj_checkpoint(...spots[k - 1].slice(0, 2)); history.replaceState(null, '', location.pathname + levelQS('')); G.skipComics = false;
+      return toast(lang === 'ru' ? 'Аномалия времени рядом: нажми или удерживай E.' : 'Уақыт аномалиясы жақын: E басып немесе ұстап тұр.', 'good');
+    }
+    if (k >= spots.length) return;
+    const [sx, sy, f] = spots[k]; E.tj_teleport(sx, sy); E.tj_face(f); setTimeout(() => tryAt(k + 1), 60);
+  };
+  tryAt(0);
+}
 // «Топпен ойнау» (?coop=1): the team forms first — the party panel opens before the level's first scene, and the
 // journey begins when it is closed, so everyone starts MAP01 from its beginning together.
 let coopFirst = false;
@@ -713,8 +742,31 @@ function pickupHint(item) {
 }
 
 // ---------------------------------------------------------------- HUD
+// The ranged weapon's own state next to the cartridges: rounds loaded / magazine, and one bar for whatever the weapon
+// is doing — reloading, working the bolt, the pulse rifle's heat; for the Turkic sabre, the parry / counter windows.
+let gunKey = '';
+function gunGauge() {
+  const kind = E.tj_state(50), weapon = E.tj_state(13), blade = E.tj_state(61);
+  document.body.classList.toggle('has-parry', blade === 2); document.body.classList.toggle('has-reload', kind > 0 && kind < 4);
+  let text = '', fill = 0, cls = '';
+  if (weapon === 2 && kind > 0) {
+    const mag = E.tj_state(51), cap = E.tj_state(52), rl = E.tj_state(53), rlMax = E.tj_state(54) || 1, bolt = E.tj_state(55), heat = E.tj_state(56), oh = E.tj_state(57);
+    if (kind === 4) { text = oh ? (lang === 'ru' ? 'ПЕРЕГРЕВ' : 'ҚЫЗУ') : heat + '%'; fill = oh ? oh / rlMax : heat / 100; cls = oh ? 'hot' : heat > 70 ? 'warm' : 'cool'; }
+    else if (rl) { text = lang === 'ru' ? 'перезарядка' : 'оқтау'; fill = 1 - rl / rlMax; cls = 'reload'; }
+    else { text = mag + '/' + cap; fill = bolt ? 1 - bolt / 48 : mag / Math.max(1, cap); cls = bolt ? 'reload' : mag ? '' : 'empty'; }
+  } else if (weapon === 0 && blade === 2) {
+    const parry = E.tj_state(58), counter = E.tj_state(59);
+    text = counter ? (lang === 'ru' ? 'КОНТРУДАР' : 'ҚАРСЫ СОҚҚЫ') : 'F'; fill = counter ? counter / 50 : parry / 14; cls = counter ? 'warm' : 'cool';
+  }
+  const key = text + '|' + Math.round(fill * 20) + '|' + cls;
+  if (key === gunKey) return;
+  gunKey = key;
+  $('gun').hidden = !text; if (!text) return;
+  $('gun-mag').textContent = text; $('gun-fill').style.width = Math.round(Math.max(0, Math.min(1, fill)) * 100) + '%'; $('gun').className = 'gun ' + cls;
+}
 function updateHud(force) {
   if (!E) return;
+  gunGauge();
   const hp = E.tj_state(8), lives = E.tj_state(9), weapon = E.tj_state(13), arrows = E.tj_state(14), zone = E.tj_state(2);
   const stage = questStage(G.flags), q = QUESTS[stage][lang] || QUESTS[stage].kk;
   const allies = party.size > 1 ? [...party.peers.values()].map(p => `${p.slot}:${p.hp}:${p.down}`).join(',') : '';
@@ -749,6 +801,8 @@ function updateHud(force) {
 }
 function equip(w) {
   if (!E || panelOpen || cine) return;
+  // MAP09: with both long guns, 3 again swaps the Mosin and the PPSh (the new one has to be loaded).
+  if (w === 2 && E.tj_state(13) === 2 && !E.tj_state(15) && LV.swapRanged?.(G)) { sfx('cock'); toast(itemList()[3][0]); updateHud(true); return; }
   if (E.tj_equip(w)) sfx('dialog');
   updateHud(true); canvas.focus({preventScroll: true});
 }
@@ -831,7 +885,10 @@ function handleEvents() {
       case EV.REVIVE_PEER: { const s = memberSlotOfEngine(a); if (s >= 0) party.net?.send('rev', {to: s}); break; }
       case EV.PLATES: quest.plates(a); break;
       case EV.ALERT: if (b === 99) quest.bossTalk?.(a); else if (!cine) music('danger'); break;   // 99: a boss stops fighting (MAP05)
-      case EV.NOAMMO: toast(t('noAmmo'), 'warn'); sfx('noammo'); break;
+      case EV.NOAMMO: toast(t('noAmmo'), 'warn'); if (!E.tj_state(50)) sfx('noammo'); break;   // a firearm's dry click comes from the engine
+      case EV.RELOAD: updateHud(true); break;
+      case EV.PARRY: break;
+      case EV.IMPACT: noteImpact(a, b); break;
     }
   }
 }
@@ -1042,7 +1099,7 @@ async function boot() {
       // A cinematic film rendered in the engine: wide letterbox, grain, timed subtitles, no dialogue boxes.
       // Motion-comic cinematic in the intro's format: the game pauses underneath and resumes afterwards.
       comic: async () => {
-        if (!LV.comic || comicOpen) return;
+        if (!LV.comic || comicOpen || G.skipComics) return;   // ?egg: the motion comic waits for a real journey
         comicOpen = true; held.clear(); touch.clear(); mouseMask = 0; input(); E.tj_pause(1); music('off');
         let ctxA = null; try { ctxA = new (window.AudioContext || window.webkitAudioContext)(); } catch {}
         try { await (await LV.comic({audioCtx: ctxA, noScore: songPlaying()})).done; } catch (e) { console.warn(e); }
@@ -1067,8 +1124,8 @@ async function boot() {
       E.tj_init(); G.flags = newFlags(); G.local = {granted: [], attempts: {}, seen: [], crystal: 0}; G.armed = null; G.forceNpc = true;
       E.tj_party(1, 0); E.tj_hero(SH.aibar); $('fade').style.opacity = 0;
       setTimeout(() => LV.playDemoFilm(G).then(() => toast(lang === 'ru' ? 'Ролик окончен. Обнови страницу, чтобы посмотреть снова.' : 'Бейнеролик аяқталды. Қайта көру үшін бетті жаңарт.')), 400);
-    } else if (params.has('new') || (params.has('final') && LV.id === 10)) { // Started from the intro comic: a fresh journey into MAP (or ?final: MAP10 at the hall).
-      G.jumpFinal = params.has('final');
+    } else if (params.has('new') || params.has('egg') || (params.has('final') && LV.id === 10)) { // Started from the intro comic: a fresh journey into MAP (or ?final: MAP10 at the hall; ?egg: next to the level's easter egg).
+      G.jumpFinal = params.has('final'); if (params.has('egg')) { G.skipComics = true; setTimeout(goEgg, 600); }
       try { const old = localStorage.getItem(SAVE_KEY); if (old) localStorage.setItem(SAVE_KEY + '.prev', old); localStorage.removeItem(SAVE_KEY); } catch {}
       history.replaceState(null, '', location.pathname + levelQS(params.get('party') ? 'party=' + params.get('party') : ''));
       newGame(); startOfficial(true);
@@ -1084,7 +1141,7 @@ async function boot() {
     musicForZone(true);
     // Debug/QA handle (used by scripts/check-rpg-browser.mjs).
     const step = n => { for (let i = 0; i < n; i++) { E.tj_tick(); handleEvents(); } E.tj_render(); ctx.putImageData(frame, 0, 0); quest?.frame?.(ctx); updateHud(); updatePrompt(); drawMinimap(performance.now()); };
-    if (import.meta.env.DEV) window.__tj = {useItem, quickHeal, renderBuffs, LV, E, G, party, quest, retryEpoch, results, get official() { return official; }, save, load, newGame, skipCutscene, closePanel, advanceDialog, travel, step, inventory, coopPanel, startParty, leaveParty,
+    if (import.meta.env.DEV) window.__tj = {recordedBanks, useItem, quickHeal, renderBuffs, LV, E, G, party, quest, retryEpoch, results, get official() { return official; }, save, load, newGame, skipCutscene, closePanel, advanceDialog, travel, step, inventory, coopPanel, startParty, leaveParty,
       get panelOpen() { return panelOpen; }, get cine() { return cine?.id || null; }, get dialog() { return !$('dlg').hidden; }};
   } catch (err) {
     console.error(err);

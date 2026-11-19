@@ -17,8 +17,11 @@ export const persistence = makePersistence({
   grants: ['kit', 'allyZ', 'allyF', 'allyK', 'page'], words: [SAVE_WORDS_L4]});
 
 const near = (x, y, tx, ty, r = 150) => Math.max(0, 1 - Math.hypot(x - tx * 16, y - ty * 16) / r);
+import {arsenal, FIRE, MELEE} from './weapons.js';
 export default {
   id: 4, title: 'Ғұндар дәуірі', wasm: '/engine/rpg/tarikh-rpg-4.wasm', saveKey: 'tarikh.rpg.v3.L4', MAP: MAP04, requires: 3,
+  // Huns: the blade and the bow keep their own systems (cut; draw-aim-loose).
+  arsenal: E => arsenal(E, {fire: FIRE.bow, blade: MELEE.institute, pole: MELEE.spear}),
   SPEAKERS: S.SPEAKERS, ZONE_NAMES: S.ZONE_NAMES, QUESTS: S.QUESTS, HISTORICAL_QUIZZES: S.HISTORICAL_QUIZZES, BONUS_QUIZ: S.BONUS_QUIZ,
   BONUS_META: S.BONUS_META, CHAMBER_FAIL: S.CHAMBER_FAIL, TRIAL_LEVELS: S.TRIAL_LEVELS, MAIN_QUIZ_ORDER: S.MAIN_QUIZ_ORDER,
   SECRETS: S.SECRETS, DIALOGUES: S.DIALOGUES, NAMES: {...S.NAMES, ...EGG_NAMES}, LABELS: {...S.LABELS, ...EGG_LABELS},

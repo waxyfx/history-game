@@ -21,6 +21,7 @@ const D = levelDescriptor({
     2: {kk: ['Мосин штыгы', 'Мылтықтың штыгы: жақын шаншу.'], ru: ['Штык Мосина', 'Штык винтовки: укол вблизи.'], icon: 'bayonet'},
     get 3() { return Q.usingPPSh() ? PPSH : MOSIN; },
     4: {kk: ['Патрондар', 'Мылтық пен автоматқа ортақ.'], ru: ['Патроны', 'Общие для винтовки и автомата.'], icon: 'cartridges'}},
+  swapRanged: G => Q.swapLongGun(G.E, G.flags.b),
   sfx: {bow: 'shot', bowstring: 'cock'},
   music: (z, f) => z === 6 ? (f?.b?.bossSeen && !f?.b?.heirDown ? 'witness' : 'mystery') : z === 4 ? 'mystery' : z === 2 ? 'danger' : 'village',
   ambience: (z) => ({wind: z === 2 || z === 4 ? .6 : .3, fire: 0, river: 0, cave: z === 6 ? .6 : 0, birds: z === 4 ? .7 : 0}),

@@ -4,6 +4,7 @@ import {A, TS, IT} from './quest.js';
 import {SHEETS} from './gen/atlas.js';
 import {makePersistence} from './persistence.js';
 import {anomaly} from './anomalies.js';
+import {arsenal, FIRE, MELEE} from './weapons.js';
 
 export const P = (x, y) => [Math.round(x * TS), Math.round(y * TS)];
 export const sheetIndex = name => Array.isArray(SHEETS) ? SHEETS.findIndex(s => (s.name || s) === name) : Object.keys(SHEETS).indexOf(name);
@@ -26,7 +27,7 @@ export function scoring(QUIZZES, SECRETS, PAGE_IDS) {
 }
 
 // The level descriptor main.js binds (same shape as level5.js / level6.js).
-export function levelDescriptor({id, title, MAP, S, Q, enemies, comic, back, UI, music, ambience, items, sfx, next}) {
+export function levelDescriptor({id, title, MAP, S, Q, enemies, comic, back, UI, music, ambience, items, sfx, next, ...extra}) {
   const SAVE_WORDS = 24 + 25 + enemies * 2 + 8;
   const persistence = makePersistence({
     quizIds: Object.values(S.HISTORICAL_QUIZZES).map(q => q.id),
@@ -41,7 +42,7 @@ export function levelDescriptor({id, title, MAP, S, Q, enemies, comic, back, UI,
       SECRETS: S.SECRETS, DIALOGUES: S.DIALOGUES, NAMES: S.NAMES, LABELS: S.LABELS,
       applyWorld: Q.applyWorld, createQuest: Q.createQuest, questStage: Q.questStage, questTarget: Q.questTarget,
       scoreOf: Q.scoreOf, secretsFound: Q.secretsFound, pageLines: Q.pageLines, pageTotal: Q.PAGE_TOTAL, restoreSnapshot: persistence.restoreSnapshot,
-      begin: quest => quest.start(), comic, back, UI, music, ambience, items, sfx,
+      begin: quest => quest.start(), comic, back, UI, music, ambience, items, sfx, ...extra,   // e.g. swapRanged (MAP09)
       ...(next ? {next: next.id, passLabel: next.label} : {passLabel: {kk: 'Дәуірлер картасы', ru: 'Карта эпох'}}),
     },
   };
@@ -79,10 +80,12 @@ export function kit(G, MAP, {ARTIFACTS = [], D = {}} = {}) {
 }
 
 // Weapon setup for an epoch (re-applied after every load): tunes = [[slot, dmg, windup, recovery, range, width], ...].
-export function arm(E, {tunes = [], lance = 0, sabre = 0, bullets = 0, burst = 0, hero = 'aibar'} = {}) {
+export function arm(E, {tunes = [], lance = 0, sabre = 0, bullets = 0, burst = 0, hero = 'aibar', fire, blade, pole, empty = 0} = {}) {
   for (let w = 0; w < 3; w++) E.tj_weapon_tune(w, 0, 0, 0, 0, 0);
   for (const t of tunes) E.tj_weapon_tune(...t);
-  E.tj_lance(lance ? 1 : 0); E.tj_sabre(sabre ? 1 : 0); E.tj_bullets(bullets ? 1 : 0); E.tj_burst(burst || 0);
+  E.tj_lance(lance ? 1 : 0); E.tj_sabre(sabre ? 1 : 0); E.tj_bullets(bullets || 0); E.tj_burst(burst || 0);
+  // The behaviour of each slot (weapons.js); the legacy flags above only pick the default modes.
+  arsenal(E, {empty, fire: fire || FIRE.bow, blade: blade || (sabre ? MELEE.shashka : MELEE.institute), pole: pole || (lance ? MELEE.lance : MELEE.spear)});
   // In a party only Aidar (slot 0) changes look; Dana and Erlan keep the sheets main.js gave them.
   const s = sheetIndex(hero); if (s >= 0 && (globalThis.__tjHeroSlot ?? 0) === 0) E.tj_hero(s);
 }

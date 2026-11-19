@@ -5,6 +5,7 @@
 import {MAP09} from './gen/map09.js';
 import {A, TS, IT, P, indexes, scoring, kit, arm, makeStrikeWatch} from './epochkit.js';
 import {makeArrowWatch} from './range.js';
+import {FIRE, MELEE} from './weapons.js';
 import {DIALOGUES as D, HISTORICAL_QUIZZES, QUESTS, SECRETS, PROOFS, FACTS, CHOICES, ARTIFACTS, PAGE_IDS, FRONT} from './story09.js';
 
 export const {IA, NPC, TRIG, TAG} = indexes(MAP09);
@@ -14,11 +15,13 @@ export const BOSS = MAP09.enemies.findIndex(e => e.type === 6);
 export const RIFLE_T = [10, 22].map((x, k) => ({x: x * TS, y: 8.4 * TS, key: 'rifleT' + (k + 1)}));
 export const BAYONET_T = [12, 16, 20].map((x, k) => ({x: x * TS, y: 20.6 * TS, key: 'stabT' + (k + 1)}));
 export const BURST_T = [8, 14, 20].map((x, k) => ({x: x * TS, y: 14.4 * TS, key: 'burstT' + (k + 1)}));
-export const KNIFE = [0, 24, 4, 12, 24, 14], MOSIN_BAYONET = [1, 30, 9, 24, 44, 7], MOSIN = [2, 70, 22, 46, 300, 0], PPSH = [2, 22, 8, 26, 220, 0];
+export const KNIFE = [0, 24, 4, 12, 24, 14], MOSIN_BAYONET = [1, 30, 9, 24, 44, 7], MOSIN = [2, 70, 6, 30, 320, 0], PPSH = [2, 20, 1, 3, 220, 0];
 export const RANGE_MIN = 8 * TS;
 const FRONT_PROOF = {worker: 'plant', librarian: 'library', evacuee: 'station'};
-let ppshMode = false;
+let ppshMode = false, preferMosin = false;
 export const usingPPSh = () => ppshMode;
+// Both long guns once the PPSh is given: pressing 3 again swaps between them (weapons.js — two different weapons).
+export function swapLongGun(E, b) { if (!b.ppsh) return false; preferMosin = !preferMosin; applyWeapons(E, b, true); return true; }
 
 export const frontDone = f => FRONT.every(k => f.tracks.includes(PROOFS[FRONT_PROOF[k]]));
 export const trainingDone = f => !!f.b.instructorDone;
@@ -50,9 +53,10 @@ export function questTarget(f) {
 }
 
 const ZONE_LIGHT = [[206, 200, 192], [196, 188, 180], [214, 206, 182], [206, 200, 196], [210, 214, 190], [206, 202, 194], [170, 160, 150], [204, 198, 190]];
-export function applyWeapons(E, b) {
-  ppshMode = !!b.ppsh;
-  arm(E, {tunes: [KNIFE, ...(b.rifle ? [MOSIN_BAYONET, b.ppsh ? PPSH : MOSIN] : [])], bullets: 1, burst: b.ppsh ? 3 : 0, hero: 'aibargun'});
+export function applyWeapons(E, b, swapped = false) {
+  ppshMode = !!b.ppsh && !preferMosin;
+  arm(E, {tunes: [KNIFE, ...(b.rifle ? [MOSIN_BAYONET, ppshMode ? PPSH : MOSIN] : [])], bullets: 1, hero: 'aibargun',
+    fire: !b.rifle ? FIRE.bow : ppshMode ? FIRE.ppsh : FIRE.mosin, empty: swapped, blade: MELEE.knife, pole: MELEE.bayonet});
 }
 export function applyWorld(G) {
   const {E, flags: f} = G, b = f.b;

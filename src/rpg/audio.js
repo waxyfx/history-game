@@ -86,6 +86,17 @@ const SFX = {
   // MAP08–MAP09 firearms: a flintlock's crack and a rifle's report; a click of the lock.
   shot: (v, p) => { noise(.22, .22 * v, {f: 1800, f1: 200, q: .7, pan: p}); osc('sine', 90, 40, .18, .14 * v, {pan: p}); },
   cock: (v, p) => noise(.05, .06 * v, {f: 4200, f1: 2600, q: 2, pan: p}),
+  // Firearms: each has its own report (not the bow's twang).
+  musket: (v, p) => { noise(.05, .3 * v, {f: 2400, f1: 700, q: .6, pan: p}); noise(.9, .2 * v, {f: 900, f1: 120, q: .5, pan: p, attack: .01}); osc('sine', 70, 30, .5, .22 * v, {pan: p}); noise(1.4, .05 * v, {at: .2, f: 400, f1: 150, q: .4, pan: p, attack: .2}); },
+  rifle: (v, p) => { noise(.03, .32 * v, {f: 5200, f1: 2200, q: .8, pan: p}); noise(.35, .18 * v, {f: 1500, f1: 300, q: .7, pan: p}); osc('sine', 110, 45, .22, .16 * v, {pan: p}); noise(.7, .04 * v, {at: .18, f: 700, f1: 250, q: .5, pan: p, attack: .05}); },
+  smg: (v, p) => { noise(.07, .18 * v, {f: 2600, f1: 900, q: .9, pan: p}); osc('square', 150, 70, .06, .05 * v, {pan: p}); },
+  pulse: (v, p) => { osc('sawtooth', 1800, 240, .16, .07 * v, {pan: p}); osc('sine', 900, 1500, .12, .05 * v, {pan: p}); noise(.12, .06 * v, {f: 6000, f1: 3000, q: 3, pan: p}); },
+  reload: (v, p) => { noise(.04, .06 * v, {f: 3200, q: 3, pan: p}); noise(.05, .05 * v, {at: .22, f: 2000, q: 4, pan: p}); noise(.04, .05 * v, {at: .5, f: 2800, q: 3, pan: p}); },
+  bolt: (v, p) => { noise(.04, .08 * v, {f: 3600, f1: 2400, q: 3, pan: p}); noise(.05, .09 * v, {at: .12, f: 2400, f1: 1800, q: 3, pan: p}); },
+  dry: (v, p) => noise(.03, .07 * v, {f: 5000, q: 6, pan: p}),
+  vent: (v, p) => { noise(1.1, .07 * v, {f: 5000, f1: 1800, q: .6, pan: p, attack: .05}); osc('sine', 1200, 400, .6, .02 * v, {pan: p}); },
+  parry: (v, p) => { osc('triangle', 1650, 1580, .5, .07 * v, {pan: p}); osc('sine', 2480, 2400, .35, .04 * v, {pan: p}); noise(.06, .12 * v, {f: 4200, q: 2, pan: p}); },
+  ricochet: (v, p) => { osc('sine', 2400, 900, .22, .04 * v, {pan: p}); noise(.04, .05 * v, {f: 3500, q: 2, pan: p}); },
   bowstring: (v, p) => osc('triangle', 300, 340, .25, .03 * v, {pan: p, attack: .2}),
   bow: (v, p) => { osc('triangle', 520, 180, .12, .1 * v, {pan: p}); noise(.18, .06 * v, {f: 3000, f1: 1200, pan: p}); },
   arrow_hit: (v, p) => { noise(.05, .12 * v, {f: 700, q: 3, pan: p}); osc('square', 140, 80, .05, .04 * v, {pan: p}); },
@@ -121,9 +132,44 @@ const SFX = {
   knot: (v = 1) => { for (let i = 0; i < 3; i++) noise(.05, .05 * v, {at: i * .07, f: 1800 - i * 300, q: 6}); },
   breath: (v = 1) => noise(1.4, .035 * v, {f: 700, f1: 380, q: .6, attack: .5}),
 };
+// ---------------------------------------------------------------- recorded sound effects (CC0, public/audio/sfx)
+// Kenney's Impact / RPG / Interface / Sci-fi packs, OpenGameArt's fire and blade-on-blade recordings (licences:
+// public/licenses/SFX.md; imported by scripts/import-sfx.py). They load after the first click; until then, or where
+// a browser cannot decode them, the synthesised sounds above play as before.
+// game sound → [bank, volume, layer the synth too, playback rate]
+const REC = {
+  step_grass: ['step_grass', .5], step_dirt: ['step_dirt', .5], step_cave: ['step_cave', .55],
+  sword: ['sword', .55, true], spear: ['cloth', .45, true], arrow_hit: ['arrow_hit', .6], enemy_hurt: ['enemy_hurt', .7],
+  enemy_die: ['enemy_die', .8, true], block: ['block', .5], parry: ['block', .6, true, 1.15], impact: ['impact', .8, true],
+  ricochet: ['ricochet', .35, false, 1.3], pickup: ['pickup', .6, true], dialog: ['dialog', .3], noammo: ['dry', .6], dry: ['dry', .7],
+  reload: ['reload', .7], bolt: ['bolt', .8], pulse: ['pulse', .55, true], vent: ['vent', .5, true], cock: ['dry', .5, false, .8],
+  musket: ['gun_musket', .9, true, .8], rifle: ['gun_rifle', .8, true, 1], smg: ['gun_smg', .5, false, 1],
+};
+const recorded = {}; let recLoading = false;
+function loadRecorded() {
+  if (recLoading || !ctx) return; recLoading = true;
+  fetch('/audio/sfx/manifest.json').then(r => r.ok ? r.json() : {}).then(m => {
+    for (const [bank, n] of Object.entries(m)) for (let i = 0; i < n; i++)
+      fetch(`/audio/sfx/${bank}_${i}.ogg`).then(r => r.ok ? r.arrayBuffer() : Promise.reject()).then(b => ctx.decodeAudioData(b))
+        .then(buf => (recorded[bank] ||= []).push(buf)).catch(() => {});
+  }).catch(() => {});
+}
+// Plays one variation (a little pitch spread so repeats don't sound identical); false when nothing is loaded.
+function playRecorded(bank, vol, pan, rate = 1, bus = sfxBus) {
+  const list = recorded[bank]; if (!list?.length || !ctx || muted) return !!list?.length;
+  const s = ctx.createBufferSource(), g = ctx.createGain(), p = ctx.createStereoPanner();
+  s.buffer = list[Math.random() * list.length | 0]; s.playbackRate.value = rate * (.94 + Math.random() * .12);
+  g.gain.value = vol; p.pan.value = pan; s.connect(g).connect(p).connect(bus); s.start();
+  return true;
+}
+export const recordedBanks = () => Object.fromEntries(Object.entries(recorded).map(([k, v]) => [k, v.length]));   // QA
 export function sfx(name, volume = 1, pan = 0) {
+  const v = Math.max(0, Math.min(1, volume)), pn = Math.max(-1, Math.min(1, pan));
+  loadRecorded();
+  const rec = REC[name];
+  if (rec && playRecorded(rec[0], rec[1] * v, pn, rec[3] || 1) && !rec[2]) return;
   const f = SFX[name];
-  if (f) try { f(Math.max(0, Math.min(1, volume)), Math.max(-1, Math.min(1, pan))); } catch {}
+  if (f) try { f(rec?.[2] && recorded[rec[0]]?.length ? v * .55 : v, pn); } catch {}   // under a recording the synth is a quieter layer
 }
 
 // ---------------------------------------------------------------- ambience
@@ -135,6 +181,15 @@ function loopNoise(name, {type = 'lowpass', f = 600, q = .7} = {}) {
   const g = c.createGain(); g.gain.value = 0;
   s.connect(fl).connect(g).connect(ambBus); s.start();
   return (amb[name] = {s, fl, g});
+}
+// The recorded campfire, looped (once it has loaded); its gain follows the fire level.
+let fireNode = null;
+function fireBed() {
+  if (fireNode) return fireNode;
+  loadRecorded();
+  const buf = recorded.fire?.[0]; if (!buf || !ctx) return null;
+  const s = ctx.createBufferSource(), g = ctx.createGain(); s.buffer = buf; s.loop = true; g.gain.value = 0;
+  s.connect(g).connect(ambBus); s.start(); return (fireNode = g);
 }
 // level: {wind, fire, river, cave, fog} each 0..1. Called every few frames.
 export function ambience(level) {
@@ -150,7 +205,9 @@ export function ambience(level) {
   w.g.gain.setTargetAtTime(.12 * (level.wind || 0) * gust, t, .4);
   w.fl.frequency.setTargetAtTime(380 + 420 * gust, t, .5);
   const fl = level.fire || 0;
-  fi.g.gain.setTargetAtTime(.07 * fl * (.8 + .2 * Math.sin(t * 1.7)), t, .3);
+  const bed = fireBed();
+  fi.g.gain.setTargetAtTime((bed ? .025 : .07) * fl * (.8 + .2 * Math.sin(t * 1.7)), t, .3);
+  if (bed) bed.gain.setTargetAtTime(.55 * fl, t, .4);
   if (!muted && fl > .05 && Math.random() < .09 * fl) {   // crackles and the odd pop of a log
     const pop = Math.random() < .15;
     noise(pop ? .07 : .018 + Math.random() * .025, (pop ? .05 : .022) * fl, {f: pop ? 900 : 1800 + Math.random() * 2600, q: pop ? 2 : 5, bus: ambBus, pan: (Math.random() - .5) * .4});

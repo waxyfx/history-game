@@ -90,7 +90,9 @@ function helpers(p, KEY, seen, choice, name) {
     for (const [m, n] of ${JSON.stringify(segments)}) for (let i = 0; i < n; i++) { E.tj_input(m); E.tj_heal(100); __tj.step(1); } E.tj_input(0); return 1; })()`);
   const charge = (x, y, {from = 70, dy = 2, weapon = 1} = {}) => moves([[72, 9], [104, 3], [72, 3], [0, 30]], {x: x - from, y: y + dy, weapon});
   const combo = (x, y, {from = 26, dy = 2} = {}) => moves([[32, 2], [0, 30], [32, 2], [0, 30], [32, 2], [0, 34]], {x: x - from, y: y + dy, weapon: 0});
-  const shoot = (x, y, dist, {weapon = 2, wait = 90} = {}) => moves([[32, 3], [0, wait]], {x, y: y + dist, face: 0, weapon});
+  // Firearms have their own cycle (reload, bolt, heat): wait until the weapon is ready, as a player would, then fire.
+  const ready = () => p.js(`(() => { const E = __tj.E; for (let t = 0; t < 600 && (E.tj_state(53) || E.tj_state(55) || E.tj_state(57) || E.tj_state(15) || E.tj_state(16)); t++) { E.tj_heal(100); __tj.step(1); } return 1; })()`);
+  const shoot = async (x, y, dist, {weapon = 2, wait = 90} = {}) => { await moves([[0, 1]], {x, y: y + dist, face: 0, weapon}); await ready(); return moves([[32, 3], [0, wait]], {x, y: y + dist, face: 0, weapon}); };
   const save = async () => { assert(await p.js('__tj.save(true)'), 'save');
     const snap = await p.js('JSON.stringify([__tj.G.flags.b, [...__tj.G.flags.talked].sort(), [...__tj.G.flags.tracks].sort(), __tj.G.flags.quiz, __tj.G.local.granted])');
     await p.js('__tj.load(true)');

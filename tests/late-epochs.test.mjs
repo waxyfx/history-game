@@ -126,19 +126,24 @@ test('composite bow (MAP06) flies farther than the base bow; bullets (MAP08) fly
   e.tj_weapon_tune(...LV[6].quest.COMPOSITE_BOW); tick(e, 60);
   const comp = flight(e);
   assert(comp > base + 40, `composite ${comp} > base ${base}`);
-  const g = engine(8); g.tj_item_add(3, 1); g.tj_item_add(4, 10); g.tj_teleport(49 * 16, 60 * 16); g.tj_equip(2); g.tj_face(0); g.tj_bullets(1); g.tj_weapon_tune(...LV[8].quest.MUSKET); tick(g, 2);
+  // MAP08 flintlock (weapons.js profile): a lead round, not an arrow — several times faster.
+  const g = engine(8); g.tj_item_add(3, 1); g.tj_item_add(4, 10); g.tj_teleport(49 * 16, 60 * 16); g.tj_equip(2); g.tj_face(0);
+  LV[8].quest.applyWeapons(g, {lesson: true}); tick(g, 2);
   fire(g, 32, 1); let fired = 0; for (let t = 0; t < 40 && !fired; t++) { tick(g, 1); fired = projectiles(g); }
   assert.equal(fired, 1); const i = [...Array(48).keys()].find(k => g.tj_projectile(k, 0));
-  const y1 = g.tj_projectile(i, 2); tick(g, 1); assert(y1 - g.tj_projectile(i, 2) > 6000, 'a bullet moves > 6 px per tick');
+  assert.equal(g.tj_projectile(i, 4), 1, 'a lead round');
+  const y1 = g.tj_projectile(i, 2); tick(g, 1); assert(y1 - g.tj_projectile(i, 2) > 12000, 'a round moves > 12 px per tick');
 });
 
-test('PPSh (MAP09): one press fires a burst of three rounds', () => {
-  const e = engine(9); e.tj_item_add(3, 1); e.tj_item_add(4, 30); e.tj_teleport(46 * 16, 40 * 16); e.tj_equip(2); e.tj_face(0);
-  e.tj_bullets(1); e.tj_burst(3); e.tj_weapon_tune(...LV[9].quest.PPSH); tick(e, 2);
+test('PPSh (MAP09): a tap fires a burst of three; the Mosin fires one round per press', () => {
+  const e = engine(9); e.tj_item_add(2, 1); e.tj_item_add(3, 1); e.tj_item_add(4, 30); e.tj_teleport(46 * 16, 40 * 16); e.tj_equip(2); e.tj_face(0);
+  LV[9].quest.applyWeapons(e, {rifle: true, ppsh: true}); tick(e, 2);
   const before = e.tj_item_count(4); fire(e, 32, 2); tick(e, 40);
   assert.equal(before - e.tj_item_count(4), 3);
-  e.tj_burst(0); const b2 = e.tj_item_count(4); tick(e, 40); fire(e, 32, 2); tick(e, 40);
-  assert.equal(b2 - e.tj_item_count(4), 1, 'without the burst: one round');
+  const m = engine(9); m.tj_item_add(2, 1); m.tj_item_add(3, 1); m.tj_item_add(4, 30); m.tj_teleport(46 * 16, 40 * 16); m.tj_equip(2); m.tj_face(0);
+  LV[9].quest.applyWeapons(m, {rifle: true}); tick(m, 2);
+  const b2 = m.tj_item_count(4); fire(m, 32, 2); tick(m, 40);
+  assert.equal(b2 - m.tj_item_count(4), 1, 'the Mosin: one round');
 });
 
 test('MAP07 noyon: no blow lands while his three banners stand', () => {

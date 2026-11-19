@@ -6,6 +6,7 @@
 import {MAP08} from './gen/map08.js';
 import {A, TS, IT, P, indexes, scoring, kit, arm, makeStrikeWatch} from './epochkit.js';
 import {makeArrowWatch} from './range.js';
+import {FIRE, MELEE} from './weapons.js';
 import {DIALOGUES as D, HISTORICAL_QUIZZES, QUESTS, SECRETS, PROOFS, FACTS, ARTIFACTS, PAGE_IDS, VOICES} from './story08.js';
 
 export const {IA, NPC, TRIG, TAG} = indexes(MAP08);
@@ -14,7 +15,7 @@ export const {MAX_SCORE, PASS_SCORE, TRIAL_POINTS, scoreOf, pageLines, secretsFo
 export const BOSS = MAP08.enemies.findIndex(e => e.type === 9);
 export const MUSKET_T = [66, 72].map((x, k) => ({x: x * TS, y: 47.4 * TS, key: 'musketT' + (k + 1)}));
 export const BAYONET_T = [64, 68, 72].map((x, k) => ({x: x * TS, y: 58.6 * TS, key: 'bayonetT' + (k + 1)}));
-export const MUSKET = [2, 64, 28, 52, 260, 0], BAYONET = [1, 34, 9, 26, 46, 7], SABRE = [0, 28, 5, 14, 28, 16];
+export const MUSKET = [2, 64, 10, 40, 260, 0], BAYONET = [1, 34, 9, 26, 46, 7], SABRE = [0, 28, 5, 14, 28, 16];
 export const RANGE_MIN = 8 * TS;
 const VOICE_PROOF = {akbope: 'land', tatar: 'trade', sarbaz: 'revolt'};
 
@@ -46,7 +47,8 @@ export function questTarget(f) {
 
 const ZONE_LIGHT = [[214, 200, 176], [206, 196, 180], [220, 200, 170], [218, 202, 172], [206, 196, 176], [196, 206, 210], [212, 200, 176], [186, 176, 160]];
 export function applyWeapons(E, b) {
-  arm(E, {tunes: [SABRE, ...(b.lesson ? [BAYONET, MUSKET] : [])], sabre: 1, bullets: 1, hero: 'aibargun'});
+  // Flintlock: one round, a flash in the pan before the shot, ~2.5 s to reload. Bayonet: a step into the thrust.
+  arm(E, {tunes: [SABRE, ...(b.lesson ? [BAYONET, MUSKET] : [])], sabre: 1, bullets: 1, hero: 'aibargun', fire: b.lesson ? FIRE.musket : FIRE.bow, pole: MELEE.bayonet});
 }
 export function applyWorld(G) {
   const {E, flags: f} = G, b = f.b;
