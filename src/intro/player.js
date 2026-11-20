@@ -43,8 +43,15 @@ export function playComic(story, {audioCtx, low = false} = {}) {
 
  // ── stage sizing (16:9, letterboxed) ──
  let W = 0, H = 0;
+ // A phone held upright gets the whole comic turned sideways (landscape), like the game itself (rpg/main.js).
+ let rotated = false;
  function layout() {
-  const vw = innerWidth, vh = innerHeight; W = Math.min(vw, vh * 16 / 9); H = W * 9 / 16;
+  rotated = matchMedia('(pointer: coarse)').matches && innerHeight > innerWidth;
+  root.classList.toggle('tj-rot', rotated);
+  Object.assign(root.style, rotated
+   ? {inset: 'auto', left: '0', top: '0', width: innerHeight + 'px', height: innerWidth + 'px', transformOrigin: '0 0', transform: `translateX(${innerWidth}px) rotate(90deg)`}
+   : {inset: '', left: '', top: '', width: '', height: '', transformOrigin: '', transform: ''});
+  const vw = rotated ? innerHeight : innerWidth, vh = rotated ? innerWidth : innerHeight; W = Math.min(vw, vh * 16 / 9); H = W * 9 / 16;
   stage.style.width = W + 'px'; stage.style.height = H + 'px';
   root.style.setProperty('--u', (W / 100) + 'px');
   const dpr = Math.min(devicePixelRatio || 1, low ? 1 : 1.5);
@@ -126,8 +133,11 @@ export function playComic(story, {audioCtx, low = false} = {}) {
  function release() {if (!holding) return; holding = null; nextHold++; root.classList.remove('tj-holding'); last = performance.now(); if (audio && audioReady() && !muted) audio.blip('sys', audioCtx.currentTime + .01);}
  function drawBubble(b) {
   if (!b.shape) return;
-  const r = b.el.getBoundingClientRect(), s = stage.getBoundingClientRect();
-  const x = r.left - s.left, y = r.top - s.top, w = r.width, hh = r.height;
+  // Stage-local box of the bubble. Turned sideways, screen rectangles are rotated too, so use the layout box
+  // (bubbles are centred on their point by translate(-50%,-50%)).
+  let x, y, w, hh;
+  if (rotated) { w = b.el.offsetWidth; hh = b.el.offsetHeight; x = b.el.offsetLeft - w / 2; y = b.el.offsetTop - hh / 2; }
+  else { const r = b.el.getBoundingClientRect(), s = stage.getBoundingClientRect(); x = r.left - s.left; y = r.top - s.top; w = r.width; hh = r.height; }
   const tip = b.line.tip ? [b.line.tip[0] / 100 * W, b.line.tip[1] / 100 * H] : null;
   b.shape.setAttribute('d', bubblePath(b.line.kind, x, y, w, hh, tip, b.line.t0));
  }

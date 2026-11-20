@@ -55,10 +55,12 @@
 .tj-paused .tj-stage{filter:saturate(.6) brightness(.8)}
 .tj-paused .tj-stage::before{content:"❚❚";position:absolute;z-index:3;left:50%;top:50%;transform:translate(-50%,-50%);font-size:calc(var(--u)*6);color:#fff6dccc}
 @media (orientation:portrait) and (max-width:700px){
- .tj-rotate{display:block;position:absolute;left:16px;right:16px;bottom:calc(24px + env(safe-area-inset-bottom));text-align:center;font:700 13px/1.5 Rubik,sans-serif;color:#f8d68b}
- .tj-rotate::before{content:"↻";display:block;font-size:28px}
- .tj-b{font-size:11px}.tj-chip{display:none}
+ .tj-intro:not(.tj-rot) .tj-rotate{display:block;position:absolute;left:16px;right:16px;bottom:calc(24px + env(safe-area-inset-bottom));text-align:center;font:700 13px/1.5 Rubik,sans-serif;color:#f8d68b}
+ .tj-intro:not(.tj-rot) .tj-rotate::before{content:"↻";display:block;font-size:28px}
+ .tj-intro:not(.tj-rot) .tj-b{font-size:11px}.tj-intro:not(.tj-rot) .tj-chip{display:none}
 }
+/* turned sideways on an upright phone (player.js): the controls sit along the long edge, a little smaller */
+.tj-rot .tj-controls{top:10px;right:12px}.tj-rot .tj-controls button{min-height:34px;font-size:12px}.tj-rot .tj-ic{width:34px}.tj-rot .tj-skip{padding:0 12px}
 @media (max-height:420px){.tj-controls button{min-height:34px;font-size:12px}.tj-ic{width:34px}.tj-skip{padding:0 12px}.tj-chip{display:none}}
 /* Hand-off into the game: HUD slides in after the comic dissolves (classes added by main.js). */
 .intro-handoff .hud{animation:tj-hud-top .9s .1s cubic-bezier(.2,.8,.2,1) both}
