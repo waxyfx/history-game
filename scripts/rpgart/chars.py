@@ -235,10 +235,15 @@ def human_frame(style, view, anim, f):
             hx += (-1 if i == 0 else 1) * up * .6
         ramp = sk if style.get('bare_arms') else style['top']
         steps = max(1, int(max(abs(hx - sx), abs(hy - sy))))
+        # Seen from the side the near arm lies over the torso in the same cloth: give it a lighter tone and a dark
+        # edge behind it, or it vanishes into the body and the figure reads as one-armed.
+        over = side and near and P['lie'] == 0
+        back_dx = -1 if fx >= 0 else 1
         for k in range(steps + 1):
             tt = k / steps
             x = sx + (hx - sx) * tt; y = sy + (hy - sy) * tt
-            col = tone(ramp, .55 - (0 if near else .2), int(x), int(y))
+            col = tone(ramp, (.85 if over else .55) - (0 if near else .2), int(x), int(y))
+            if over and k > 0: p.set(x + back_dx, y, tone(ramp, .04, int(x), int(y)))
             p.set(x, y, col)
             if style.get('build') != 'child':
                 p.set(x + (1 if i == 1 or side else -1) * (1 if view in ('s', 'n') else 0), y, tone(ramp, .4 - (0 if near else .2), int(x), int(y)))

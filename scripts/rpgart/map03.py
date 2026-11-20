@@ -161,9 +161,9 @@ def place():
     for k in range(6):
         a = k / 6 * math.pi * 2
         o('deerstone', *P(62 + math.cos(a) * 6.5, 13.5 + math.sin(a) * 3.6))
-    o('standard', *P(57, 9)); o('standard', *P(67, 9)); o('tent', *P(69, 18), 1)
+    o('standard', *P(57, 9)); o('standard', *P(67, 9)); o('tent', *P(72.5, 20.6), 1)   # on the meadow below the rock, not straddling its edge
     o('rock', *P(57, 16.6), 2, t('niche'))
-    for x, y in ((52, 20), (71, 21), (58, 23)): o('tulips', *P(x, y), 1)
+    for x, y in ((52, 20), (68, 22.5), (58, 23)): o('tulips', *P(x, y), 1)
     # ---- foothills: spruces
     for x in list(range(6, 108, 7)):
         y = 9 + noise2(x, 3, 7) * 3

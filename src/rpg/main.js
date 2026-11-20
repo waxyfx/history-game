@@ -35,7 +35,7 @@ const W = 480, H = 320, RESULTS_KEY = 'tarikh.rpg.results';
 let SAVE_KEY = 'tarikh.rpg.v3';
 const SFX_NAMES = ['step_grass', 'step_dirt', 'step_water', 'step_cave', 'sword', 'spear', 'bow', 'arrow_hit', 'enemy_hurt', 'enemy_die', 'howl', 'growl', 'roar', 'swipe', 'shout', 'pickup', 'splash', 'hooves', 'block', 'down', 'revive', 'impact', 'bowstring',
   'musket', 'rifle', 'smg', 'pulse', 'reload', 'bolt', 'dry', 'vent', 'parry', 'ricochet'];
-const EV = {SFX: 1, INTERACT: 2, TRIGGER: 3, ENEMY_DIED: 4, PICKUP: 5, HURT: 6, DOWN: 7, DEAD: 8, REVIVED: 9, ZONE: 10, ENEMY_HIT: 11, PEER_HIT: 12, REVIVE_PEER: 13, PLATES: 14, ALERT: 15, HOLD: 16, NOAMMO: 17, EFFECT: 18, USED: 19, RELOAD: 20, PARRY: 21, IMPACT: 22};
+const EV = {SFX: 1, INTERACT: 2, TRIGGER: 3, ENEMY_DIED: 4, PICKUP: 5, HURT: 6, DOWN: 7, DEAD: 8, REVIVED: 9, ZONE: 10, ENEMY_HIT: 11, PEER_HIT: 12, REVIVE_PEER: 13, PLATES: 14, ALERT: 15, HOLD: 16, NOAMMO: 17, EFFECT: 18, USED: 19, RELOAD: 20, PARRY: 21, IMPACT: 22, FULL: 23};
 const NAMES = {
   kk: {page1: 'Жарқыраған үзінді', track1: 'Із', track2: 'Сынған жебе', track3: 'Сүйреткен із', track4: 'Қорамсақ', toolpile: 'Шақпақтың құралдары', firepit: 'Ошақ', thicket: 'Қалың бұта',
     cachebush: 'Бұта', cache: 'Жасырын қойма', rope: 'Арқан', boulder: 'Үлкен тас', lever: 'Бөрене-тұтқа', cavemouth: 'Суретті үңгір', caveexit: 'Шығу', petro1: 'Жартас суреті', petro2: 'Жартас суреті',
@@ -806,6 +806,28 @@ function equip(w) {
   if (E.tj_equip(w)) sfx('dialog');
   updateHud(true); canvas.focus({preventScroll: true});
 }
+// Out of arrows or cartridges is never a dead end: a little after the last one is spent, a supply (a full quiver, a box
+// of cartridges, energy cells) is laid down a few steps away. At most once every 25 s, only while the ranged weapon
+// is owned and nothing is happening on screen.
+let ammoEmptySince = 0, ammoNextDrop = 0;
+const SUPPLY = {0: 12, 1: 6, 2: 10, 3: 20, 4: 12};   // by FireKind: bow, flintlock, Mosin, PPSh, pulse rifle
+function ammoSupply(now) {
+  if (!E || cine || panelOpen || dialogBusy || E.tj_item_count(3) <= 0 || E.tj_item_count(IT.arrows) > 0 || E.tj_state(8) <= 0) { ammoEmptySince = 0; return; }
+  if (!ammoEmptySince) { ammoEmptySince = now; return; }
+  if (now - ammoEmptySince < 2500 || now < ammoNextDrop) return;
+  const hx = E.tj_state(0) / 1000, hy = E.tj_state(1) / 1000, face = E.tj_state(3);
+  const dirs = [[0, -1], [.7, -.7], [1, 0], [.7, .7], [0, 1], [-.7, .7], [-1, 0], [-.7, -.7]];
+  for (const r of [40, 32, 24, 48]) for (let k = 0; k < 8; k++) {
+    const [dx, dy] = dirs[(face + k) % 8], x = Math.round(hx + dx * r), y = Math.round(hy + dy * r);
+    if (E.tj_solid(x, y) || E.tj_solid(x + 4, y) || E.tj_solid(x - 4, y)) continue;
+    E.tj_spawn_item(IT.arrows, SUPPLY[E.tj_state(50)] ?? 12, x, y);
+    ammoNextDrop = now + 25000; ammoEmptySince = 0;
+    const kind = E.tj_state(50);
+    return toast(!kind ? (lang === 'ru' ? 'Рядом лежит колчан со стрелами.' : 'Жақын жерде жебе толы қорамсақ жатыр.')
+      : kind === 4 ? (lang === 'ru' ? 'Рядом лежит ящик с энергоячейками.' : 'Жақын жерде энергия ұяшықтары бар жәшік жатыр.')
+      : (lang === 'ru' ? 'Рядом лежит ящик с патронами.' : 'Жақын жерде оқ-дәрі жәшігі жатыр.'), 'good');
+  }
+}
 function updatePrompt() {
   const kind = E.tj_state(25), id = E.tj_state(26), el = $('prompt');
   if (kind < 0 || cine || dialogBusy || panelOpen) { el.hidden = true; return; }
@@ -885,7 +907,14 @@ function handleEvents() {
       case EV.REVIVE_PEER: { const s = memberSlotOfEngine(a); if (s >= 0) party.net?.send('rev', {to: s}); break; }
       case EV.PLATES: quest.plates(a); break;
       case EV.ALERT: if (b === 99) quest.bossTalk?.(a); else if (!cine) music('danger'); break;   // 99: a boss stops fighting (MAP05)
-      case EV.NOAMMO: toast(t('noAmmo'), 'warn'); if (!E.tj_state(50)) sfx('noammo'); break;   // a firearm's dry click comes from the engine
+      case EV.NOAMMO: { const k = E.tj_state(50);   // a firearm's dry click comes from the engine
+        toast(!k ? t('noAmmo') : k === 4 ? (lang === 'ru' ? 'Энергоячейки пусты!' : 'Энергия ұяшықтары бос!') : (lang === 'ru' ? 'Патроны кончились!' : 'Оқ таусылды!'), 'warn');
+        if (!k) sfx('noammo'); break; }
+      case EV.FULL: {   // walked over a pickup with a full stack: say so, it stays where it lies
+        const ammo = a === IT.arrows, k = E.tj_state(50);
+        toast(ammo ? (k ? (lang === 'ru' ? `Патронов максимум (${E.tj_item_count(a)}) — остальное лежит здесь.` : `Оқ толы (${E.tj_item_count(a)}) — қалғаны осында жатыр.`)
+          : (lang === 'ru' ? `Колчан полон (${E.tj_item_count(a)}) — стрелы лежат здесь.` : `Қорамсақ толы (${E.tj_item_count(a)}) — жебелер осында жатыр.`))
+          : `${itemList()[a]?.[0] || ''}: ${lang === 'ru' ? 'больше не унести' : 'артық алып жүре алмайсың'}`, 'warn'); break; }
       case EV.RELOAD: updateHud(true); break;
       case EV.PARRY: break;
       case EV.IMPACT: noteImpact(a, b); break;
@@ -939,7 +968,7 @@ function loop(now) {
   updateHud(); updatePrompt();
   $('viewport').classList.toggle('playing', !panelOpen);
   if ((now / 100 | 0) % 2 === 0) drawMinimap(now);
-  if ((now / 250 | 0) !== ambTick) { ambTick = now / 250 | 0; ambienceTick(); renderBuffs(); $('s-score').textContent = timerText() + (official?.active ? (lang === 'ru' ? ' · офиц.' : ' · ресми') : ''); }
+  if ((now / 250 | 0) !== ambTick) { ambTick = now / 250 | 0; ambienceTick(); ammoSupply(now); renderBuffs(); $('s-score').textContent = timerText() + (official?.active ? (lang === 'ru' ? ' · офиц.' : ' · ресми') : ''); }
   netTick(now);
   if (now - lastSave > 60000 && !cine && !panelOpen) autosave();
 }

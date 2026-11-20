@@ -14,7 +14,7 @@ constexpr int MaxPlayers=3;
 enum EventType { EV_NONE, EV_SFX, EV_INTERACT, EV_TRIGGER, EV_ENEMY_DIED, EV_PICKUP, EV_HURT, EV_DOWN, EV_DEAD,
                  EV_REVIVED, EV_ZONE, EV_ENEMY_HIT, EV_PEER_HIT, EV_REVIVE_PEER, EV_PLATES, EV_ALERT, EV_HOLD_START, EV_NOAMMO,
                  EV_EFFECT /* a=effect id, b=1 start, 2 refreshed, 0 ended */, EV_USED /* a=item, b=healed hp */,
-                 EV_RELOAD /* a=1 started, 0 done */, EV_PARRY, EV_IMPACT /* a=x, b=y: where a player's round stopped */ };
+                 EV_RELOAD /* a=1 started, 0 done */, EV_PARRY, EV_IMPACT /* a=x, b=y: where a player's round stopped */, EV_FULL /* a=item: walked over it with a full stack */ };
 enum Sfx { SFX_STEP_GRASS, SFX_STEP_DIRT, SFX_STEP_WATER, SFX_STEP_CAVE, SFX_SWORD, SFX_SPEAR, SFX_BOW, SFX_ARROW_HIT,
            SFX_ENEMY_HURT, SFX_ENEMY_DIE, SFX_HOWL, SFX_GROWL, SFX_ROAR, SFX_SWIPE, SFX_SHOUT, SFX_PICKUP, SFX_SPLASH,
            SFX_HOOVES, SFX_BLOCK, SFX_DOWN, SFX_REVIVE, SFX_IMPACT, SFX_BOWSTRING,
@@ -48,7 +48,7 @@ struct Npc {
     int way=0,wait=0,mode=0; // 0 routine, 1 scripted goto, 2 hold position
     float gx=0,gy=0; bool run=false; int holdAnim=art::A_IDLE,bubble=0,alert=0,greeted=0;
 };
-struct Animal { bool active=true; int sheet; float x,y,hx,hy,vx=0,vy=0,tvx=0,tvy=0; int facing=2,anim=art::A_IDLE,animTime=0,timer=0,flee=0,calm=0,turn=0,bump=0; };
+struct Animal { bool active=true; int sheet; float x,y,hx,hy,vx=0,vy=0,tvx=0,tvy=0; int facing=2,anim=art::A_IDLE,animTime=0,timer=0,flee=0,calm=0,turn=0,bump=0; bool walking=false; };
 struct Enemy {
     bool active=true,enabled=true;
     int type=0,group=0,hp=0,state=Idle,facing=4,timer=0,anim=art::A_IDLE,animTime=0,target=-1,alerted=0,seed=0,hitFlash=0,showBar=0,phase=1,special=0,illusions=0;
@@ -79,6 +79,7 @@ struct Game {
     int shadowX=0,shadowY=0,shadowAlpha=0;
     unsigned completedTasks=0,storyEvents=0;
     int prevKeys=0,interactCooldown=0,hurtFlash=0;
+    int fullCd=0;   // throttles the «quiver full» notice
     int hitRanged=0; float knockNow=0;   // the hit being resolved: from a projectile (no parry) / a heavy blow's extra push
     float flashX=0,flashY=0; int flashT=0,flashKind=0;   // the last muzzle flash
     ActiveEffect fx[MaxEffects]; int useCooldown=0;
@@ -651,20 +652,31 @@ void tickAnimals(){
         float k=a.flee>0?.12f:.04f;   // ease the velocity toward the goal
         a.vx+=(a.tvx-a.vx)*k;a.vy+=(a.tvy-a.vy)*k;
         float speed=sqrtf(a.vx*a.vx+a.vy*a.vy);
-        if(speed>.05f){
+        // Walking or standing, with hysteresis: no flicker between the two while the speed eases through the threshold.
+        if(!a.walking&&speed>.09f)a.walking=true; else if(a.walking&&speed<.035f)a.walking=false;
+        if(speed>.02f){
             bool bx=blockedFeet(a.x+a.vx,a.y,4,2),by=blockedFeet(a.x,a.y+a.vy,4,2);
             if(!bx)a.x+=a.vx; if(!by)a.y+=a.vy;
-            if(bx&&by){   // a wall or a fence: turn away once, then let the new heading ease in (no spinning on the spot)
-                if(!a.bump){float ang=atan2f(a.vy,a.vx)+3.1416f*(.5f+frand());
-                    a.tvx=cosf(ang)*topSpeed;a.tvy=sinf(ang)*topSpeed*.7f;a.bump=40;}
-                a.vx*=.3f;a.vy*=.3f;
-            } else if(bx){a.tvx=-a.tvx*.5f;a.vx=0;} else if(by){a.tvy=-a.tvy*.5f;a.vy=0;}
+            if(bx||by){
+                // A fence, a rock, water: pick at once the free heading nearest to the wanted one (or stand still),
+                // instead of pushing against it — pushing made the speed and the walk animation stutter.
+                float want=atan2f(a.tvy!=0||a.tvx!=0?a.tvy:a.vy,a.tvx!=0||a.tvy!=0?a.tvx:a.vx),mag=sqrtf(a.tvx*a.tvx+a.tvy*a.tvy);
+                if(mag<.05f)mag=topSpeed;
+                bool found=false;
+                for(int k=1;k<=4&&!found;++k)for(int sgn=-1;sgn<=1&&!found;sgn+=2){
+                    float ang=want+sgn*k*.7854f,dx=cosf(ang),dy=sinf(ang);
+                    if(!blockedFeet(a.x+dx*7,a.y+dy*5,4,2)&&!blockedFeet(a.x+dx*3,a.y+dy*2,4,2)){a.tvx=dx*mag;a.tvy=dy*mag*.7f;found=true;}}
+                if(!found){a.tvx=a.tvy=0;}
+                a.vx*=.4f;a.vy*=.4f;a.bump=40;
+                if(a.flee<=0&&a.timer>120)a.timer=120;   // a wander that ran into something ends sooner
+            }
             // Turn only when clearly moving and not more often than every 20 ticks: no flicker between
             // neighbouring directions on a diagonal or while easing in/out.
             if(speed>.12f&&!a.turn){int h=heading(a.vx,a.vy);if(h!=a.facing){a.facing=h;a.turn=20;}}
-            setAnim(a.anim,a.animTime,a.flee>0&&speed>.8f?art::A_RUN:art::A_WALK);
             if(!hare&&a.flee>0&&a.flee%34==0)sfx(SFX_HOOVES,a.x,a.y);
-        } else setAnim(a.anim,a.animTime,(!hare&&a.timer%240<170)?art::A_GRAZE:art::A_IDLE);
+        }
+        if(a.walking)setAnim(a.anim,a.animTime,a.flee>0&&speed>.8f?art::A_RUN:art::A_WALK);
+        else setAnim(a.anim,a.animTime,(!hare&&a.timer%240<170)?art::A_GRAZE:art::A_IDLE);
     }
 }
 
@@ -1339,7 +1351,7 @@ void tickPickups(){
         float dx=k.x-p.x,dy=k.y-p.y;
         if(dx*dx+dy*dy<11*11){
             int& c=game.inv.counts[k.item-1];
-            if(c>=items[k.item-1].limit)continue;
+            if(c>=items[k.item-1].limit){ if(!game.fullCd){emit(EV_FULL,k.item);game.fullCd=150;} continue; }   // tell the player why it stays
             c+=k.qty;if(c>items[k.item-1].limit)c=items[k.item-1].limit;
             k.active=false;if(k.id>=0)game.staticPicked|=1u<<k.id;
             game.lastPickup=k.item;emit(EV_PICKUP,k.item,k.qty);sfx(SFX_PICKUP,k.x,k.y);
@@ -1400,6 +1412,7 @@ void tick(){
     if(game.paused)return;
     ++game.ticks; // events accumulate until JS clears them
     if(game.interactCooldown)--game.interactCooldown;
+    if(game.fullCd)--game.fullCd;
     if(game.hurtFlash)--game.hurtFlash;
     if(game.shake)--game.shake;
     const Area& ar_=area();
@@ -1571,7 +1584,9 @@ void render(){
                 art::I_TABLET,art::I_EMBER,art::I_MOULD,art::I_SEAL,art::I_BRACELET,
                 art::I_HERBBIG,art::I_STRENGTH,art::I_GUARD,art::I_SWIFT,art::I_COAL,art::I_CURD};
             renderer.sprite(art::X_SHADOW_0,int(k.x),int(k.y));
-            renderer.sprite(icon[k.item],int(k.x),int(k.y)-bob-1);
+            int ic=icon[k.item];
+            if(k.item==IArrows)ic=fire.kind!=FireBow?art::I_CARTRIDGES:k.qty>=8?art::I_QUIVER:art::I_ARROWS;   // the era's ammunition; a supply is a full quiver
+            renderer.sprite(ic,int(k.x),int(k.y)-bob-1);
             if((k.bob/20)%3==0)renderer.pixel(int(k.x)+3-cx,int(k.y)-14-cy,rgba(0xfff2c4));
             break;}
         case 6:{const Projectile& p=projectiles[d.idx];if(p.fire)renderer.sprite(art::X_FIREBOLT_0+((game.ticks/5)&1),int(p.x),int(p.y));
@@ -1785,6 +1800,9 @@ int tj_enemy(int index,int field){
         case 17:case 18:case 19:{int k=field-17;return int(e.px[k]*1000);}case 20:case 21:case 22:{int k=field-20;return int(e.py[k]*1000);}default:return -1;}
 }
 int tj_enemy_count(){ return tj::EnemyCount; }
+// QA: an animal's state (0 x, 1 y, 2 facing, 3 anim, 4 flee, 5 speed ×1000); -1 when out of range.
+int tj_animal(int i,int field){ int n=int(sizeof(tj::animals)/sizeof(tj::animals[0])); if(i<0||i>=n)return -1; const auto& a=tj::animals[i];
+    switch(field){case 0:return int(a.x*1000);case 1:return int(a.y*1000);case 2:return a.facing;case 3:return a.anim;case 4:return a.flee;case 5:return int(sqrtf(a.vx*a.vx+a.vy*a.vy)*1000);case 6:return a.active;default:return -1;} }
 // Network client: apply the host snapshot of one enemy.
 void tj_enemy_set(int i,int x,int y,int hp,int state,int facing,int anim,int animTime,int attackAge){
     if(i<0||i>=tj::EnemyCount)return;auto& e=tj::enemies[i];

@@ -1,5 +1,5 @@
 // MAP10 «Он бірінші тігіс» — shot builders (same kit as src/intro/scenes.js; the knot-keeper and the cord are MAP04's).
-import {h, g, path, tf, lerp, seg, ease, easeOut, rand, INK, nextId, makeHero, makeGate, makeHand, applyCam, page, overlay, sparks} from '../../intro/art.js';
+import {h, g, path, tf, lerp, seg, ease, easeOut, rand, INK, nextId, makeHero, makeVillain, makeGate, makeHand, applyCam, page, overlay, sparks, mix} from '../../intro/art.js';
 import {makeKnot, cord} from '../knot/scenes.js';
 
 function grad(root, stops, {x2 = 0, y2 = 1, radial = false} = {}) {
@@ -37,7 +37,83 @@ function face(parent) {
  return F;
 }
 
+// Aidar's sword in his hand (the Institute blade): a line along the forearm that swings with the arm.
+function swordIn(R) {
+ const S = g(R.j.handF);
+ path(S, 'M-12,14 L12,14', 'none', 7, {stroke: '#8a6a3a', 'stroke-linecap': 'round'});      // the guard
+ path(S, 'M0,14 L0,190', 'none', 9, {stroke: '#d8e2ea', 'stroke-linecap': 'round'});        // the blade
+ path(S, 'M3,22 L3,182', 'none', 2, {stroke: '#ffffff', opacity: .7});
+ return S;
+}
+// A cut that flashes white, then stays as a dark-red line.
+function cutMark(parent, d) {
+ const flash = path(parent, d, 'none', 14, {stroke: '#fff6e8', 'stroke-linecap': 'round', opacity: 0});
+ const mark = path(parent, d, 'none', 8, {stroke: '#8c1a14', 'stroke-linecap': 'round', opacity: 0});
+ return t => {flash.setAttribute('opacity', Math.max(0, seg(t, 0, .08) - seg(t, .12, .45)).toFixed(2)); mark.setAttribute('opacity', (seg(t, .05, .3) * .95).toFixed(2));};
+}
+const GUARD = {shF: 70, elF: 50, wrF: -20, shB: 20, elB: 40, hipF: 14, kneeF: 18, hipB: -12, kneeB: 10, lean: 6};
+const CUT_UP = {shF: 150, elF: 20, wrF: 10, shB: -10, elB: 30, hipF: 24, kneeF: 22, hipB: -18, kneeB: 8, lean: -6};
+const CUT_DOWN = {shF: 30, elF: 0, wrF: -30, shB: 30, elB: 20, hipF: 30, kneeF: 30, hipB: -22, kneeB: 6, lean: 16};
+const HIT = {shF: 40, elF: 70, wrF: 0, shB: -30, elB: 60, hipF: -10, kneeF: 10, hipB: 16, kneeB: 20, lean: -22, head: -14};
+const HUNCH = {shF: 10, elF: 30, wrF: -20, shB: -10, elB: 40, hipF: 8, kneeF: 22, hipB: -6, kneeB: 20, lean: 16, head: 16, y: 14};   // bent over, still on his feet
+
 export const SCENES = {
+ // 0a — the fight in the hall of the Gate, with everything he has left: cut, parry, cut — the ink hand answers;
+ // he is thrown back, falls to one knee, and gets up again for one more charge.
+ fight(root) {
+  const cam = g(root); const R = gateHall(cam);
+  const z = makeVillain(cam); z.place(1060, 780, 1.25, true);
+  const a = makeHero(cam); a.place(560, 780, 1.25, false); swordIn(a);
+  const sp = [1.3, 2.7, 4.1, 7.9].map((at, i) => [at, sparks(cam, 830, 470, 22, 5 + i, i % 2 ? '#7ff5e4' : '#ffe28a')]);
+  const hit = cutMark(cam, 'M500,430 L580,530');   // across the chest, where the ink hand caught him
+  const ink = h('ellipse', {cx: 980, cy: 560, rx: 0, ry: 0, fill: '#0a0814', opacity: .85}, cam);
+  overlay(root, 'url(#tj-vig)');
+  return t => {
+   let pose = GUARD, x = 560, tilt = 0;
+   // three exchanges: guard → raise → strike, a step forward each time
+   [1, 2.4, 3.8].forEach((t0, i) => {
+    if (t < t0) return;
+    const up = ease(seg(t, t0, t0 + .35)), down = ease(seg(t, t0 + .35, t0 + .6));
+    if (t < t0 + .6) pose = down > 0 ? mix(CUT_UP, CUT_DOWN, down) : mix(GUARD, CUT_UP, up);
+    else if (t < t0 + 1) pose = mix(CUT_DOWN, GUARD, ease(seg(t, t0 + .6, t0 + 1)));
+    x = 560 + 50 * i + 50 * ease(seg(t, t0, t0 + .6));
+   });
+   if (t > 4.8) { const k = ease(seg(t, 4.8, 5.4)); pose = mix(GUARD, HIT, k); x = lerp(710, 460, k); tilt = seg(t, 5.2, 5.7) * -10; }
+   if (t > 5.7) { pose = mix(HIT, HUNCH, ease(seg(t, 5.7, 6.2))); x = 460; }
+   if (t > 6.6) { pose = mix(HUNCH, GUARD, ease(seg(t, 6.6, 7.2))); tilt = 0; }
+   if (t > 7.3) { const k = ease(seg(t, 7.3, 7.7)); pose = mix(GUARD, CUT_UP, k); x = lerp(460, 660, k); }
+   if (t > 7.7) pose = mix(CUT_UP, CUT_DOWN, ease(seg(t, 7.7, 8)));
+   a.place(x, 780, 1.25, false, tilt); a.pose(pose);
+   a.face({brow: t > 4.8 ? -.8 : -.5, mouth: t > 4.8 && t < 6.6 ? 'open' : t > 7.2 ? 'shout' : 'closed', look: [6, 0]}); a.tick(t, false);
+   // Zulmat barely moves; at 4.6 his ink hand lashes out
+   const lash = Math.max(0, seg(t, 4.5, 4.9) - seg(t, 5.1, 5.8));
+   z.place(lerp(1060, 1010, lash), 780, 1.25, true); z.pose({shF: 30 + lash * 100, elF: 20 - lash * 20, shB: 10, lean: -4 + lash * 10});
+   z.face({mouth: 'smirk'}); z.coatSwing = Math.sin(t * 2) * 2; z.tick(t, false);
+   ink.setAttribute('rx', (lash * 230).toFixed(0)); ink.setAttribute('ry', (lash * 60).toFixed(0)); ink.setAttribute('cx', lerp(980, 640, lash).toFixed(0));
+   sp.forEach(([at, f]) => f(t - at));
+   hit(t - 5.0);
+   R.gate.set(t, .8);
+   applyCam(cam, [lerp(800, 780, ease(t / 9)), 470, lerp(.92, 1.02, ease(t / 9)), 0], [1.3, 2.7, 4.1, 5.0, 7.9].some(v => t > v && t < v + .2) ? 12 : 0, t);
+  };
+ },
+ // 0b — the wounds: on one knee, the blows keep coming — the shoulder, the arm, the side. The sword sinks but stays in his hand.
+ wounds(root) {
+  const cam = g(root); const R = gateHall(cam);
+  const a = makeHero(cam); a.place(760, 800, 1.5, false); swordIn(a);
+  const cuts = [[.8, 'M700,470 L790,540'], [2.0, 'M820,560 L880,650'], [3.2, 'M690,600 L780,640']].map(([at, d]) => [at, cutMark(cam, d)]);
+  const red = h('rect', {x: -400, y: -300, width: 2400, height: 1500, fill: '#5a0a08', opacity: 0}, root);
+  overlay(root, 'url(#tj-vig)');
+  return t => {
+   const sag = ease(seg(t, .6, 5));
+   const jolt = [.8, 2, 3.2].reduce((v, at) => v + Math.max(0, seg(t, at, at + .08) - seg(t, at + .12, at + .4)), 0);   // each blow rocks him back
+   a.pose(mix(mix(HUNCH, {...HUNCH, shF: -10, elF: 10, head: 30, lean: 26, y: 30}, sag), {...HUNCH, lean: -12, head: -10}, jolt));
+   a.face({brow: -.9, mouth: t > 4.4 ? 'open' : 'closed', look: [0, 2], blink: t > 3.3 && t < 3.6 ? 1 : 0}); a.tick(t, false);
+   cuts.forEach(([at, f]) => f(t - at));
+   red.setAttribute('opacity', (cuts.reduce((sum, [at]) => sum + Math.max(0, seg(t, at, at + .06) - seg(t, at + .1, at + .5)), 0) * .35).toFixed(2));
+   R.gate.set(t, .6);
+   applyCam(cam, [760, lerp(470, 500, ease(t / 6)), lerp(1.05, 1.25, ease(t / 6)), 0], [.8, 2, 3.2].some(v => t > v && t < v + .2) ? 14 : 0, t);
+  };
+ },
  // 1 — the ink blade crosses the face; one eye goes dark, red, then black.
  wound(root) {
   const cam = g(root); page(cam, '#0b0a10');
@@ -95,15 +171,18 @@ export const SCENES = {
   path(cam, 'M600,630 L660,600 M940,600 L1000,630', 'none', 4, {stroke: '#8a6a52'});                    // lines of age
   const scar = path(cam, 'M560,330 L760,560', 'none', 10, {stroke: '#7a4a3a', 'stroke-linecap': 'round', opacity: 0});   // the old wound, healed
   const hood = path(cam, 'M330,900 C320,300 520,-40 800,-60 C1080,-40 1280,300 1270,900 L1130,900 C1140,420 1000,180 800,180 C600,180 460,420 470,900 Z', '#4a4b53', 8);
+  // the cloak itself falls from the shoulders after the hood: he takes it off to be seen
+  const cloak = path(cam, 'M120,1100 C200,820 380,760 470,760 L1130,760 C1220,760 1400,820 1480,1100 Z', '#3c3d45', 8);
   const scarf = g(cam); path(scarf, 'M480,760 C620,880 980,880 1120,760 L1180,900 L420,900 Z', '#b8875a', 7);   // the same scarf, faded
   F.eyeL.setAttribute('opacity', 0);
   const ember = h('circle', {cx: 660, cy: 468, r: 22, fill: '#ffb347', opacity: 0}, cam);
   return t => {
    const drop = ease(seg(t, .4, 2.6));
    tf(hood, 0, lerp(0, 760, drop)); hood.setAttribute('opacity', (1 - seg(t, 2, 2.8)).toFixed(2));
+   const off = ease(seg(t, 2.4, 4)); tf(cloak, lerp(0, -200, off), lerp(0, 520, off)); cloak.setAttribute('opacity', (1 - seg(t, 3.4, 4.2)).toFixed(2));
    grey.setAttribute('opacity', (seg(t, 1.4, 2.6) * .55).toFixed(2)); scar.setAttribute('opacity', seg(t, 2.2, 3).toFixed(2));
    ember.setAttribute('opacity', (seg(t, 3, 4) * (.5 + .3 * Math.sin(t * 6))).toFixed(2));
-   applyCam(cam, [800, 470, lerp(1, 1.12, ease(t / 10)), 0]);
+   applyCam(cam, [800, 470, lerp(1, 1.12, ease(t / 13)), 0]);
   };
  },
  // 5 — the hands meet; the cord of eleven knots passes from the old hand to the young one; the ten epochs flash by.

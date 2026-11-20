@@ -1,28 +1,39 @@
 // MAP10 · «Он бірінші тігіс / Одиннадцатый стежок» — the fourth big motion-comic, the finale (format of src/intro).
-// The canon sequence (docs/story-canon.md 1.3) after the fight has stripped Aidar to his sword: the wound and the lost eye;
-// he falls; Түйінші appears; the reveal — he is the future Aidar; he passes on experience, strength and memories; the two
-// merge; the fire in the empty socket. Order is fixed by the author; nothing here changes it.
+// The canon sequence (docs/story-canon.md 1.3): Aidar fights Zulmat with everything he has left and is wounded again and
+// again — the last wound takes his eye; he falls; Түйінші comes, throws off his cloak and shows his face — he is Aidar from
+// the future; he passes on experience, strength and memories; the two merge; the fire in the empty socket.
+// Order is fixed by the author; nothing here changes it.
 export const CAST = {
  hero: {kk: 'Айдар', ru: 'Айдар'},
  knot: {kk: 'Түйінші', ru: 'Түйінші'},
  sys: {kk: 'ЖҮЙЕ', ru: 'СИСТЕМА'},
+ zulmat: {kk: 'Зұлмат', ru: 'Зулмат'},
 };
 
 const VO = (at, end, kk, ru, who) => ({at, end, kind: 'caption', p: [50, 84], w: 64, kk, ru, ...(who ? {who} : {})});
 
 export const SHOTS = [
  // ── 1. ЖАРА / РАНА ────────────────────────────────────────────────
+ {id: 'fight', scene: 1, dur: 9, trans: 'black', lines: [
+  VO(2.9, 4.6, '«Тағы да!»', '«Ещё!»', 'hero'),
+  VO(5.4, 7.2, '«Сен жалғызсың, шежіреші. Жалғыз адам тарихты ұстап тұра алмайды.»', '«Ты один, летописец. Один человек не удержит историю.»', 'zulmat'),
+  VO(7.3, 8.8, '«Әлі тұрмын!»', '«Я ещё стою!»', 'hero'),
+ ], sfx: [[1.3, 'glass'], [2.7, 'glass'], [4.1, 'glass'], [5, 'flashBoom'], [7.9, 'glass']]},
+ {id: 'wounds', scene: 1, dur: 6, trans: 'cut', lines: [
+  VO(3.8, 5.8, '«Тұр… Тұр, Айдар.»', '«Вставай… Вставай, Айдар.»', 'hero'),
+ ], sfx: [[.4, 'heart'], [.8, 'swish'], [2, 'swish'], [2.6, 'heart'], [3.2, 'swish']]},
  {id: 'wound', scene: 1, dur: 6, trans: 'black', lines: [], sfx: [[.4, 'heart'], [2.2, 'swish'], [2.5, 'glass'], [2.6, 'flashBoom']]},
  {id: 'fall', scene: 1, dur: 7, trans: 'fade', lines: [
   VO(3.6, 6.6, '«Мен кіммін?»', '«Кто я?»', 'hero'),
  ], sfx: [[.6, 'stone'], [2.4, 'heart'], [4, 'heart']]},
  // ── 2. ТҮЙІНШІ ────────────────────────────────────────────────────
  {id: 'arrive', scene: 2, dur: 8, trans: 'fade', lines: [], sfx: [[.4, 'steps'], [1.6, 'steps'], [2.8, 'steps'], [5.4, 'chime']]},
- {id: 'reveal', scene: 2, dur: 10, trans: 'cut', lines: [
+ {id: 'reveal', scene: 2, dur: 13, trans: 'cut', lines: [
   VO(.8, 3.6, '«Сен үшінші сұрақты қойдың. Енді жауап беруге болады.»', '«Ты задал третий вопрос. Теперь на него можно ответить.»', 'knot'),
-  VO(4.6, 7.2, '«Мен — сенмін. Сенің болашағыңмын.»', '«Я — это ты. Твоё будущее.»', 'knot'),
-  VO(7.6, 9.8, '«Мен он бірінші тігісті байладым. Енді оны саған беремін.»', '«Я завязал одиннадцатый стежок. Теперь я отдаю его тебе.»', 'knot'),
- ], sfx: [[4.2, 'heart'], [7.4, 'chime']]},
+  VO(4.2, 6.6, '«Қара маған. Бұл тыртық — сенің тыртығың. Бұл орамал — сенің орамалың.»', '«Посмотри на меня. Этот шрам — твой шрам. Этот шарф — твой шарф.»', 'knot'),
+  VO(6.8, 9.2, '«Мен — сенмін. Болашақтан келдім, он дәуірдің бәрінен өтіп.»', '«Я — это ты. Я пришёл из будущего, через все десять эпох.»', 'knot'),
+  VO(9.6, 12.4, '«Мен он бірінші тігісті байладым. Енді оны саған беремін.»', '«Я завязал одиннадцатый стежок. Теперь я отдаю его тебе.»', 'knot'),
+ ], sfx: [[2.4, 'swish'], [6.6, 'heart'], [9.4, 'chime']]},
  // ── 3. ТІГІС / СТЕЖОК ─────────────────────────────────────────────
  {id: 'transfer', scene: 3, dur: 8, trans: 'cut', lines: [], sfx: [[.6, 'tunnel', 7], ...Array.from({length: 10}, (_, i) => [2 + i * .45, 'swish'])]},
  {id: 'merge', scene: 3, dur: 7, trans: 'flash', lines: [], sfx: [[1.2, 'whoosh'], [4.6, 'flashBoom']]},
@@ -52,6 +63,7 @@ export const SCENE_TITLES = {1: {kk: 'Жара', ru: 'Рана'}, 2: {kk: 'Тү�
 // single held chord in D (the book's key from MAP06) rising to A.
 export function score(I) {
  const ev = [], at = (t, fn) => ev.push({t, fn}), S = START;
+ for (let b = 0; b < 16; b++) at(S.fight + b * .55, w => {I.taiko(w, b % 4 ? .12 : .26); if (b % 2) I.hat(w, .02);});   // the fight: drums
  at(S.fall, w => I.pad(w, ['D2', 'A2'], 7, {vol: .025, cut: 400, att: 2}));
  at(S.arrive + 1, w => I.kobyz(w, 'D3', 9, .03));
  for (const t0 of [S.arrive + 5.4, S.reveal + 4.6]) {at(t0, w => I.bell(w, 'E4', .05)); at(t0 + .55, w => I.bell(w, 'C4', .05)); at(t0 + 1.4, w => I.bell(w, 'G4', .045));}
