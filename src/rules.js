@@ -4,6 +4,20 @@ export function grade(value,accepted){return accepted.some(a=>Array.isArray(a)?A
 export const thresholds=[30,60,100,140,190,240,300,360,430,500];
 export const reward=attempt=>attempt===1?100:attempt===2?60:30;
 export function newProgress(){return {version:2,id:uuid(),status:'active',level:1,lives:3,score:0,stage:'study',answers:{},mistakes:[],activeSeconds:0,completed:[],character:0};}
+// Browser storage is untrusted input. Validate before spreading it into game state
+// or rendering scores/history as HTML; never use these local results for ranking.
+export function validProgress(p){
+ const integer=(n,min,max)=>Number.isInteger(n)&&n>=min&&n<=max;
+ if(!p||p.version!==2||typeof p.id!=='string'||p.id.length>80||!['active','failed','finished'].includes(p.status))return false;
+ if(!integer(p.level,1,11)||!integer(p.lives,0,3)||!integer(p.score,0,1100)||!integer(p.character,0,9))return false;
+ if(!['study','fragment','repair','exit'].includes(p.stage)||!Number.isFinite(p.activeSeconds)||p.activeSeconds<0)return false;
+ if((p.level===11)!==(p.status==='finished'))return false;
+ if(!Array.isArray(p.completed)||p.completed.length!==p.level-1||!p.completed.every((v,i)=>v===i+1))return false;
+ if(!Array.isArray(p.mistakes)||p.mistakes.length>10000||!p.mistakes.every(id=>typeof id==='string'&&id.length<=80))return false;
+ if(!p.answers||typeof p.answers!=='object'||Array.isArray(p.answers)||Object.keys(p.answers).length>10)return false;
+ return Object.entries(p.answers).every(([id,a])=>id.length<=80&&a&&typeof a.correct==='boolean'&&integer(a.attempts,1,1000000)&&integer(a.awarded,0,100)&&a.awarded===(a.correct?reward(a.attempts):0));
+}
+export function readHistory(raw){try{const list=JSON.parse(raw);return Array.isArray(list)?list.filter(p=>validProgress(p)&&typeof p.endedAt==='string'&&Number.isFinite(Date.parse(p.endedAt))).slice(-100):[];}catch{return [];}}
 export function answerProgress(p,id,correct,phase='main'){
  const n=structuredClone(p);
  if(phase==='main'||phase==='repair'){
