@@ -195,7 +195,7 @@ function getTabTitle(tab) {
     players: 'Ойыншылар мен оқушылар',
     teams: 'Командалық рейтинг және статистика',
     sessions: 'Ойын сессияларын басқару',
-    epochs: '8 Тарихи дәуір (Карталар мен тапсырмалар)',
+    epochs: `${ALL_EPOCHS.length} тарихи дәуір (карталар мен тапсырмалар)`,
     quizzes: 'Квиздер мен сұрақтарды басқару (CRUD)',
     analytics: 'Оқыту аналитикасы мен нәтижелер'
   };
@@ -462,7 +462,7 @@ function renderQuizzes() {
               <td style="max-width:260px;font-size:12px;color:var(--text-muted);line-height:1.4">${escapeHtml(q.explanation)}</td>
               <td><span class="role-badge ${q.active ? 'teacher' : 'player'}">${q.active ? 'Белсенді' : 'Өшірулі'}</span></td>
               <td>
-                <button class="btn btn-danger" style="font-size:11px;padding:4px 8px" data-delete-quiz="${escapeHtml(q.id)}">Өшіру</button>
+                <button class="btn ${q.active ? 'btn-danger' : ''}" style="font-size:11px;padding:4px 8px" data-delete-quiz="${escapeHtml(q.id)}">${q.active ? 'Өшіру' : 'Қосу'}</button>
               </td>
             </tr>
           `).join('')}
@@ -676,10 +676,11 @@ window.adminToggleEpoch = id => {
   }
 };
 
+// «Өшіру» switches a question off (it stays in the list, marked «Өшірулі»); «Қосу» switches it back on.
 window.adminDeleteQuiz = id => {
   const q = state.quizzes.find(x => x.id === id);
   if (q) {
-    q.active = false;
+    q.active = !q.active;
     renderApp();
   }
 };

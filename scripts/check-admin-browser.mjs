@@ -124,7 +124,7 @@ try {
 
   // 4. Navigate to Epochs
   await js('document.querySelector("button[data-tab=\'epochs\']").click()');
-  await wait('document.querySelectorAll(".epoch-admin-card").length === 8');
+  await wait('document.querySelectorAll(".epoch-admin-card").length === 10');
 
   // 5. Check Role Switching & Permission restriction
   await js('document.querySelector("#role-select").value = "player"');
@@ -132,7 +132,7 @@ try {
   await wait('document.querySelector(".admin-section").textContent.includes("Құқық шектелген")');
 
   assert.deepEqual(errors, [], 'No browser console or runtime errors in Admin Panel');
-  console.log('PASS: Admin Panel dashboard, navigation, players, quizzes, 8 epochs, and RBAC restrictions verified.');
+  console.log('PASS: Admin Panel dashboard, navigation, players, quizzes, 10 epochs, and RBAC restrictions verified.');
 } finally {
   ws?.close();
   child.kill();
