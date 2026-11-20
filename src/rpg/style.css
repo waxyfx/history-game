@@ -245,3 +245,32 @@ html, body { height: 100%; overflow: hidden; background: #050909; }
 .gun.cool .gun-bar span { background: #7ff5e4; } .gun.warm .gun-bar span { background: #ffb347; } .gun.hot i, .gun.hot .gun-bar span { color: #ff6a50; background: #ff6a50; }
 .acts .t-parry, .acts .t-reload { display: none; width: 44px; height: 44px; font-size: 15px; }
 body.has-parry .acts .t-parry, body.has-reload .acts .t-reload { display: block; }
+
+/* Phones and tablets: a map you can read, a hotbar you can hit, the heal button (Q). */
+@media (pointer: coarse) {
+  .hotbar { font-size: 12px; gap: 6px; padding: 5px 7px; bottom: 6px; z-index: 4; }   /* above the joystick area (.touch, z 3): a tap on a slot must not move the hero */
+  .slots, .belt { gap: 6px; }
+  .slots button, .belt button { width: 42px; height: 42px; }
+  .slots .icon, .belt .icon { transform: scale(1.05); }
+  .slots kbd, .belt kbd { font-size: 9px; } .belt b { font-size: 11px; }
+  .ammo { font-size: 13px; padding: 2px 8px 2px 2px; }
+  .ammo .icon { transform: scale(.9); margin: -4px -2px; }
+  .hb { height: 40px; min-width: 40px; }
+  .minimap { width: 150px; }
+  .dlg { font-size: 11.5px; }            /* readable on a phone (the canvas scale alone gave ~9px) */
+  .hud-tr { font-size: 10px; }
+  .panel-card { max-height: 96%; padding: .8em 1em; }   /* a trial fits on a phone without scrolling */
+  /* a long panel (the bag) scrolls, but its close button stays in reach at the bottom */
+  .panel-card [data-close] { position: sticky; bottom: 0; z-index: 1; box-shadow: 0 -.6em 1em #0f1a1c; }
+  .acts { bottom: 4.2em; }
+  .acts .t-heal { width: 48px; height: 48px; font-size: 20px; color: #8fd36b; border-color: #8fd36b88; }
+}
+.acts .t-heal { display: none; } @media (pointer: coarse) { .acts .t-heal { display: block; } }
+/* Netlify's "Powered by Netlify" badge sits over the bottom-right corner, right on the touch buttons: not on the game page
+   (Netlify offers "Hide this badge" itself). */
+#nl-badge-frame { display: none !important; }
+
+/* iPhone: a long press on a button (holding E on the rope, holding the trigger) must not start text selection or the
+   callout menu — iOS would cancel the touch and the hold would never complete. */
+.touch, .touch *, .hotbar, .hotbar *, .viewport canvas { -webkit-touch-callout: none; -webkit-user-select: none; user-select: none; -webkit-tap-highlight-color: transparent; }
+.acts button, .stick, .slots button, .belt button, .hb { touch-action: none; }

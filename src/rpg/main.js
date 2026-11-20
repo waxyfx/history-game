@@ -102,7 +102,7 @@ document.querySelector('#rpg-app').innerHTML = `
       <p id="loading" class="loading" role="status"></p>
       <div class="touch" id="touch">
         <div class="stick" id="stick"><i class="stick-base"></i><i class="stick-knob"></i></div>
-        <div class="acts"><button data-key="32" aria-label="attack">⚔</button><button data-key="16" aria-label="action">E</button><button data-key="256" aria-label="parry" class="t-parry">F</button><button data-key="128" aria-label="reload" class="t-reload">R</button></div>
+        <div class="acts"><button data-key="32" aria-label="attack">⚔</button><button data-key="16" aria-label="action">E</button><button data-key="256" aria-label="parry" class="t-parry">F</button><button data-key="128" aria-label="reload" class="t-reload">R</button><button class="t-heal" id="t-heal" aria-label="heal (Q)">✚</button></div>
       </div>
     </div>
   </section>
@@ -996,6 +996,7 @@ for (const btn of document.querySelectorAll('[data-key]')) {
   btn.addEventListener('pointerdown', ev => { ev.preventDefault(); unlockAudio(); btn.setPointerCapture(ev.pointerId); if (!$('dlg').hidden) { advanceDialog(); return; } touch.set(ev.pointerId, +btn.dataset.key); input(); });
   for (const n of ['pointerup', 'pointercancel', 'lostpointercapture']) btn.addEventListener(n, ev => { touch.delete(ev.pointerId); input(); });
 }
+$('t-heal').addEventListener('pointerdown', ev => { ev.preventDefault(); ev.stopPropagation(); unlockAudio(); quickHeal(); });   // Q on touch screens
 $('dlg').addEventListener('click', () => advanceDialog());
 // ---------------------------------------------------------------- mouse controls
 // Left button = attack (hold to keep striking), right button = interact / talk (hold for hold-actions),
@@ -1084,8 +1085,8 @@ for (const n of ['pointerup', 'pointercancel', 'lostpointercapture']) stickEl.ad
 let autoFs = true;
 function enterFullscreen() {
   const el = document.documentElement;
-  const lock = () => screen.orientation?.lock?.('landscape').catch(() => {});   // phones: turn to landscape when allowed
-  if (!document.fullscreenElement && el.requestFullscreen) el.requestFullscreen({navigationUI: 'hide'}).then(lock, () => {});
+  // Only the game turns sideways (resize(): CSS rotation) — the phone itself is never asked to rotate.
+  if (!document.fullscreenElement && el.requestFullscreen) el.requestFullscreen({navigationUI: 'hide'}).catch(() => {});
   else if (!document.fullscreenElement && el.webkitRequestFullscreen) el.webkitRequestFullscreen();
 }
 function firstGesture() { if (autoFs) { autoFs = false; enterFullscreen(); } }
