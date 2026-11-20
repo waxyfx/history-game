@@ -84,7 +84,7 @@ export function applyWorld(G) {
   ia('firepit', true); ia('toolpile', b.bow);
   for (const n of [1, 2, 3, 4]) ia('track' + n, b.elderTask);
   ia('thicket', !b.thicket); ia('cachebush', !b.cachebush); ia('cache', b.cachebush && !b.cache);
-  ia('rope', b.elderTask && !b.freed, 200);
+  ia('rope', b.elderTask && !b.freed, 120);   // ~2 s of holding E (3.3 s was too long, on a phone above all)
   ia('boulder', b.returned && !b.caveOpen); ia('lever', b.returned && !b.caveOpen && party === 1, 150);
   ia('cavemouth', b.caveOpen); ia('caveexit', true);
   for (const n of [1, 2, 3, 4]) ia('petro' + n, true);

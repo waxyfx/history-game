@@ -785,6 +785,7 @@ function updateHud(force) {
   }).join('');
   $('slots').querySelectorAll('[data-weapon]').forEach(b => b.onclick = () => equip(+b.dataset.weapon));
   renderBelt();
+  requestAnimationFrame(fitHotbar);   // its width changed
   $('zone-name').textContent = ZONE_NAMES[lang][zone] || '';
   $('obj-title').textContent = q[0]; $('obj-detail').textContent = q[1];
   $('s-score').textContent = timerText() + (official?.active ? (lang === 'ru' ? ' · офиц.' : ' · ресми') : '');
@@ -1053,6 +1054,18 @@ function resize() {
   const c = Math.max(w / W, h / H);
   Object.assign(canvas.style, {width: W * c + 'px', height: H * c + 'px', left: (w - W * c) / 2 + 'px', top: (h - H * c) / 2 + 'px'});
   placeStick();
+  fitHotbar();
+}
+// Touch screens: the hotbar goes into the gap between the joystick ring (bottom-left) and the action buttons
+// (bottom-right), scaled down just enough to fit — on an iPhone held upright Safari's bars leave the game ~690 px wide.
+function fitHotbar() {
+  const hb = $('hotbar'); if (!hb) return;
+  if (!matchMedia('(pointer: coarse)').matches) { hb.style.left = ''; hb.style.transform = ''; return; }
+  const acts = document.querySelector('.acts'), vpW = $('viewport').offsetWidth;
+  const left = 64 + 48 + 10, right = (acts?.offsetLeft || vpW - 200) - 10, natural = hb.scrollWidth || hb.offsetWidth;
+  const k = Math.max(.55, Math.min(1, (right - left) / natural));
+  hb.style.transformOrigin = '0 100%'; hb.style.transform = `scale(${k.toFixed(3)})`;
+  hb.style.left = Math.max(left, left + ((right - left) - natural * k) / 2) + 'px';
 }
 // Touch: a floating analog stick on the left half (8 directions; pushed to the rim = run).
 const stick = {id: null, ox: 0, oy: 0};

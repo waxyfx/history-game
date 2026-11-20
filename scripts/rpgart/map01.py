@@ -308,13 +308,13 @@ def emit():
     interact('thicket', 38 * TS, 12.6 * TS, 24, tag('thicket'))
     interact('cachebush', 10.5 * TS, 11.8 * TS, 22, tag('cachebush'))
     interact('cache', 10 * TS, 7.5 * TS, 20, tag('cache'))
-    interact('rope', 89 * TS, 21 * TS, 22, tag('post'))
+    interact('rope', 89 * TS, 21.6 * TS, 34, tag('post'))   # on Zhebei himself, reachable from every side
     interact('boulder', 102 * TS, 8.4 * TS, 30, tag('boulder'))
     interact('lever', 94.5 * TS, 9.5 * TS, 20, tag('lever'))
     interact('cavemouth', 102 * TS, 6.6 * TS, 18)
     interact('caveexit', 25 * TS, 106 * TS, 22)
     for i, (x, y) in enumerate(((15.5, 80.2), (21, 79.7), (29, 79.7), (34.5, 80.2))):
-        interact(f'petro{i + 1}', x * TS, y * TS + 6, 22)
+        interact(f'petro{i + 1}', x * TS, y * TS + 6, 28)   # cave-wall pictures: reachable from the floor in front, not only from one spot
     interact('crack', 13.5 * TS, 85.2 * TS, 22, tag('crack'))
     interact('altar', 7 * TS, 81.2 * TS, 22)
     interact('flute', 9 * TS, 86.6 * TS, 18, tag('flute'))

@@ -415,20 +415,22 @@ void updateFocus(){
     game.focusKind=-1;game.focusId=-1;
     if(p.hp<=0||p.down||p.dead||game.cinematic)return;
     float best=1e9;auto fd=directions[p.facing];
+    // What E acts on is chosen by distance and, above all, by where the hero faces: an object and a person standing on the
+    // same spot (a rope and the bound hunter, a rack and its sentry) are each reached by turning towards it.
+    auto facingK=[&](float dx,float dy,float d){float dot=(dx*fd.x+dy*fd.y)/(sqrtf(d)+.01f);return dot>.55f?.45f:dot>-.2f?1.f:2.4f;};
     for(int i=0;i<InteractCount;++i){
         if(!world.iaEnabled[i])continue;const auto& ia=interacts[i];
         if(ia.tag&&world.hiddenTag[ia.tag])continue;
         float dx=ia.x-p.x,dy=ia.y-p.y,d=dx*dx+dy*dy;
         if(d>ia.r*ia.r)continue;
-        float dot=(dx*fd.x+dy*fd.y)/(sqrtf(d)+.01f);
-        float score=d*(dot<-.2f?2.2f:1);
+        float score=d*facingK(dx,dy,d);
         if(score<best){best=score;game.focusKind=0;game.focusId=i;}
     }
     for(int i=0;i<NpcCount;++i){const auto& n=npcs[i];
         if(!n.active||n.hidden||!n.talk)continue;
         float dx=n.x-p.x,dy=n.y-p.y,d=dx*dx+dy*dy;
-        // People win over a nearby marker (a hearth, a pole) unless the marker is much closer: E talks to the person.
-        float dot=(dx*fd.x+dy*fd.y)/(sqrtf(d)+.01f),score=d*.4f*(dot<-.2f?2.2f:1);
+        // A person is favoured a little over a marker at the same distance (E talks to the person you walk up to).
+        float score=d*.75f*facingK(dx,dy,d);
         if(d<26*26&&score<best){best=score;game.focusKind=1;game.focusId=i;}
     }
     for(int s=1;s<MaxPlayers;++s){const auto& o=players[s];
