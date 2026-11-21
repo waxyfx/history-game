@@ -151,9 +151,17 @@ function drawPortrait(cv, who) {
 const heroPos = () => [E.tj_state(0) / 1000, E.tj_state(1) / 1000];
 
 // ---------------------------------------------------------------- dialogue
-let dlgResolve = null, typing = null;
-async function say(lines, fact) {
-  if (!lines || !lines.length) return;
+let dlgResolve = null, typing = null, dlgChain = Promise.resolve(), dlgQueued = 0;
+// One conversation at a time: a line started while another waits for its tap queues behind it (a zone line and a
+// cutscene's lines used to share dlgResolve, so the first conversation never ended and dialogBusy stayed on for good).
+function say(lines, fact) {
+  if (!lines || !lines.length) return Promise.resolve();
+  const go = () => sayNow(lines, fact).finally(() => dlgQueued--);
+  const run = dlgQueued++ ? dlgChain.then(go) : go();   // nothing on screen: starts right now, as before
+  dlgChain = run.catch(e => console.error(e));
+  return run;
+}
+async function sayNow(lines, fact) {
   const owned = !cine; // Free conversations freeze the action locally.
   if (owned) { dialogBusy = true; freeze(true); }
   for (let i = 0; i < lines.length; i++) {
@@ -204,6 +212,7 @@ async function playCutscene(id, script, broadcast = true) {
   G.local.seen.push(id);
   if (broadcast && party.net) party.net.send('cut', {id});
   const d = cine = {id, skipping: false, afters: []};
+  if (dlgQueued) await dlgChain;   // a conversation already on screen (a zone line at the spawn point) ends first
   E.tj_cinematic(1); input();
   $('bars').classList.add('on'); $('skip').hidden = false; $('skip').textContent = t('skip');
   const isAibar = party.slot === 0;
@@ -1185,7 +1194,7 @@ async function boot() {
     // Debug/QA handle (used by scripts/check-rpg-browser.mjs).
     const step = n => { for (let i = 0; i < n; i++) { E.tj_tick(); handleEvents(); } E.tj_render(); ctx.putImageData(frame, 0, 0); quest?.frame?.(ctx); updateHud(); updatePrompt(); drawMinimap(performance.now()); };
     if (import.meta.env.DEV) window.__tj = {recordedBanks, useItem, quickHeal, renderBuffs, LV, E, G, party, quest, retryEpoch, results, get official() { return official; }, save, load, newGame, skipCutscene, closePanel, advanceDialog, travel, step, inventory, coopPanel, startParty, leaveParty,
-      get panelOpen() { return panelOpen; }, get cine() { return cine?.id || null; }, get dialog() { return !$('dlg').hidden; }};
+      get panelOpen() { return panelOpen; }, get cine() { return cine?.id || null; }, get dialog() { return !$('dlg').hidden; }, get dialogBusy() { return dialogBusy; }};
   } catch (err) {
     console.error(err);
     $('loading').textContent = t('loadFail');

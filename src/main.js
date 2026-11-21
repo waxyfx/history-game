@@ -28,7 +28,7 @@ const $=s=>document.querySelector(s);
 const btn=(text,action,cls='')=>`<button class="${cls}" data-act="${action}">${text}</button>`;
 let progress=newProgress(),engine,enginePromise,practiceAnswers,user,teacher=false,room=null,mode='practice',running=false,paused=true,modalOpen=false,lastFrame=0,acc=0,returnStage='study',busy=false,roomTimer;
 const held=new Set();let audio;
-const invite=new URLSearchParams(location.search).get('session');if(invite&&/^[A-Z0-9]{10}$/i.test(invite))localStorage.setItem('tarikh.invite',invite.toUpperCase());
+const invite=new URLSearchParams(location.search).get('session');if(invite&&/^[A-Z0-9]{10}$/i.test(invite))try{localStorage.setItem('tarikh.invite',invite.toUpperCase());}catch{}
 function loadProgress(){try{const p=JSON.parse(localStorage.getItem('tarikh.practice'));if(validProgress(p))return {...newProgress(),...p};}catch{}return newProgress();}
 function archivePractice(){if(mode!=='practice'||(!Object.keys(progress.answers).length&&progress.status==='active'))return;const history=readHistory(localStorage.getItem('tarikh.history'));const entry={...progress,endedAt:new Date().toISOString()};const index=history.findIndex(p=>p.id===entry.id);if(index<0)history.push(entry);else history[index]=entry;localStorage.setItem('tarikh.history',JSON.stringify(history));}
 function adoptRun(run){const local={character:progress.character,activeSeconds:progress.activeSeconds,lives:progress.lives};progress={...newProgress(),...run,...local};}

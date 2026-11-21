@@ -1,4 +1,6 @@
 import fs from 'node:fs';
+import {tmpdir} from 'node:os';
+import {join} from 'node:path';
 import create from '../public/engine/doom.js';
 import assert from 'node:assert/strict';
 const get=n=>fs.readFileSync(new URL('../public/engine/'+n,import.meta.url));
@@ -8,7 +10,7 @@ const canvas={getContext:()=>({putImageData:f=>pixels=f.data})};
 const m=await create({canvas,wasmBinary:get('doom.wasm'),print:()=>{},preRun:[m=>{for(const n of ['freedoom2.wad','tarikh.wad'])m.FS.writeFile('/'+n,get(n))}]});
 const tick=n=>{for(let i=0;i<n;i++)m._th_tick()};
 m._th_level(1);tick(30);m._th_key(119,1);tick(25);
-fs.writeFileSync('../tools/build-temp/camp.rgba',pixels);
+fs.writeFileSync(join(tmpdir(),'tarikh-camp.rgba'),pixels);   // the first frame, for a look when it fails
 tick(230);console.log('Closed gate',m._th_x(),m._th_y());assert(m._th_x()>900&&m._th_x()<960);
 m._th_gate(1);tick(100);console.log('Open gate',m._th_x(),m._th_y());assert(m._th_x()>1300);
 m._th_key(119,0);m._th_weapon();tick(30);m._th_key(163,1);tick(12);m._th_key(163,0);

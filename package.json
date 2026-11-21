@@ -12,7 +12,8 @@
     "engine:rpg": "node scripts/build-rpg.mjs",
     "test:rpg": "node --test tests/rpg.test.mjs",
     "check:rpg": "node scripts/check-rpg-browser.mjs",
-    "check:admin": "node scripts/check-admin-browser.mjs"
+    "check:admin": "node scripts/check-admin-browser.mjs",
+    "check:dialog": "node scripts/check-dialog-browser.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "2.57.4",
