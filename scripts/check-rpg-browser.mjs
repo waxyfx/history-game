@@ -8,6 +8,7 @@ import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import assert from 'node:assert/strict';
 import {setTimeout as delay} from 'node:timers/promises';
+import {QA_COOKIES} from './qa-profile.mjs';
 
 const base = process.argv[2] || 'http://127.0.0.1:5173';
 const candidates = process.env.BROWSER_EXE ? [process.env.BROWSER_EXE] : ['C:/Program Files/Google/Chrome/Application/chrome.exe', 'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe', '/usr/bin/google-chrome', '/usr/bin/chromium'];
@@ -35,7 +36,7 @@ async function page(url, {w = 1600, h = 900} = {}) {
   const key = async (code, k, type) => call('Input.dispatchKeyEvent', {type, code, key: k, windowsVirtualKeyCode: {KeyE: 69, KeyD: 68, Space: 32, Escape: 27, KeyI: 73}[code] || 0});
   const press = async (code, k) => { await key(code, k, 'keyDown'); await delay(40); await key(code, k, 'keyUp'); };
   const shot = async name => { const r = await call('Page.captureScreenshot', {format: 'png'}); await writeFile('test-results/' + name + '.png', Buffer.from(r.data, 'base64')); };
-  await call('Runtime.enable'); await call('Page.enable');
+  await call('Runtime.enable'); await call('Page.enable'); await call('Network.setCookies', QA_COOKIES);   // play as the local profile «QA» (scripts/qa-profile.mjs)
   await call('Emulation.setDeviceMetricsOverride', {width: w, height: h, deviceScaleFactor: 1, mobile: false});
   await call('Page.navigate', {url});
   await wait('window.__tj && __tj.E');
@@ -77,9 +78,16 @@ try {
   for (let i = 0; i < 200 && !(await a.js('__tj.panelOpen && !!document.querySelector("#panel-card [data-opt]")')); i++) { await a.js('__tj.advanceDialog()'); await delay(60); }
   await a.shot('map01-02-quiz');
   assert(!(await a.js('document.querySelector("#qfb")')), 'no right/wrong verdict element during a trial');
+  assert.equal(await a.js('document.querySelectorAll("#panel-card .trial-verdict, #panel-card .right, #panel-card .wrong").length'), 0, 'no verdict before the choice');
   await a.js(`document.querySelector('#panel-card [data-opt="1"]').click()`);
+  // Audit №14: right after the choice the same panel explains it — verdict, the right option, explanation, source.
+  await a.wait('!!document.querySelector("#panel-card .trial-verdict")');
+  const fb = await a.js(`({ok: document.querySelector('#panel-card .trial-verdict').classList.contains('ok'), right: document.querySelector('#panel-card [data-opt="1"]').classList.contains('right'),
+    expl: !!document.querySelector('#panel-card .expl'), source: !!document.querySelector('#panel-card .source'), locked: [...document.querySelectorAll('#panel-card [data-opt]')].every(b => b.disabled)})`);
+  assert.deepEqual(fb, {ok: true, right: true, expl: true, source: true, locked: true}, 'feedback after the choice');
+  await a.shot('map01-02b-feedback');
+  await a.js(`document.querySelector('#panel-card [data-verdict]').click()`);
   await a.wait('!__tj.panelOpen');
-  assert.equal(await a.js('document.querySelectorAll("#panel-card .right, #panel-card .wrong").length'), 0);
   assert.equal(await a.js('__tj.G.flags.quiz.stone_main.ok'), true);
   await settle(a);
   assert.match(await a.js('document.querySelector("#s-score").textContent'), /⏱ \d+:\d\d/, 'live timer, no live score');

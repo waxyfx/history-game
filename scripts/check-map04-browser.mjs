@@ -5,6 +5,7 @@ import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import assert from 'node:assert/strict';
 import {setTimeout as delay} from 'node:timers/promises';
+import {QA_COOKIES} from './qa-profile.mjs';
 
 const base = process.argv[2] || 'http://127.0.0.1:5173';
 const CHOICE = {tally: +(process.env.TALLY ?? 0), ally: +(process.env.ALLY ?? 0)};
@@ -34,7 +35,7 @@ async function open(url) {
   const key = (code, k, type) => call('Input.dispatchKeyEvent', {type, code, key: k, windowsVirtualKeyCode: {KeyE: 69}[code] || 0});
   const press = async (code, k) => { await key(code, k, 'keyDown'); await delay(40); await key(code, k, 'keyUp'); };
   const shot = async name => { const r = await call('Page.captureScreenshot', {format: 'png'}); await writeFile('test-results/' + name + '.png', Buffer.from(r.data, 'base64')); };
-  await call('Runtime.enable'); await call('Page.enable');
+  await call('Runtime.enable'); await call('Page.enable'); await call('Network.setCookies', QA_COOKIES);   // play as the local profile «QA» (scripts/qa-profile.mjs)
   await call('Emulation.setDeviceMetricsOverride', {width: 1600, height: 900, deviceScaleFactor: 1, mobile: false});
   await call('Page.navigate', {url});
   return {call, js, wait, press, key, shot, errors, nav: u => call('Page.navigate', {url: u})};

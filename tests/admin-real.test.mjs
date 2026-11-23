@@ -85,6 +85,23 @@ test('Admin panel data: only teachers and admins, built from real profiles and r
   assert.deepEqual([byId.stone_main.answered_count, byId.stone_main.right_count], [2, 1]);
   assert.deepEqual([byId.stone_cave.answered_count, byId.stone_cave.right_count], [1, 1]);
   assert(stats.every(s => !('correct' in s) && !('choice' in s)), 'no answer key or chosen option is exposed');
+  // Which option the class picked (migration 019): stone_main — Aru chose B (1), Beks chose A (0).
+  assert.deepEqual(byId.stone_main.choices, {0: 1, 1: 1});
+  assert.deepEqual(byId.stone_cave.choices, {1: 1});
+  assert.deepEqual(byId.stone_workshop.choices, {}, 'an unanswered trial has no choices');
+
+  // One student's answers in one finished run (migration 019): picked option, right or not, points; no keys.
+  const results = await rpc('admin_get_level_results', [1, 50, 0]);
+  const beksResult = results.find(r => r.user_id === beks);
+  const ans = Object.fromEntries((await rpc('admin_result_answers', [beksResult.id])).map(a => [a.quiz_id, a]));
+  assert.deepEqual([ans.stone_main.answered, ans.stone_main.choice, ans.stone_main.right, ans.stone_main.awarded], [true, 0, false, 0]);
+  assert.deepEqual([ans.stone_secret.answered, ans.stone_secret.right], [true, true]);
+  assert.deepEqual([ans.stone_cave.answered, ans.stone_cave.choice], [false, null], 'a trial Beks never reached');
+  assert(Object.values(ans).every(a => !('correct' in a)), 'no answer key');
+  await assert.rejects(rpc('admin_result_answers', [randomUUID()]), /Нәтиже табылмады/);
+  await as(beks);
+  await assert.rejects(rpc('admin_result_answers', [beksResult.id]), /Мұғалім немесе Әкімші/, 'students cannot read answers');
+  await as(admin);
 
   // The admin can change a role through the existing server function; the overview follows.
   await rpc('admin_set_user_role', [beks, 'teacher']);

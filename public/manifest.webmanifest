@@ -1,10 +1,17 @@
 {
   "name": "Жоғалған шежіре · Tarikh Joly",
   "short_name": "Tarikh Joly",
+  "description": "Қазақстан тарихы бойынша 10 дәуірлік оқу ойыны",
+  "lang": "kk",
   "start_url": "/rpg.html",
+  "scope": "/",
   "display": "fullscreen",
   "orientation": "landscape",
   "background_color": "#050909",
   "theme_color": "#142729",
-  "icons": []
+  "icons": [
+    {"src": "/favicon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any"},
+    {"src": "/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable"},
+    {"src": "/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable"}
+  ]
 }

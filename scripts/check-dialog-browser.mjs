@@ -4,9 +4,27 @@
 // cutscene's lines took over the shared resolver, the first conversation never ended and dialogBusy stayed on for good.
 // Usage: node scripts/check-dialog-browser.mjs [levels, e.g. 1,9]   (needs the dev server on :5173)
 import {launch, delay, assert} from './check-lib.mjs';
+import {QA_COOKIES} from './qa-profile.mjs';
 const levels = (process.argv[2] || '1,2,3,4,5,6,7,8,9,10').split(',').map(Number);
 const B = await launch('dialog', '../src/rpg/story.js');
 const bad = [];
+// Audit №14: /rpg.html?level=N used to start without an account. Now the game asks first (local profile without a
+// server), does not start until a name is given, and starts right after it.
+{
+  const a = await B.open('about:blank');
+  await a.call('Network.clearBrowserCookies');
+  await a.call('Page.navigate', {url: 'http://localhost:5173/rpg.html?level=3&new=1'});
+  await a.wait(`!!document.querySelector('#panel-card #acc-name')`, 30000);
+  await delay(800);
+  assert(!(await a.js('!!(window.__tj && __tj.E)')), 'no game before an account');
+  await a.js(`document.querySelector('#acc-local').click(), 1`);
+  assert.match(await a.js(`document.querySelector('#acc-error').textContent`), /2/, 'an empty name is refused');
+  await a.js(`(() => { const i = document.querySelector('#acc-name'); i.value = 'QA'; document.querySelector('#acc-local').click(); return 1; })()`);
+  await a.wait('window.__tj && __tj.E && __tj.LV.id === 3', 40000);
+  assert(/tj_player=/.test(await a.js('document.cookie')), 'the profile is kept in a cookie');
+  console.log('✓ account first: /rpg.html?level=3 waits for the account window, then starts');
+  await a.call('Network.setCookies', QA_COOKIES);
+}
 for (const n of levels) {
   const a = await B.open('about:blank');
   // an upright phone (the game turned sideways): the timing where the zone line and the cutscene overlapped

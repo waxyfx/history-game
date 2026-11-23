@@ -257,13 +257,15 @@ body.has-parry .acts .t-parry, body.has-reload .acts .t-reload { display: block;
   .ammo .icon { transform: scale(.9); margin: -4px -2px; }
   .hb { height: 36px; min-width: 36px; }
   #fs-btn, .hb kbd { display: none; }   /* no fullscreen on iPhone; no keyboard hints on a touch screen */
-  /* Two rows, so it fits between the joystick and the buttons: weapons, ammo, bag, sound, menu — then the belt. */
-  .hotbar { flex-wrap: wrap; justify-content: center; max-width: 330px; row-gap: 4px; }
+  /* One compact row between the joystick and the buttons (audit №14: two rows covered the middle of the view).
+     fitHotbar() scales it to fit; only when that would shrink the slots too much it wraps into two rows (.two-rows). */
+  .hotbar { flex-wrap: nowrap; justify-content: center; }
   .hotbar .sep { display: none; }
-  .hotbar .belt { order: 10; flex-basis: 100%; justify-content: center; }
   .hotbar .belt:empty { display: none; }
+  .hotbar.two-rows { flex-wrap: wrap; max-width: 330px; row-gap: 4px; }
+  .hotbar.two-rows .belt { order: 10; flex-basis: 100%; justify-content: center; }
   .minimap { width: 150px; }
-  .dlg { font-size: 11.5px; bottom: 100px; }   /* readable on a phone; above the two-row hotbar */
+  .dlg { font-size: 11.5px; bottom: 64px; }   /* readable on a phone; above the hotbar */
   .hud-tr { font-size: 10px; }
   .panel-card { max-height: 96%; padding: .8em 1em; }   /* a trial fits on a phone without scrolling */
   /* a long panel (the bag) scrolls, but its close button stays in reach at the bottom */
@@ -280,3 +282,25 @@ body.has-parry .acts .t-parry, body.has-reload .acts .t-reload { display: block;
    callout menu — iOS would cancel the touch and the hold would never complete. */
 .touch, .touch *, .hotbar, .hotbar *, .viewport canvas { -webkit-touch-callout: none; -webkit-user-select: none; user-select: none; -webkit-tap-highlight-color: transparent; }
 .acts button, .stick, .slots button, .belt button, .hb { touch-action: none; }
+
+/* Screen-reader text; the game area itself never pinch-zooms or double-tap-zooms (the page may: user-scalable is allowed), panels still scroll. */
+.sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+.rpg { touch-action: none; }
+.panel-card { touch-action: pan-y; }
+.panel-card:focus { outline: none; }
+
+/* Feedback right after a trial: verdict, the right option, why, explanation and source (audit №14). */
+.trial-verdict { margin: .7em 0 .45em; padding: .6em .8em; border-radius: .5em; border: 1px solid; }
+.trial-verdict.ok { border-color: #4ea56a; background: #12301fcc; color: #c4ecd1; }
+.trial-verdict.no { border-color: #c0634c; background: #34160fcc; color: #f6cbbd; }
+.trial-verdict p { margin: .35em 0 0; }
+.panel-card .expl { line-height: 1.45; }
+.panel-card .source { font-size: .85em; color: #c3cbbb; }
+.opt-letter { display: inline-block; min-width: 1.3em; color: var(--gold2); }
+
+/* The account window before the game starts (src/account.js, shown in the panel). */
+.acc-panel .field { display: grid; gap: .25em; margin: .55em 0; font-size: .9em; }
+.acc-panel .field input { width: 100%; text-transform: none; letter-spacing: normal; padding: .55em .7em; font: inherit; color: inherit; }
+.acc-panel .actions, .acc-panel .tabs { display: flex; flex-wrap: wrap; gap: .5em; }
+.acc-panel .muted, .acc-panel #acc-error { color: #c9b9a0; font-size: .85em; min-height: 1em; }
+.acc-panel #acc-error:not(:empty) { color: #f6a08d; }

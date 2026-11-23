@@ -9,7 +9,7 @@ import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import assert from 'node:assert/strict';
 import {setTimeout as delay} from 'node:timers/promises';
-import {TEMP_UNLOCK_ALL} from '../src/rpg/levels.js';
+import {QA_COOKIES} from './qa-profile.mjs';
 
 const base = process.argv[2] || 'http://127.0.0.1:5173';
 const candidates = process.env.BROWSER_EXE ? [process.env.BROWSER_EXE] : ['C:/Program Files/Google/Chrome/Application/chrome.exe', 'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe', '/usr/bin/google-chrome', '/usr/bin/chromium'];
@@ -39,7 +39,7 @@ async function open(url, {w = 1600, h = 900} = {}) {
   const key = (code, k, type) => call('Input.dispatchKeyEvent', {type, code, key: k, windowsVirtualKeyCode: {KeyE: 69}[code] || 0});
   const press = async (code, k) => { await key(code, k, 'keyDown'); await delay(40); await key(code, k, 'keyUp'); };
   const shot = async name => { const r = await call('Page.captureScreenshot', {format: 'png'}); await writeFile('test-results/' + name + '.png', Buffer.from(r.data, 'base64')); };
-  await call('Runtime.enable'); await call('Page.enable');
+  await call('Runtime.enable'); await call('Page.enable'); await call('Network.setCookies', QA_COOKIES);   // play as the local profile «QA» (scripts/qa-profile.mjs)
   await call('Emulation.setDeviceMetricsOverride', {width: w, height: h, deviceScaleFactor: 1, mobile: false});
   await call('Page.navigate', {url});
   return {call, js, wait, press, key, shot, errors, nav: u => call('Page.navigate', {url: u})};
@@ -85,8 +85,9 @@ try {
   assert(port, 'Browser launch failed');
   // 0. Lock: MAP02 is closed until MAP01 is passed (no local pass, signed out).
   const a = await open(base + '/rpg.html?level=2');
-  if (!TEMP_UNLOCK_ALL) {   // the lock is temporarily lifted for QA (src/rpg/levels.js)
-    await a.wait(`document.querySelector('#panel-card')?.textContent.includes('MAP 01')`);
+  // The dev server opens every epoch for QA (__TJ_QA_UNLOCK__, src/rpg/levels.js); a production build keeps the lock.
+  await a.wait(`(window.__tj && __tj.E) || document.querySelector('#panel-card')?.textContent.includes('MAP 01')`);
+  if (!(await a.js('!!(window.__tj && __tj.E)'))) {
     assert(!(await a.js('!!window.__tj')), 'locked level does not start the game');
     await a.shot('map02-00-locked');
   } else await a.wait('window.__tj && __tj.E');

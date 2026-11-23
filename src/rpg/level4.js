@@ -35,7 +35,7 @@ export default {
     G.E.tj_groups(0); G.E.tj_teleport(32 * 16, 96 * 16); return G.film(playFilm, 'filmdemo'); },
   back: {label: {kk: 'Талас даласына оралу', ru: 'Талас даласына оралу'}, x: 40, y: 65},
   passLabel: {kk: 'Түркі дәуіріне өту →', ru: 'В тюркскую эпоху →'}, next: 5,
-  UI: {chapter: {kk: 'MAP 04 · ҒҰНДАР ДӘУІРІ'}, complete: {kk: 'MAP 04 АЯҚТАЛДЫ'}, completeSub: {kk: 'Шежіренің 4-парағы қалпына келді'}, stay: {kk: 'Ғұндар дәуірінде қалу'}, nextOpened: {kk: 'MAP05 ашылды: Түркі қағанаты', ru: 'MAP05 открыта: Тюркский каганат'}},
+  UI: {chapter: {kk: 'MAP 04 · ҒҰНДАР ДӘУІРІ', ru: 'MAP 04 · ЭПОХА ГУННОВ'}, complete: {kk: 'MAP 04 АЯҚТАЛДЫ', ru: 'MAP 04 ЗАВЕРШЕНА'}, completeSub: {kk: 'Шежіренің 4-парағы қалпына келді', ru: 'Четвёртая страница Шежире восстановлена'}, stay: {kk: 'Ғұндар дәуірінде қалу', ru: 'Остаться в эпохе гуннов'}, nextOpened: {kk: 'MAP05 ашылды: Түркі қағанаты', ru: 'MAP05 открыта: Тюркский каганат'}},
   music: (z, f) => z === 10 ? 'camp' : z >= 8 ? 'cave' : z === 1 || z === 2 || z === 5 ? 'village' : z === 7 ? 'mystery' : 'steppe',
   ambience: (z, x, y, tile) => {
     let river = 0;

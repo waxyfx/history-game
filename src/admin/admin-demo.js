@@ -76,7 +76,7 @@ function renderApp() {
         <button class="${state.activeTab === 'players' ? 'active' : ''}" data-tab="players">👥 Ойыншылар</button>
         <button class="${state.activeTab === 'teams' ? 'active' : ''}" data-tab="teams">⚔ Топтар мен рейтинг</button>
         <button class="${state.activeTab === 'sessions' ? 'active' : ''}" data-tab="sessions">🎮 Ойын сессиялары</button>
-        <button class="${state.activeTab === 'epochs' ? 'active' : ''}" data-tab="epochs">🗺 8 Дәуір (Деңгейлер)</button>
+        <button class="${state.activeTab === 'epochs' ? 'active' : ''}" data-tab="epochs">🗺 10 Дәуір (Деңгейлер)</button>
         <button class="${state.activeTab === 'quizzes' ? 'active' : ''}" data-tab="quizzes">📝 Квиздер мен сұрақтар</button>
         <button class="${state.activeTab === 'analytics' ? 'active' : ''}" data-tab="analytics">📈 Аналитика</button>
       </nav>
@@ -98,7 +98,7 @@ function renderApp() {
         <h1>${getTabTitle(state.activeTab)}</h1>
         <div class="topbar-right">
           <a href="/rpg.html">🎮 2D RPG Ойнау</a>
-          <a href="/">Doom Beta 0.1</a>
+          <a href="/">🎮 Ойынға</a>
         </div>
       </header>
 
@@ -242,8 +242,8 @@ function renderDashboard() {
         <div class="number">${activeSessions}</div>
       </div>
       <div class="kpi-card">
-        <h3>Орташа нәтиже</h3>
-        <div class="number">${avgScore} <small style="font-size:16px;color:#95a593">/ 300</small></div>
+        <h3>Орташа нәтиже · 3 дәуір</h3>
+        <div class="number">${avgScore} <small style="font-size:16px;color:#95a593">/ 300 (әр дәуір 100)</small></div>
       </div>
       <div class="kpi-card">
         <h3>Аяқталған дәуірлер</h3>
@@ -402,7 +402,7 @@ function renderSessions() {
 function renderEpochs() {
   return `
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
-      <p style="font-size:13px;color:var(--text-muted)">Tarikh Joly сегіз дәуірден тұрады. Бас әкімші дәуірлерді жариялауды немесе жасыруды басқара алады.</p>
+      <p style="font-size:13px;color:var(--text-muted)">Tarikh Joly он дәуірден тұрады. Бас әкімші дәуірлерді жариялауды немесе жасыруды басқара алады.</p>
     </div>
     <div class="epoch-list-grid">
       ${state.epochs.map(e => `
@@ -507,20 +507,20 @@ function renderAnalytics() {
         <tbody>
           <tr>
             <td>MAP 01: Тас дәуірі</td>
-            <td>5 сұрақ</td>
-            <td>280 / 300</td>
+            <td>5 сынақ + 5 құпия</td>
+            <td>93 / 100</td>
             <td><strong style="color:var(--accent-green)">92%</strong></td>
           </tr>
           <tr>
             <td>MAP 02: Қола дәуірі</td>
-            <td>4 сұрақ</td>
-            <td>250 / 300</td>
+            <td>7 сынақ</td>
+            <td>83 / 100</td>
             <td><strong style="color:var(--accent-green)">84%</strong></td>
           </tr>
           <tr>
             <td>MAP 03: Сақ дәуірі</td>
-            <td>4 сұрақ</td>
-            <td>240 / 300</td>
+            <td>8 сынақ</td>
+            <td>80 / 100</td>
             <td><strong style="color:var(--accent-green)">80%</strong></td>
           </tr>
         </tbody>

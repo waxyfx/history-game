@@ -27,12 +27,12 @@ export default {
   applyWorld: Q.applyWorld, createQuest: Q.createQuest, questStage: Q.questStage, questTarget: Q.questTarget,
   scoreOf: Q.scoreOf, secretsFound: Q.secretsFound, pageLines: Q.pageLines, pageTotal: Q.PAGE_TOTAL, restoreSnapshot: persistence.restoreSnapshot,
   begin: quest => quest.start(),
-  back: {label: {kk: 'Ауылға оралу', ru: 'Ауылға оралу'}, x: 51, y: 34},
+  back: {label: {kk: 'Ауылға оралу', ru: 'Вернуться в аул'}, x: 51, y: 34},
   passLabel: {kk: 'Сақ дәуіріне өту →', ru: 'В эпоху саков →'}, next: 3,
   // Epoch weapon names (slot 1–3). Later maps rename the slots for their own arms (akinak, sabre…).
   UI: {weapon: {kk: ['Шоқпар', 'Найза', 'Садақ'], ru: ['Дубина', 'Копьё', 'Лук']}, 
-    chapter: {kk: 'MAP 02 · ҚОЛА ДӘУІРІ'}, complete: {kk: 'MAP 02 АЯҚТАЛДЫ'}, completeSub: {kk: 'Шежіренің 2-парағы қалпына келді'},
-    stay: {kk: 'Қола дәуірінде қалу'},
+    chapter: {kk: 'MAP 02 · ҚОЛА ДӘУІРІ', ru: 'MAP 02 · БРОНЗОВЫЙ ВЕК'}, complete: {kk: 'MAP 02 АЯҚТАЛДЫ', ru: 'MAP 02 ЗАВЕРШЕНА'}, completeSub: {kk: 'Шежіренің 2-парағы қалпына келді', ru: 'Вторая страница Шежире восстановлена'},
+    stay: {kk: 'Қола дәуірінде қалу', ru: 'Остаться в бронзовом веке'},
   },
   music: (z, f) => z === 8 ? 'cave' : z === 1 || z === 2 || z === 4 ? (f.b.rekindled ? 'village' : 'mystery') : z === 6 || z === 3 ? 'mystery' : z === 7 ? 'danger' : 'explore',
   ambience: (z, x, y, tile, f) => {

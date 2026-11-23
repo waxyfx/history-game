@@ -18,3 +18,14 @@
 .results-table{width:100%;border-collapse:collapse;font-size:14px;margin:6px 0 12px}
 .results-table th,.results-table td{padding:6px 8px;border-bottom:1px solid #ffffff1f;text-align:left}
 .epoch-card.soon{opacity:.62}.epoch-card.soon .epoch-number>span{font-size:9px;letter-spacing:.08em;text-transform:uppercase}
+
+/* The Netlify free-plan badge covered page controls (audit №14). */
+#nl-badge-frame, iframe[title="Netlify badge"] { display: none !important; }
+
+/* WCAG AA contrast (audit №14): text greys and gold darkened to at least 4.5:1 on the paper background; phone tap targets at least 44 px. */
+:root{--muted:#5d645a}
+.lead{color:#545e55}
+.hero h1 em,h1 em,.brand-mark{color:#8a6224}
+.intro-replay{min-height:44px}
+@media (pointer:coarse){footer a,footer button,.intro-replay{min-height:44px;display:inline-flex;align-items:center}}
+.source-list{padding-left:20px;margin:8px 0 14px}.source-list li{margin:10px 0;line-height:1.45}.source-list li span{color:var(--muted);font-size:13px}.source-list .source{margin:4px 0 0;font-size:12px}

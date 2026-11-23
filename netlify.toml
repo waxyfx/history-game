@@ -1,0 +1,10 @@
+# Netlify build for a Git-connected site. `npm run build` also writes dist/tarikh-source.zip — the corresponding source
+# the GPL-2.0 DoomGeneric engine requires (public/licenses/ASSETS.md links to it; audit №14 found it missing because
+# the site was built without that step). Response headers live in public/_headers (also used by drag-and-drop deploys).
+[build]
+  command = "npm run build"
+  publish = "dist"
+
+[build.environment]
+  NODE_VERSION = "22"
+  PYTHON = "python3"

@@ -99,7 +99,7 @@ header.admin-topbar h1 { font-size: 22px; font-weight: 600; }
 .kpi-card .number { font-size: 32px; font-weight: 700; color: var(--gold-primary); line-height: 1; }
 
 /* Tables */
-.table-container { background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px; overflow: hidden; margin-top: 16px; }
+.table-container { background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px; overflow-x: auto; -webkit-overflow-scrolling: touch; margin-top: 16px; }
 table.admin-table { width: 100%; border-collapse: collapse; text-align: left; font-size: 13px; }
 table.admin-table th { background: var(--bg-sidebar); color: var(--text-muted); font-weight: 600; padding: 14px 18px; border-bottom: 1px solid var(--border); font-size: 11px; text-transform: uppercase; letter-spacing: 1px; }
 table.admin-table td { padding: 14px 18px; border-bottom: 1px solid var(--border); color: var(--text-main); }
@@ -195,3 +195,21 @@ td.person img{width:28px;height:28px;border-radius:50%;flex:none}
 td.person small{display:block;color:var(--text-muted);font-size:11px}
 .admin-alert{margin:12px 24px 0;padding:10px 14px;border-radius:6px;border:1px solid #2f5d4a;background:#0f241d;color:#b6e8c9;font-size:13px}
 .admin-alert.error{border-color:#7f1d1d;background:#2d1a1a;color:#fca5a5}
+
+/* Teacher analytics (019): option counts per trial, one student's answers, CSV export. */
+.filter-row .btn, .search-bar .btn { margin-left: auto; }
+.btn-small { padding: 4px 10px; font-size: 12px; }
+table.admin-table tr.selected { background: var(--bg-card-hover); }
+table.admin-table tr.row-ok td:nth-child(5) { color: #86d4a5; }
+table.admin-table tr.row-bad td:nth-child(5) { color: #f3a39a; }
+.answers-box { margin-top: 18px; padding: 14px; border: 1px solid var(--gold-dim, #8a7550); border-radius: 8px; background: var(--bg-sidebar); }
+.answers-head { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: space-between; }
+.answers-head .section-title { margin: 0; }
+.choice-bars { display: grid; gap: 3px; min-width: 150px; }
+.choice-bars span { display: grid; grid-template-columns: 16px 1fr 28px; align-items: center; gap: 6px; font-size: 11px; color: var(--text-muted); }
+.choice-bars i { display: block; height: 7px; min-width: 2px; border-radius: 4px; background: #5d6f6a; }
+.choice-bars span.right { color: #86d4a5; }
+.choice-bars span.right i { background: #3f9d68; }
+/* The Netlify free-plan badge sat on top of the signed-in bar (e-mail and «Шығу») and the tables. */
+#nl-badge-frame, iframe[title="Netlify badge"] { display: none !important; }
+@media (max-width: 650px) { .gate-session { left: 12px; right: 12px; justify-content: space-between; } table.admin-table th, table.admin-table td { padding: 10px 12px; } }

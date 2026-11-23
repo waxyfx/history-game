@@ -12,6 +12,7 @@ import {noteImpact} from './range.js';
 import {sfx, music, ambience, toggleAudioMute, isAudioMuted, unlockAudio, playSong, stopSong, songPlaying, recordedBanks} from './audio.js';
 import {createParty, makeCode, MAX_PARTY} from './net.js';
 import {db, rpc as rpcNamed} from '../api.js';
+import {requireAccount} from '../account.js';
 // Official-run RPCs are written with positional arguments (as in the SQL tests); Supabase needs named ones.
 const RPC_PARAMS = {level_start_run: ['p_level', 'p_mode', 'p_session'], level_submit_answer: ['p_run', 'p_quiz', 'p_choice', 'p_request'],
   level_finish_run: ['p_run', 'p_request'], level_abandon_run: ['p_run']};
@@ -64,7 +65,7 @@ document.querySelector('#rpg-app').innerHTML = `
 <main class="rpg">
   <section class="stage">
     <div class="viewport" id="viewport">
-      <canvas id="world" width="${W}" height="${H}" tabindex="0" aria-label="RPG"></canvas>
+      <canvas id="world" width="${W}" height="${H}" tabindex="0" role="img" aria-label="${lang === 'ru' ? 'Игровой мир: управление — клавиши WASD, E, пробел' : 'Ойын әлемі: басқару — WASD, E, бос орын пернелері'}"></canvas>
       <div class="hud" id="hud">
         <div class="hud-tl">
           <div class="hp"><span class="hp-icon">♥</span><div class="hp-track"><div id="hp-fill"></div><span id="hp-text"></span></div><span id="lives" class="lives"></span></div>
@@ -91,14 +92,15 @@ document.querySelector('#rpg-app').innerHTML = `
       </div>
       <div class="bars" id="bars"><i></i><i></i></div>
       <div class="fade" id="fade"></div>
-      <div class="dlg" id="dlg" hidden>
+      <div class="dlg" id="dlg" hidden role="group" aria-label="Диалог">
         <canvas id="dlg-portrait" width="48" height="48"></canvas>
         <div class="dlg-body"><b id="dlg-name"></b><p id="dlg-text"></p><small id="dlg-fact" hidden></small></div>
         <span class="dlg-next">▼</span>
       </div>
       <button class="skip" id="skip" hidden></button>
       <p class="sub" id="sub" hidden></p><div class="title-card" id="title-card" hidden></div>
-      <div class="panel" id="panel" hidden><div class="panel-card" id="panel-card"></div></div>
+      <div class="panel" id="panel" hidden><div class="panel-card" id="panel-card" role="dialog" aria-modal="true" tabindex="-1"></div></div>
+      <p class="sr-only" id="dlg-sr" aria-live="polite"></p>
       <p id="loading" class="loading" role="status"></p>
       <div class="touch" id="touch">
         <div class="stick" id="stick"><i class="stick-base"></i><i class="stick-knob"></i></div>
@@ -176,6 +178,7 @@ async function sayNow(lines, fact) {
     $('dlg-fact').hidden = !showFact;
     if (showFact) $('dlg-fact').innerHTML = `<b>${esc(t('fact'))}</b> ${esc(L(fact))}`;
     sfx('dialog');
+    $('dlg-sr').textContent = `${L(sp)}: ${L(line)}`;
     await typeLine(L(line));
     if (!cine?.skipping) await new Promise(r => { dlgResolve = r; });
   }
@@ -267,7 +270,10 @@ function openPanel(html, cls = '', pauseGame = true) {
   $('panel').hidden = false; panelOpen = true;
   if (E) { if (pauseGame && party.size === 1) E.tj_pause(1); else E.tj_control(0); }
   input();
-  $('panel-card').querySelector('button,input')?.focus();
+  // Focus the card (or its text field), never the first button: Space is the attack key and a quiz that opened under a
+  // held Space used to answer option A by itself. Keyboard players reach the options with Tab.
+  const field = $('panel-card').querySelector('input,textarea,select');
+  (field || $('panel-card')).focus({preventScroll: true});
 }
 function closePanel() {
   if (!panelOpen) return;
@@ -299,21 +305,32 @@ async function startOfficial(fresh) {
 }
 const netFail = () => toast(lang === 'ru' ? 'Нет связи с сервером. Повтори ответ.' : 'Сервермен байланыс жоқ. Жауапты қайтала.', 'warn');
 const evidenceHTML = list => list && list.length ? `<div class="evidence"><small>${esc(t('evidence'))}</small><ul>${list.map(e => `<li>${esc(L(e))}</li>`).join('')}</ul></div>` : '';
-// Historical trial = a story decision. The player observes (intro + evidence), thinks and chooses ONCE.
-// No right/wrong verdict is shown during the level: the choice changes what happens next (branch
-// lines, trust, gifts, page completeness). Verdicts and the historical logic are revealed in the
-// chronicle journal after the level. In an official run the server records the choice and scores it.
+// Historical trial = a story decision. The player observes (intro + evidence), thinks and chooses ONCE (the choice
+// changes what happens next: branch lines, trust, gifts, page completeness). Right after the choice the panel shows
+// whether the evidence supports it, the right option, why, the explanation and the source (audit №14: learning needs
+// the feedback at once, not only in the journal after the level). In an official run the server records the choice
+// first (one choice per trial, migration 007), so showing the answer afterwards cannot change the score.
+const LETTER = i => 'ABCDEFGHIJ'[i] || '?';
+const lettered = (o, i) => /^[A-JА-Г]\)\s/.test(o || '') ? o : `${LETTER(i)}) ${o || ''}`;
+function verdictHTML(def, idx) {
+  const ok = idx === def.correctIndex;
+  const why = !ok && Array.isArray(def.why) && (lang === 'kk' || def.whyRu) ? (def.whyRu || def.why)[idx] : '';
+  return `<div class="trial-verdict ${ok ? 'ok' : 'no'}" role="status"><b>${ok ? '✓' : '✗'} ${esc(t(ok ? 'verdictOk' : 'verdictNo'))}</b>
+      ${ok ? '' : `<p>${esc(t('rightAnswer'))}: <b>${esc(lettered(def.options[def.correctIndex], def.correctIndex))}</b></p>`}${why ? `<p>${esc(why)}</p>` : ''}</div>
+    ${def.explanation ? `<p class="expl">${esc(def.explanation)}</p>` : ''}${def.source ? `<p class="source"><small>${esc(t('sourceLabel'))}:</small> ${esc(def.source)}</p>` : ''}`;
+}
 async function trial(def) {
   const done = G.flags.quiz[def.id];
   const head = `<p class="eyebrow">${esc(def.questTitle)} · ${esc(t('trial'))}${def.level ? ' · ' + esc((lang === 'ru' ? TRIAL_LEVELS_RU : TRIAL_LEVELS)[def.level]) : ''}</p><h2>${esc(def.title)}</h2>`;
   if (done) {
-    openPanel(`${head}<p>${esc(t('decided'))}</p><button class="primary" data-close>${esc(t('next'))} →</button>`, 'quiz');
+    const known = Number.isInteger(done.ch) && def.options?.[done.ch] != null;
+    openPanel(`${head}${known ? `<p class="q">${esc(def.question)}</p><p>${esc(lettered(def.options[done.ch], done.ch))}</p>${verdictHTML(def, done.ch)}` : `<p>${esc(t('decided'))}</p>`}<button class="primary" data-close>${esc(t('next'))} →</button>`, 'quiz');
     await panelDone();
     return {ok: !!done.ok, fresh: false};
   }
   if (def.intro) await say(def.intro);
   let picked = null;
-  openPanel(`${head}${evidenceHTML(def.evidence)}<p class="q">${esc(def.question)}</p><div class="opts" data-trial="${esc(def.id)}">${def.options.map((o, i) => `<button data-opt="${i}">${esc(o)}</button>`).join('')}</div><p class="note">${esc(t('oneChoice'))}</p>`, 'quiz');
+  openPanel(`${head}${evidenceHTML(def.evidence)}<p class="q">${esc(def.question)}</p><div class="opts" data-trial="${esc(def.id)}">${def.options.map((o, i) => `<button data-opt="${i}">${esc(lettered(o, i))}</button>`).join('')}</div><p class="note">${esc(t('oneChoice'))}</p>`, 'quiz');
   await new Promise(resolve => {
     $('panel-card').querySelectorAll('[data-opt]').forEach(btn => btn.onclick = async () => {
       if (picked !== null || btn.dataset.busy) return;
@@ -329,7 +346,16 @@ async function trial(def) {
       G.local.attempts[def.id] = 1;
       G.flags.quiz[def.id] = {a: 1, t: Date.now(), by: party.slot, ok: idx === def.correctIndex, ch: idx};
       changed(); applyWorld(G); autosave();
-      setTimeout(() => { closePanel(); resolve(); }, 450);
+      setTimeout(() => {
+        // The same panel turns into the feedback card; the story continues when the player has read it.
+        const card = $('panel-card');
+        card.querySelector('.note')?.remove();
+        card.querySelectorAll('[data-opt]').forEach(b => { const i = +b.dataset.opt; b.classList.toggle('right', i === def.correctIndex); b.classList.toggle('wrong', i === idx && idx !== def.correctIndex); });
+        card.insertAdjacentHTML('beforeend', `${verdictHTML(def, idx)}<button class="primary" data-close data-verdict>${esc(t('understood'))} →</button>`);
+        card.querySelector('.trial-verdict')?.scrollIntoView({block: 'nearest'});
+        card.focus({preventScroll: true});
+        panelDone().then(resolve);
+      }, 450);
     });
   });
   const ok = G.flags.quiz[def.id].ok;
@@ -351,7 +377,8 @@ const quiz = n => {
 function bonusDef(i) {
   const q = BONUS_QUIZ.questions[i], m = BONUS_META[i];
   return {id: m.id, level: m.level, title: L(BONUS_QUIZ.title), questTitle: lang === 'ru' ? 'СЕКРЕТНОЕ ИСПЫТАНИЕ' : 'ЖАСЫРЫН СЫНАҚ',
-    evidence: q.ev ? L(q.ev) : null, question: L(q.q), options: L(q.o), correctIndex: q.a};
+    evidence: q.ev ? L(q.ev) : null, question: L(q.q), options: L(q.o), correctIndex: q.a,
+    explanation: q.e ? L(q.e) : '', why: q.w ? L(q.w) : null, whyRu: lang === 'ru' && q.w?.ru ? q.w.ru : null, source: BONUS_QUIZ.source || ''};
 }
 // Secret trial in Jebey's cache (microliths).
 async function bonusTrial(i, branch) {
@@ -501,6 +528,8 @@ async function levelUnlocked(id) {
   if (localPassed(id - 1) || levelPassedOf(id - 1)) return true;
   try {
     if (db && (await currentUser(db))) {
+      const role = await rpc('get_my_role').catch(() => null);   // teachers and admins may open any epoch
+      if (role === 'teacher' || role === 'admin') return true;
       const p = await rpc('get_my_profile');
       const list = p?.unlocked_levels || [];
       try { localStorage.setItem('tarikh.official.unlocked', JSON.stringify(list)); } catch {}
@@ -988,7 +1017,7 @@ window.addEventListener('keydown', e => {
   unlockAudio();
   if (e.ctrlKey || e.metaKey || e.altKey || !E || comicOpen) return;
   if (document.activeElement?.tagName === 'INPUT') return;
-  if (e.code === 'Escape') { e.preventDefault(); if (cine) skipCutscene(); else if (panelOpen) { if (!$('panel-card').querySelector('[data-choice],[data-trial]')) closePanel(); } else if (!dialogBusy) pauseMenu(); return; }
+  if (e.code === 'Escape') { e.preventDefault(); if (cine) skipCutscene(); else if (panelOpen) { if (!$('panel-card').querySelector('[data-choice],[data-trial],[data-lock]') || $('panel-card').querySelector('[data-verdict]')) closePanel(); } else if (!dialogBusy) pauseMenu(); return; }
   if (!$('dlg').hidden && ['KeyE', 'Space', 'Enter'].includes(e.code)) { e.preventDefault(); if (!e.repeat) advanceDialog(); return; }
   if (panelOpen || cine || dialogBusy) return;
   if (e.code === 'KeyI' && !e.repeat) { e.preventDefault(); inventory(); return; }
@@ -1068,13 +1097,20 @@ function resize() {
 // Touch screens: the hotbar goes into the gap between the joystick ring (bottom-left) and the action buttons
 // (bottom-right), scaled down just enough to fit — on an iPhone held upright Safari's bars leave the game ~690 px wide.
 function fitHotbar() {
-  const hb = $('hotbar'); if (!hb) return;
-  if (!matchMedia('(pointer: coarse)').matches) { hb.style.left = ''; hb.style.transform = ''; return; }
+  const hb = $('hotbar'), zone = $('stick'); if (!hb) return;
+  if (!matchMedia('(pointer: coarse)').matches) { hb.style.left = ''; hb.style.transform = ''; hb.classList.remove('two-rows'); if (zone) zone.style.width = ''; return; }
   const acts = document.querySelector('.acts'), vpW = $('viewport').offsetWidth;
-  const left = 64 + 48 + 10, right = (acts?.offsetLeft || vpW - 200) - 10, natural = hb.scrollWidth || hb.offsetWidth;
+  const left = 64 + 48 + 10, right = (acts?.offsetLeft || vpW - 200) - 10;
+  // One row; two rows only when one row would have to shrink the slots below ~27 px.
+  hb.classList.remove('two-rows');
+  let natural = hb.scrollWidth || hb.offsetWidth;
+  if ((right - left) / natural < .72) { hb.classList.add('two-rows'); natural = hb.scrollWidth || hb.offsetWidth; }
   const k = Math.max(.55, Math.min(1, (right - left) / natural));
   hb.style.transformOrigin = '0 100%'; hb.style.transform = `scale(${k.toFixed(3)})`;
-  hb.style.left = Math.max(left, left + ((right - left) - natural * k) / 2) + 'px';
+  const L = Math.max(left, left + ((right - left) - natural * k) / 2);
+  hb.style.left = L + 'px';
+  // The joystick's touch zone ends where the hotbar begins, so no strip of the screen belongs to both (audit №14).
+  if (zone) zone.style.width = Math.max(116, Math.round(L - 6)) + 'px';   // 116: the resting stick (16…112) always fits
 }
 // Touch: a floating analog stick on the left half (8 directions; pushed to the rim = run).
 const stick = {id: null, ox: 0, oy: 0};
@@ -1103,8 +1139,9 @@ for (const n of ['pointerup', 'pointercancel', 'lostpointercapture']) stickEl.ad
   if (ev.pointerId !== stick.id) return;
   stick.id = null; stickEl.classList.remove('on'); placeStick(); touch.delete('stick'); input();
 });
-// Browsers allow real fullscreen only after a user gesture: enter it on the first key/click.
-let autoFs = true;
+// Browsers allow real fullscreen only after a user gesture. On a touch phone the first tap enters it (the browser bars
+// eat a third of the screen there); on a computer it is never forced: the ⛶ button (#fs-btn) asks for it.
+let autoFs = matchMedia('(pointer: coarse)').matches;
 function enterFullscreen() {
   const el = document.documentElement;
   // Only the game turns sideways (resize(): CSS rotation) — the phone itself is never asked to rotate.
@@ -1119,9 +1156,15 @@ addEventListener('resize', resize);
 new ResizeObserver(resize).observe(document.body);
 
 // ---------------------------------------------------------------- boot
+// The account window of the home page, shown in the game's panel (src/account.js). data-lock keeps Esc from closing it.
+const accountUi = {show: html => openPanel(`<div data-lock class="acc-panel">${html}</div>`, 'account'), close: () => closePanel(), root: () => $('panel-card')};
 async function boot() {
   $('loading').textContent = t('loading');
   try {
+    // The game starts only for a signed-in player (without a server: a named local profile). ?level=N, ?final, ?egg and
+    // co-op links used to skip the home page's account window (audit №14); now the game asks for the account itself.
+    resize();
+    if (!(await requireAccount(db, accountUi))) { location.href = '/'; return; }
     bindLevel(await loadLevel(levelFromURL()));
     document.title = `Tarikh Joly · ${LV.title}`;
     if (LV.requires && !(await levelUnlocked(LV.id))) { $('loading').remove(); return lockedScreen(); }

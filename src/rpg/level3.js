@@ -28,9 +28,9 @@ export default {
   applyWorld: Q.applyWorld, createQuest: Q.createQuest, questStage: Q.questStage, questTarget: Q.questTarget,
   scoreOf: Q.scoreOf, secretsFound: Q.secretsFound, pageLines: Q.pageLines, pageTotal: Q.PAGE_TOTAL, restoreSnapshot: persistence.restoreSnapshot,
   begin: quest => quest.start(),
-  back: {label: {kk: 'Сақ қонысына оралу', ru: 'Сақ қонысына оралу'}, x: 56, y: 44},
+  back: {label: {kk: 'Сақ қонысына оралу', ru: 'Вернуться в стан саков'}, x: 56, y: 44},
   passLabel: {kk: 'Ғұндар дәуіріне өту →', ru: 'В эпоху гуннов →'}, next: 4,
-  UI: {chapter: {kk: 'MAP 03 · САҚ ДӘУІРІ'}, complete: {kk: 'MAP 03 АЯҚТАЛДЫ'}, completeSub: {kk: 'Шежіренің 3-парағы қалпына келді'}, stay: {kk: 'Сақ дәуірінде қалу'}, nextOpened: {kk: 'MAP04 — Ғұндар дәуірі ашылды'}},
+  UI: {chapter: {kk: 'MAP 03 · САҚ ДӘУІРІ', ru: 'MAP 03 · ЭПОХА САКОВ'}, complete: {kk: 'MAP 03 АЯҚТАЛДЫ', ru: 'MAP 03 ЗАВЕРШЕНА'}, completeSub: {kk: 'Шежіренің 3-парағы қалпына келді', ru: 'Третья страница Шежире восстановлена'}, stay: {kk: 'Сақ дәуірінде қалу', ru: 'Остаться в эпохе саков'}, nextOpened: {kk: 'MAP04 — Ғұндар дәуірі ашылды', ru: 'Открыта MAP04: эпоха гуннов'}},
   music: (z, f) => z === 12 ? 'camp' : z >= 10 ? 'cave' : z <= 3 && z >= 1 ? 'village' : z === 6 || z === 9 || z === 7 ? 'mystery' : 'explore',
   ambience: (z, x, y, tile, f) => {
     let river = 0;

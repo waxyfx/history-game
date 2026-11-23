@@ -1,9 +1,11 @@
 // Epoch registry: one runtime (main.js + engine), one content bundle per level, loaded on demand.
 const LOADERS = {1: () => import('./level1.js'), 2: () => import('./level2.js'), 3: () => import('./level3.js'), 4: () => import('./level4.js'), 5: () => import('./level5.js'), 6: () => import('./level6.js'), 7: () => import('./level7.js'), 8: () => import('./level8.js'), 9: () => import('./level9.js'), 10: () => import('./level10.js')};
 export const LEVEL_IDS = Object.keys(LOADERS).map(Number);
-// TEMPORARY (QA): every playable epoch is open in practice mode so levels can be checked without
-// passing the previous one. Official runs are still unlocked only by the server. Set to false to restore the gate.
-export const TEMP_UNLOCK_ALL = true;
+// QA: on the dev server (vite define __TJ_QA_UNLOCK__, see vite.config.js) every epoch is open in practice mode so
+// levels can be checked without passing the previous one. A production build keeps the gate (audit №14: ?level=N
+// opened every map): MAP02+ opens after the previous epoch is passed; signed-in teachers and admins may open any.
+/* global __TJ_QA_UNLOCK__ */
+export const TEMP_UNLOCK_ALL = typeof __TJ_QA_UNLOCK__ !== 'undefined' && __TJ_QA_UNLOCK__ === true;
 export function levelFromURL(search = globalThis.location?.search || '') {
   const n = Number(new URLSearchParams(search).get('level') || 1);
   return LOADERS[n] ? n : 1;

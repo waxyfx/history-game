@@ -1,6 +1,7 @@
 // Admin panel on real data: Google-signed-in participants, official runs and results of the 2D campaign.
 // Server functions (all teacher/admin-only on the server): admin_overview, admin_list_users,
-// admin_trial_stats (migration 018), admin_get_level_results and admin_set_user_role (006), get_my_role.
+// admin_trial_stats (migration 018; option counts in 019), admin_result_answers (019: one student's answers),
+// admin_get_level_results and admin_set_user_role (006), get_my_role. Tables export to CSV (Excel opens them).
 // Without Supabase the gate loads the demo panel (admin-demo.js) instead.
 import {escapeHtml as esc} from './escape.js';
 import './admin.css';
@@ -28,7 +29,8 @@ const TABS = {
 
 const state = {
   tab: 'dashboard', role: null, me: null, error: '', notice: '', loading: false,
-  overview: null, users: null, search: '', results: {}, resultsLevel: 0, trials: {}, trialsLevel: 1, titles: {}
+  overview: null, users: null, search: '', results: {}, resultsLevel: 0, trials: {}, trialsLevel: 1, titles: {},
+  answers: null   // {result, rows, error}: one student's answers, shown under the results table
 };
 const root = document.querySelector('#admin-app');
 const $ = id => document.getElementById(id);
@@ -59,10 +61,7 @@ async function load(force = false) {
     } else if (state.tab === 'trials') {
       const n = state.trialsLevel;
       if (force || !state.trials[n]) state.trials[n] = await call('admin_trial_stats', {p_level: n});
-      if (!state.titles[n] && STORIES[n]) {
-        const m = await STORIES[n]();
-        state.titles[n] = Object.fromEntries(Object.values(m.HISTORICAL_QUIZZES || {}).map(q => [q.id, typeof q.title === 'object' ? q.title.kk : q.title]));
-      }
+      await trialTexts(n);
     }
   } catch (e) {
     state.error = e.message || String(e);
@@ -70,6 +69,31 @@ async function load(force = false) {
     state.loading = false; render();
   }
 }
+
+// Trial texts of one level from its story file: title, options and the right option (the client ships them anyway;
+// the server never returns keys). MAP01's five secret questions come from BONUS_QUIZ.
+const kk = v => (v && typeof v === 'object' && !Array.isArray(v) ? v.kk : v);
+async function trialTexts(n) {
+  if (state.titles[n] || !STORIES[n]) return state.titles[n] || {};
+  const m = await STORIES[n]();
+  const out = Object.fromEntries(Object.values(m.HISTORICAL_QUIZZES || {}).map(q => [q.id, {title: kk(q.title), options: kk(q.options) || [], right: q.correctIndex}]));
+  (m.BONUS_META || []).forEach((b, i) => { const q = m.BONUS_QUIZ?.questions?.[i]; if (q) out[b.id] = {title: `${kk(m.BONUS_QUIZ.title)} · ${i + 1}`, options: kk(q.o) || [], right: q.a}; });
+  return (state.titles[n] = out);
+}
+const LETTER = i => 'ABCDEFGHIJ'[i] || '?';
+const optText = (q, i) => { const o = q?.options?.[i] || ''; return /^[A-JА-Г]\)\s/.test(o) ? o : `${LETTER(i)}) ${o}`; };
+const trialName = (n, id) => state.titles[n]?.[id]?.title || id;
+
+// CSV for Excel: UTF-8 with BOM, «;» between columns (what Excel expects in kk/ru locales), quotes doubled.
+function downloadCSV(name, header, rows) {
+  const cell = v => { const t = v == null ? '' : String(v); return /[;"\n\r]/.test(t) ? `"${t.replace(/"/g, '""')}"` : t; };
+  const text = '\uFEFF' + [header, ...rows].map(r => r.map(cell).join(';')).join('\r\n');
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([text], {type: 'text/csv;charset=utf-8'}));
+  a.download = name; document.body.append(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+}
+const csvButton = id => `<button class="btn btn-secondary" id="${id}">⬇ CSV (Excel)</button>`;
 
 // ------------------------------------------------------------------ screens
 function kpi(title, value, sub = '') {
@@ -83,8 +107,8 @@ const EMPTY_RESULTS = 'Әзірге ресми нәтиже жоқ. Оқушыл
 function resultsTable(rows, withName = true) {
   if (!rows.length) return `<p class="empty-note">${EMPTY_RESULTS}</p>`;
   return `<div class="table-container"><table class="admin-table"><thead><tr>
-    ${withName ? '<th>Қатысушы</th>' : ''}<th>Деңгей</th><th>Ұпай</th><th>%</th><th>Нәтиже</th><th>Талпыныс</th><th>Уақыт</th><th>Аяқталды</th>
-  </tr></thead><tbody>${rows.map(r => `<tr>
+    ${withName ? '<th>Қатысушы</th>' : ''}<th>Деңгей</th><th>Ұпай</th><th>%</th><th>Нәтиже</th><th>Талпыныс</th><th>Уақыт</th><th>Аяқталды</th><th>Жауаптар</th>
+  </tr></thead><tbody>${rows.map(r => `<tr class="${state.answers?.result?.id === r.id ? 'selected' : ''}">
     ${withName ? `<td><strong>${esc(r.name || '—')}</strong></td>` : ''}
     <td>${esc(levelName(r.level_id))}</td>
     <td><strong style="color:var(--gold-primary)">${num(r.score)}</strong> / ${num(r.max_score)}</td>
@@ -93,7 +117,43 @@ function resultsTable(rows, withName = true) {
     <td>${num(r.attempt_number)}</td>
     <td>${mmss(r.duration_seconds)}</td>
     <td>${esc(when(r.finished_at))}</td>
-  </tr>`).join('')}</tbody></table></div>`;
+    <td>${r.id ? `<button class="btn btn-secondary btn-small" data-answers="${esc(r.id)}">Көру</button>` : '—'}</td>
+  </tr>`).join('')}</tbody></table></div>${answersPanel()}`;
+}
+
+// One student's answers: every trial of the level, the option picked, right or wrong, points.
+function answersPanel() {
+  const A = state.answers;
+  if (!A) return '';
+  const r = A.result, n = r.level_id;
+  const head = `<div class="answers-head"><h3 class="section-title">${esc(r.name || '—')} · ${esc(levelName(n))} · ${num(r.score)} / ${num(r.max_score)}</h3>
+    <div>${A.rows ? csvButton('csv-answers') : ''} <button class="btn btn-secondary" id="answers-close" aria-label="Жабу">✕</button></div></div>`;
+  if (A.error) return `<div class="answers-box">${head}<p class="admin-alert error" role="alert">${esc(A.error)}</p></div>`;
+  if (!A.rows) return `<div class="answers-box">${head}<p class="empty-note">Жүктелуде…</p></div>`;
+  const wrong = A.rows.filter(a => a.answered && !a.right).length;
+  return `<div class="answers-box">${head}<p class="hint">Жауап берілген: ${A.rows.filter(a => a.answered).length} / ${A.rows.length} · қате: ${wrong}</p>
+    <div class="table-container"><table class="admin-table"><thead><tr><th>Сынақ</th><th>Түрі</th><th>Таңдаған нұсқа</th><th>Дұрыс нұсқа</th><th>Нәтиже</th><th>Ұпай</th></tr></thead>
+    <tbody>${A.rows.map(a => { const q = state.titles[n]?.[a.quiz_id] || {};
+      const picked = a.answered && a.choice != null ? optText(q, a.choice) : '—';
+      const right = q.right != null ? optText(q, q.right) : '—';
+      return `<tr class="${a.answered ? (a.right ? 'row-ok' : 'row-bad') : ''}"><td><strong>${esc(trialName(n, a.quiz_id))}</strong><br><small class="muted">${esc(a.quiz_id)}</small></td>
+        <td>${esc(KIND[a.kind] || a.kind)}</td><td>${esc(picked)}</td><td>${a.answered && !a.right ? esc(right) : '<span class="muted">—</span>'}</td>
+        <td>${a.answered ? (a.right ? '✓ Дұрыс' : '✗ Қате') : '<span class="muted">Жауап жоқ</span>'}</td><td>${num(a.awarded)}</td></tr>`; }).join('')}</tbody></table></div></div>`;
+}
+async function openAnswers(id) {
+  const all = Object.values(state.results).flat().concat(state.overview?.recent || []);
+  const result = all.find(r => r.id === id);
+  if (!result) return;
+  if (state.answers?.result?.id === id) { state.answers = null; return render(); }
+  state.answers = {result}; render();
+  try {
+    await trialTexts(result.level_id);
+    state.answers.rows = await call('admin_result_answers', {p_result: id});
+  } catch (e) {
+    state.answers.error = /admin_result_answers|does not exist|schema cache/i.test(e.message || '')
+      ? 'Бұл мүмкіндікке серверде 019_teacher_analytics.sql миграциясы керек (Supabase → SQL Editor).' : (e.message || String(e));
+  }
+  if (state.answers?.result?.id === id) render();
 }
 
 function renderDashboard() {
@@ -115,6 +175,7 @@ function renderUsers() {
   const admin = state.role === 'admin';
   return `<div class="search-bar">
       <input type="search" id="user-search" placeholder="${admin ? 'Аты немесе email бойынша іздеу…' : 'Аты бойынша іздеу…'}" value="${esc(state.search)}" />
+      ${users.length ? csvButton('csv-users') : ''}
     </div>
     ${admin ? '<p class="hint">Рөлді өзгерту бірден серверде сақталады. Өз рөліңізді өзгерте алмайсыз.</p>' : '<p class="hint">Рөлдерді тек Әкімші өзгерте алады.</p>'}
     ${users.length ? `<div class="table-container"><table class="admin-table"><thead><tr>
@@ -139,7 +200,9 @@ function levelOptions(selected, withAll) {
 
 function renderResults() {
   return `<div class="filter-row"><label for="results-level">Деңгей:</label>
-      <select id="results-level">${levelOptions(state.resultsLevel, true)}</select></div>
+      <select id="results-level">${levelOptions(state.resultsLevel, true)}</select>
+      ${(state.results[state.resultsLevel] || []).length ? csvButton('csv-results') : ''}</div>
+    <p class="hint">«Көру» оқушының әр сынақта қай нұсқаны таңдағанын және қай жерде қателескенін көрсетеді.</p>
     ${resultsTable(state.results[state.resultsLevel] || [])}`;
 }
 
@@ -165,21 +228,35 @@ function renderLevels() {
     </tr>`).join('')}</tbody></table></div>`;
 }
 
+// The most chosen wrong option of a trial: the idea the class believed (needs the option counts of migration 019).
+function topWrong(t, q) {
+  const c = Object.entries(t.choices || {}).map(([k, v]) => [+k, num(v)]).filter(([k, v]) => v > 0 && k !== q?.right).sort((a, b) => b[1] - a[1])[0];
+  return c ? {i: c[0], n: c[1]} : null;
+}
+function choicesCell(t, q) {
+  if (!t.choices) return '<span class="muted">019 миграциясы керек</span>';
+  const total = Object.values(t.choices).reduce((sum, v) => sum + num(v), 0);
+  if (!total) return '<span class="muted">—</span>';
+  const opts = Math.max((q?.options || []).length, ...Object.keys(t.choices).map(k => +k + 1));
+  return `<div class="choice-bars">${Array.from({length: opts}, (_, i) => { const v = num(t.choices[i]);
+    return `<span class="${i === q?.right ? 'right' : ''}" title="${esc(q?.options?.[i] || '')}"><b>${LETTER(i)}</b><i style="width:${pct(v, total)}%"></i>${v}</span>`; }).join('')}</div>`;
+}
 function renderTrials() {
-  const n = state.trialsLevel, rows = state.trials[n] || [], titles = state.titles[n] || {};
+  const n = state.trialsLevel, rows = state.trials[n] || [], texts = state.titles[n] || {};
   return `<div class="filter-row"><label for="trials-level">Деңгей:</label>
-      <select id="trials-level">${levelOptions(n, false)}</select></div>
-    <p class="hint">Аяқталған ресми ойындар бойынша. Дұрыс нұсқалар серверде жасырын сақталады, мұнда тек статистика.</p>
+      <select id="trials-level">${levelOptions(n, false)}</select>${rows.length ? csvButton('csv-trials') : ''}</div>
+    <p class="hint">Аяқталған ресми ойындар бойынша. «Нұсқалар»: сынып әр нұсқаны қанша рет таңдағаны (жасыл — дұрыс нұсқа). «Жиі қате»: сыныптың ең көп сенген қате идеясы.</p>
     ${rows.length ? `<div class="table-container"><table class="admin-table"><thead><tr>
-      <th>Сынақ</th><th>Түрі</th><th>Ұпай</th><th>Жауап бергендер</th><th>Дұрыс жауап</th><th>Дұрыс %</th>
-    </tr></thead><tbody>${rows.map(t => `<tr>
-      <td><strong>${esc(titles[t.quiz_id] || (/_bonus_(\d+)$/.test(t.quiz_id) ? `Құпия сұрақ ${t.quiz_id.match(/_bonus_(\d+)$/)[1]}` : t.quiz_id))}</strong><br><small class="muted">${esc(t.quiz_id)}</small></td>
+      <th>Сынақ</th><th>Түрі</th><th>Ұпай</th><th>Жауап бергендер</th><th>Дұрыс %</th><th>Нұсқалар</th><th>Жиі қате</th>
+    </tr></thead><tbody>${rows.map(t => { const q = texts[t.quiz_id], w = topWrong(t, q); return `<tr>
+      <td><strong>${esc(trialName(n, t.quiz_id))}</strong><br><small class="muted">${esc(t.quiz_id)}</small></td>
       <td>${esc(KIND[t.kind] || t.kind)}</td>
       <td>${num(t.points)}</td>
       <td>${num(t.answered_count)}</td>
-      <td>${num(t.right_count)}</td>
       <td>${t.answered_count ? `${pct(num(t.right_count), num(t.answered_count))}%` : '—'}</td>
-    </tr>`).join('')}</tbody></table></div>` : '<p class="empty-note">Бұл деңгейдің сынақтары серверде әлі тіркелмеген.</p>'}`;
+      <td>${choicesCell(t, q)}</td>
+      <td>${w ? `<small>${esc(optText(q, w.i))} <span class="muted">(${w.n})</span></small>` : '<span class="muted">—</span>'}</td>
+    </tr>`; }).join('')}</tbody></table></div>` : '<p class="empty-note">Бұл деңгейдің сынақтары серверде әлі тіркелмеген.</p>'}`;
 }
 
 function renderSection() {
@@ -221,7 +298,31 @@ let searchTimer;
 function attach() {
   root.querySelectorAll('nav.admin-nav button').forEach(b => { b.onclick = () => { state.tab = b.dataset.tab; state.notice = ''; load(); }; });
   $('refresh')?.addEventListener('click', () => { state.notice = ''; load(true); });
-  $('results-level')?.addEventListener('change', e => { state.resultsLevel = Number(e.target.value); load(); });
+  $('results-level')?.addEventListener('change', e => { state.resultsLevel = Number(e.target.value); state.answers = null; load(); });
+  root.querySelectorAll('[data-answers]').forEach(b => { b.onclick = () => openAnswers(b.dataset.answers); });
+  $('answers-close')?.addEventListener('click', () => { state.answers = null; render(); });
+  const stamp = new Date().toISOString().slice(0, 10), map = n => 'MAP' + String(n).padStart(2, '0');
+  $('csv-results')?.addEventListener('click', () => downloadCSV(`natizheler-${state.resultsLevel ? map(state.resultsLevel) : 'barlyq'}-${stamp}.csv`,
+    ['Қатысушы', 'Деңгей', 'Ұпай', 'Максимум', '%', 'Нәтиже', 'Талпыныс', 'Уақыт (сек)', 'Аяқталды'],
+    (state.results[state.resultsLevel] || []).map(r => [r.name || '', levelName(r.level_id), num(r.score), num(r.max_score), Math.round(num(r.percentage)),
+      r.passed ? 'Өтті' : 'Өтпеді', num(r.attempt_number), num(r.duration_seconds), r.finished_at || ''])));
+  $('csv-trials')?.addEventListener('click', () => {
+    const n = state.trialsLevel, texts = state.titles[n] || {};
+    downloadCSV(`synaqtar-${map(n)}-${stamp}.csv`, ['Сынақ', 'ID', 'Түрі', 'Ұпай', 'Жауап бергендер', 'Дұрыс', 'Дұрыс %', 'A', 'B', 'C', 'D', 'Дұрыс нұсқа', 'Жиі қате нұсқа'],
+      (state.trials[n] || []).map(t => { const q = texts[t.quiz_id], w = topWrong(t, q);
+        return [trialName(n, t.quiz_id), t.quiz_id, KIND[t.kind] || t.kind, num(t.points), num(t.answered_count), num(t.right_count),
+          t.answered_count ? pct(num(t.right_count), num(t.answered_count)) : '', ...[0, 1, 2, 3].map(i => num(t.choices?.[i])),
+          q?.right != null ? LETTER(q.right) : '', w ? optText(q, w.i) : '']; }));
+  });
+  $('csv-answers')?.addEventListener('click', () => {
+    const A = state.answers, n = A.result.level_id;
+    downloadCSV(`zhauaptar-${(A.result.name || 'oqushy').replace(/[^\p{L}\p{N}]+/gu, '_')}-${map(n)}-${stamp}.csv`, ['Сынақ', 'ID', 'Таңдаған нұсқа', 'Дұрыс нұсқа', 'Нәтиже', 'Ұпай'],
+      A.rows.map(a => { const q = state.titles[n]?.[a.quiz_id] || {};
+        return [trialName(n, a.quiz_id), a.quiz_id, a.answered && a.choice != null ? optText(q, a.choice) : '',
+          q.right != null ? optText(q, q.right) : '', a.answered ? (a.right ? 'Дұрыс' : 'Қате') : 'Жауап жоқ', num(a.awarded)]; }));
+  });
+  $('csv-users')?.addEventListener('click', () => downloadCSV(`qatysushylar-${stamp}.csv`, ['Аты', 'Email', 'Рөл', 'Талпыныстар', 'Өткен деңгейлер', 'Үздік ұпайлар', 'Соңғы белсенділік'],
+    (state.users || []).map(u => [u.name || '', u.email || '', ROLE[u.role] || u.role, num(u.attempts), num(u.levels_passed), num(u.best_total), u.last_active || ''])));
   $('trials-level')?.addEventListener('change', e => { state.trialsLevel = Number(e.target.value); load(); });
   $('user-search')?.addEventListener('input', e => {
     state.search = e.target.value;
