@@ -103,6 +103,8 @@ try {
   await goTo(a, 58, 34); await settle(a); assert(await flag(a, 'townSeen'), 'town: city and steppe');
   await a.shot('map06-02-town');
   for (const n of ['khorezm', 'mudarris', 'aysha']) await talk(a, n);
+  // Audit №14: the people of 1350 remember Otrar, the Karakhanids and the Kipchaks — a secret trial each.
+  assert(['horde_otrar', 'horde_karakhan', 'horde_kipchak'].every(id => seenTrials.includes(id)), 'IX–XII century trials: ' + JSON.stringify(seenTrials));
   await groupKill(a, 1);
   // Act II — the evidence: the library copy, the mint, the yam register.
   await use(a, 'genealogy'); await use(a, 'mint'); await use(a, 'yamregister');
@@ -139,6 +141,23 @@ try {
   // Secrets and the remaining side trial.
   await groupKill(a, 3);
   for (const s of ['turbe', 'margin', 'balbalblock', 'scribehome', 'fivemarks', 'caravangate']) await use(a, s);
+  // The Karakhanid books answered wrongly on purpose: the same panel at once shows the verdict, the right option, the
+  // explanation and the source (the secret points are spare — the level caps at 100, so the result stays 100).
+  {
+    const tp = `(() => { const [x, y] = __tj.LV.MAP.interactPos.kutadgu; __tj.E.tj_teleport(Math.round(x), Math.round(y + 14)); __tj.E.tj_face(0); __tj.step(2); })()`;
+    await a.js(tp); await settle(a); await a.js(tp); await a.press('KeyE', 'e'); await delay(160);
+    for (let t = 0; t < 400 && !(await a.js(`!!document.querySelector('#panel-card [data-trial] [data-opt]:not(:disabled)')`)); t++) { if (await a.js('!!__tj.dialog')) await a.js('__tj.advanceDialog()'); await delay(40); }
+    assert.equal(await a.js(`document.querySelector('#panel-card [data-trial]')?.dataset.trial`), 'horde_books', 'the book shelf opens its trial');
+    assert(!(await a.js(`!!document.querySelector('#panel-card .trial-verdict')`)), 'no verdict before the choice');
+    seenTrials.push('horde_books');
+    await a.js(`document.querySelector('#panel-card [data-opt="${(KEY.horde_books + 1) % 4}"]').click()`);
+    await a.wait(`!!document.querySelector('#panel-card .trial-verdict')`, 5000);
+    const c = await a.js(`(() => { const c = document.querySelector('#panel-card'), v = c.querySelector('.trial-verdict'); return {no: v.classList.contains('no'), right: c.querySelector('[data-opt].right')?.dataset.opt,
+      verdict: v.textContent, expl: c.querySelector('.expl')?.textContent || '', source: c.querySelector('.source')?.textContent || '', locked: [...c.querySelectorAll('[data-opt]')].every(b => b.disabled)}; })()`);
+    assert(c.no && c.locked && c.right === String(KEY.horde_books) && c.verdict.includes('ABCD'[KEY.horde_books] + ')'), 'verdict card: ' + JSON.stringify(c));
+    assert(/1069/.test(c.expl) && /Қашқари|Кашгари/.test(c.source), 'explanation and source: ' + JSON.stringify(c));
+    await a.shot('map06-card-books'); await settle(a);
+  }
   assert(await a.js(`JSON.parse(localStorage.getItem('tarikh.anomalies') || '[]').includes('map06')`), 'anomaly collected');
   assert(await a.js('__tj.save(true)'), 'save MAP06');
   const snap = await a.js('JSON.stringify([__tj.G.flags.b, [...__tj.G.flags.talked].sort(), [...__tj.G.flags.tracks].sort(), __tj.G.flags.quiz, __tj.G.local.granted])');
@@ -206,7 +225,7 @@ try {
   await a.shot('map06-10-result');
   const res = await a.js('({score: document.querySelector(".verdict .big")?.textContent, pass: !!document.querySelector("#go-camp"), secrets: __tj.LV.secretsFound(__tj.G.flags), page: __tj.LV.pageLines(__tj.G.flags), area: __tj.E.tj_state(35)})');
   assert.equal(res.score, '100 / 100'); assert(res.pass); assert.equal(res.page, 4); assert.equal(res.area, 0);
-  assert.deepEqual([...new Set(seenTrials)].sort(), Object.keys(KEY).sort(), 'all eight trials');
+  assert.deepEqual([...new Set(seenTrials)].sort(), Object.keys(KEY).sort(), 'all twelve trials');
   assert.equal(seenChoices.length, 1, 'one choice');
   assert.deepEqual(a.errors, [], 'no runtime errors');
   console.log('MAP06 browser PASS', JSON.stringify(res), 'choice', GATE);

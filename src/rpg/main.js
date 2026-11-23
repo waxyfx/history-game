@@ -337,7 +337,12 @@ async function trial(def) {
       const idx = +btn.dataset.opt;
       if (official?.active) {
         btn.dataset.busy = 1;
-        try { await official.answer(def.id, idx); } catch { delete btn.dataset.busy; netFail(); return; }
+        try { await official.answer(def.id, idx); } catch (e) {
+          // A secret trial the server has no key for yet (its migration not applied) must not trap the player in the
+          // panel: it is decided locally and simply adds nothing to the official score. Other failures: retry.
+          if (!(def.tier === 'secret' && /Сұрақ табылмады/.test(e?.message || ''))) { delete btn.dataset.busy; netFail(); return; }
+          toast(lang === 'ru' ? 'Это тайное испытание пока не учитывается на сервере.' : 'Бұл құпия сынақ серверде әзірге есептелмейді.', 'warn');
+        }
       }
       picked = idx;
       $('panel-card').querySelectorAll('[data-opt]').forEach(b => { b.disabled = true; });

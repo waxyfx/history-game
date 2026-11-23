@@ -41,6 +41,15 @@ try {
   assert(await a.flag('ppshDone'), 'burst line');
   for (const s of ['turksib', 'heroines', 'famine', 'deport', 'cards', 'ninestars']) await a.use(s);
   assert.equal(await a.js('__tj.LV.secretsFound(__tj.G.flags)'), 6, 'six secrets: ' + JSON.stringify(await a.js('__tj.LV.SECRETS.filter(k => !__tj.G.flags.b[k])')));
+  // Audit №14: 1937–38, ALZhIR, the Virgin Lands, Baikonur. The closed shelf answered rightly by hand (the card at once),
+  // ALZhIR wrongly on purpose (the card names the right option; spare secret points keep the result at 100).
+  const c1 = await a.trialCard('banned', B.KEY.sov_1937);
+  assert.equal(c1.id, 'sov_1937'); assert(c1.ok && c1.locked && c1.right === String(B.KEY.sov_1937) && c1.wrong === null, 'right card: ' + JSON.stringify(c1));
+  assert(/1937/.test(c1.expl) && /ақтау|реабилит/.test(c1.source), 'explanation and source: ' + JSON.stringify(c1));
+  const c2 = await a.trialCard('alzhir', (B.KEY.sov_alzhir + 1) % 4);
+  assert.equal(c2.id, 'sov_alzhir'); assert(!c2.ok && c2.right === String(B.KEY.sov_alzhir) && c2.verdict.includes('ABCD'[B.KEY.sov_alzhir] + ')'), 'wrong card: ' + JSON.stringify(c2));
+  for (const s of ['tyn', 'baikonur']) await a.use(s);
+  assert(['sov_tyn', 'sov_baikonur'].every(id => B.seen.trials.includes(id)), 'Virgin Lands and Baikonur trials');
   await a.save();
   // The hall of memory: two voices, then the Heir.
   await a.goTo(46, 16); await a.settle(); assert(await a.flag('bossSeen'), 'the hall');
@@ -53,7 +62,7 @@ try {
   await a.use('names'); assert(await a.flag('page')); assert(await a.flag('nameslist'));
   const res = await a.finish('gate9');
   assert.equal(res.score, '100 / 100'); assert(res.pass); assert.equal(res.page, 4); assert.equal(res.secrets, 6);
-  assert.deepEqual([...new Set(B.seen.trials)].sort(), Object.keys(B.KEY).sort(), 'all eight trials');
+  assert.deepEqual([...new Set(B.seen.trials)].sort(), Object.keys(B.KEY).sort(), 'all twelve trials');
   assert.equal(B.seen.choices.length, 1, 'one choice');
   assert.equal(await a.js('__tj.LV.next'), 10, 'next level');
   assert.deepEqual(a.errors, [], 'no runtime errors');

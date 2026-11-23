@@ -129,6 +129,8 @@ def place():
     for x, y in ((14, 96), (51, 96), (18, 108), (46, 108), (32, 104)): o('torch', *P(x, y))
     for x in (16, 49): o('pillar', *P(x, 93.5), 0); o('pillar', *P(x, 98.5), 0)
     o('stairs', *P(32, 114)); o('beam', *P(29.5, 111)); o('beam', *P(35.5, 111))
+    # ---- the madrasa's book shelf: copies of the Karakhanid books (secret trial horde_books, audit №14)
+    o('shelves', *P(101, 33.6))
 
 def emit():
     build_world(); build_under(); place()
@@ -153,6 +155,7 @@ def emit():
     I('thread', *P(23.4, 86.6), 16, tag('thread'))
     I('scribehome', *P(14, 52.6), 18, tag('scribehome'))
     I('fivemarks', *P(66.4, 50.8), 16, tag('fivemarks'))
+    I('kutadgu', *P(101, 34.4), 18)
     for key, x0, y0, x1, y1 in (('town', 40, 22, 76, 46), ('field', 46, 2, 74, 20), ('ford', 22, 48, 36, 58), ('madrasa', 78, 24, 102, 42),
                                ('hall', 16, 103, 49, 110), ('arena', 12, 91, 53, 100), ('necropolis', 80, 46, 108, 68)):
         L.trigger(key, x0, y0, x1, y1)

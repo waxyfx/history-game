@@ -82,6 +82,34 @@ function helpers(p, KEY, seen, choice, name) {
     await p.js(tp(2)); await settle(); await p.js(tp(1));
     await p.press('KeyE', 'e'); await delay(160); await settle();
   };
+  // One trial answered by hand (audit №14): walk up to the NPC or object, read the dialogue, pick an option, and read the
+  // feedback card the same panel turns into at once — verdict, right option, explanation, source — before the story goes on.
+  const trialCard = async (target, pick) => {
+    const isNpc = await p.js(`__tj.LV.MAP.npcs.includes(${JSON.stringify(target)})`);
+    const tp = isNpc ? `(() => { const i = __tj.LV.MAP.npcs.indexOf(${JSON.stringify(target)}); const E = __tj.E; E.tj_teleport(E.tj_npc(i, 0), E.tj_npc(i, 1) + 14); E.tj_face(0); __tj.step(2); })()`
+      : `(() => { const [x, y] = __tj.LV.MAP.interactPos[${JSON.stringify(target)}]; __tj.E.tj_teleport(Math.round(x), Math.round(y + 14)); __tj.E.tj_face(0); __tj.step(2); })()`;
+    await p.js(tp); await settle(); await p.js(tp);
+    await p.press('KeyE', 'e'); await delay(160);
+    let id = null;
+    for (const t0 = Date.now(); !id && Date.now() - t0 < 30000;) {
+      if (await p.js('!!__tj.cine')) await p.js('__tj.skipCutscene()');
+      if (await p.js('!!__tj.dialog')) { await p.js('__tj.advanceDialog()'); await delay(25); continue; }
+      id = await p.js(`document.querySelector('#panel-card [data-trial] [data-opt]:not(:disabled)') ? document.querySelector('#panel-card [data-trial]').dataset.trial : null`);
+      if (!id) await delay(60);
+    }
+    assert(id, 'a trial opens at ' + target);
+    assert(!(await p.js(`!!document.querySelector('#panel-card .trial-verdict')`)), 'no verdict before the choice');
+    seen.trials.push(id);
+    await p.js(`document.querySelector('#panel-card [data-opt="${pick}"]').click()`);
+    await p.wait(`!!document.querySelector('#panel-card .trial-verdict')`, 5000);
+    const card = await p.js(`(() => { const c = document.querySelector('#panel-card'), v = c.querySelector('.trial-verdict');
+      return {ok: v.classList.contains('ok'), verdict: v.textContent.replace(/\\s+/g, ' ').trim(), right: c.querySelector('[data-opt].right')?.dataset.opt ?? null,
+        wrong: c.querySelector('[data-opt].wrong')?.dataset.opt ?? null, expl: c.querySelector('.expl')?.textContent || '', source: c.querySelector('.source')?.textContent || '',
+        locked: [...c.querySelectorAll('[data-opt]')].every(b => b.disabled)}; })()`);
+    await p.shot(`${name}-card-${id}`);
+    await settle();
+    return {id, ...card};
+  };
   const flag = k => p.js(`!!__tj.G.flags.b.${k}`);
   const stage = () => p.js('__tj.LV.questStage(__tj.G.flags)');
   const goTo = (x, y) => p.js(`(() => { __tj.E.tj_teleport(${Math.round(x * 16)}, ${Math.round(y * 16)}); __tj.step(3); })()`);
@@ -109,5 +137,5 @@ function helpers(p, KEY, seen, choice, name) {
     await p.shot(`${name}-result`);
     return p.js('({score: document.querySelector(".verdict .big")?.textContent, pass: !!document.querySelector("#go-camp"), next: document.querySelector("#go-camp")?.textContent, secrets: __tj.LV.secretsFound(__tj.G.flags), page: __tj.LV.pageLines(__tj.G.flags)})');
   };
-  return {settle, use, talk, flag, stage, goTo, groupKill, moves, charge, combo, shoot, save, bossStep, bossState, finish};
+  return {settle, use, talk, trialCard, flag, stage, goTo, groupKill, moves, charge, combo, shoot, save, bossStep, bossState, finish};
 }

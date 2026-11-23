@@ -15,7 +15,8 @@ const LV = {};
 for (const n of [6, 7, 8, 9, 10]) {
   LV[n] = {story: await import(`../src/rpg/story${pad(n)}.js`), quest: await import(`../src/rpg/quest${pad(n)}.js`), level: await loadLevel(n),
     mod: await import(`../src/rpg/level${n}.js`), map: (await import(`../src/rpg/gen/map${pad(n)}.js`))[`MAP${pad(n)}`],
-    sql: await readFile(new URL(`../supabase/migrations/${MIGRATION[n]}.sql`, import.meta.url), 'utf8'),
+    sql: await readFile(new URL(`../supabase/migrations/${MIGRATION[n]}.sql`, import.meta.url), 'utf8') +
+      await readFile(new URL('../supabase/migrations/020_content_gaps.sql', import.meta.url), 'utf8'),   // audit №14 secret trials
     wasm: await WebAssembly.compile(await readFile(new URL(`../public/engine/rpg/tarikh-rpg-${n}.wasm`, import.meta.url)))};
 }
 function engine(n) { const e = new WebAssembly.Instance(LV[n].wasm, {}).exports; e._initialize?.(); e.tj_init(); return e; }
@@ -37,18 +38,25 @@ test('the campaign has ten playable epochs in order, each with its own engine bu
 });
 
 for (const n of [6, 7, 8, 9, 10]) {
-  test(`MAP${pad(n)}: eight trials match the private keys and the 90 + 10 scoring contract`, () => {
+  // Audit №14 added secret trials to MAP06 (IX–XII centuries), MAP08 (1916, Alash) and MAP09 (1937–38, ALZhIR, the Virgin
+  // Lands, Baikonur): the mandatory trials still give 90, secrets add 2–3 each, and the level score is capped at 100.
+  const TRIALS = {6: 12, 7: 8, 8: 11, 9: 12, 10: 8};
+  test(`MAP${pad(n)}: ${TRIALS[n]} trials match the private keys and the 90 + secrets (capped at 100) scoring contract`, () => {
     const {story, sql} = LV[n], trials = Object.values(story.HISTORICAL_QUIZZES);
     const keys = Object.fromEntries([...sql.matchAll(new RegExp(`\\(${n}, '(\\w+)', '(main|final|secret)', (\\d), (\\d+)\\)`, 'g'))].map(m => [m[1], {kind: m[2], correct: +m[3], points: +m[4]}]));
-    assert.equal(trials.length, 8); assert.equal(Object.keys(keys).length, 8);
+    assert.equal(trials.length, TRIALS[n]); assert.equal(Object.keys(keys).length, TRIALS[n]);
+    assert.equal(new Set(trials.map(q => q.id)).size, trials.length, 'unique trial ids');
     for (const q of trials) {
       assert.deepEqual(keys[q.id], {kind: q.tier, correct: q.correctIndex, points: q.points}, q.id);
       assert.equal(q.epoch, n); assert.equal(q.options.length, 4); assert.match(q.question, /[әғқңөұүһі]/i);
+      assert(q.options.every((o, i) => o.startsWith('ABCD'[i] + ') ')), q.id + ': options in the «A) …» format');
       assert(q.source && q.explanation && q.evidence.length && q.branch.ok.length && q.branch.no.length, q.id);
+      if (q.tier === 'secret') assert(q.points >= 2 && q.points <= 3, q.id + ': a secret gives 2–3 points');
     }
-    assert.equal(trials.reduce((s, q) => s + q.points, 0), 100);
+    assert(trials.reduce((s, q) => s + q.points, 0) >= 100, 'all trials reach the 100 cap');
     assert.equal(trials.filter(q => q.tier !== 'secret').reduce((s, q) => s + q.points, 0), 90);
     assert.equal(trials.filter(q => q.tier === 'final').length, 1);
+    assert.deepEqual([...(story.MAIN_QUIZ_ORDER || [1, 2, 3, 4, 5, 6, 7, 8])].sort((a, b) => a - b), Object.keys(story.HISTORICAL_QUIZZES).map(Number).sort((a, b) => a - b), 'the journal lists every trial');
     assert.match(sql, /pass_score = 60|100, 60, 60/);
   });
 
@@ -104,10 +112,34 @@ test('quest stages advance along the story (MAP07–MAP10)', () => {
 });
 
 test('scoring: 100 for all trials, the pass mark 60, the page needs the four main trials', () => {
-  for (const n of [7, 8, 9, 10]) {
+  for (const n of [6, 7, 8, 9, 10]) {
     const {quest, story} = LV[n], all = Object.fromEntries(Object.values(story.HISTORICAL_QUIZZES).map(q => [q.id, {ok: true}]));
     assert.equal(quest.scoreOf(flags({}, {quiz: all})), 100); assert.equal(quest.PASS_SCORE, 60);
     assert.equal(quest.pageLines(flags({}, {quiz: all})), 4); assert.equal(quest.PAGE_TOTAL, 4);
+    // Mandatory trials alone give 90; the secrets fill the rest up to the cap.
+    const main = Object.fromEntries(Object.values(story.HISTORICAL_QUIZZES).filter(q => q.tier !== 'secret').map(q => [q.id, {ok: true}]));
+    assert.equal(quest.scoreOf(flags({}, {quiz: main})), 90, `MAP${pad(n)} mandatory = 90`);
+  }
+});
+
+// Audit №14: each new secret trial is reached in play — the quest hands it to G.quiz from its NPC or object.
+test('the IX–XII century, 1916/Alash and 1937–Baikonur secret trials are reachable from their NPCs and objects', async () => {
+  const NEW = {6: ['horde_karakhan', 'horde_books', 'horde_kipchak', 'horde_otrar'], 8: ['rus_1916', 'rus_torgai', 'rus_alash'],
+    9: ['sov_1937', 'sov_alzhir', 'sov_tyn', 'sov_baikonur']};
+  for (const [n, ids] of Object.entries(NEW)) {
+    const {quest, story, map} = LV[n], e = engine(+n), asked = [];
+    const byNum = Object.fromEntries(Object.entries(story.HISTORICAL_QUIZZES).map(([k, q]) => [+k, q.id]));
+    const G = {E: e, flags: flags({met: true}), local: {granted: []}, lang: () => 'kk', changed() {}, save() {}, area: () => 0,
+      say: async () => {}, quiz: async k => { asked.push(byNum[k]); G.flags.quiz[byNum[k]] = {a: 1, t: 1, ok: true}; }, choose: async () => 0,
+      cine: async () => {}, toast() {}, sfx() {}, spawnFx() {}, heroPos: () => [0, 0], levelPassed: () => false, gotoLevel() {}, results() {}, complete() {}};
+    const q = quest.createQuest(G);
+    for (const id of ids) {
+      const at = Object.values(story.HISTORICAL_QUIZZES).find(t => t.id === id).at;
+      asked.length = 0;
+      if (map.npcs.includes(at)) await q.talk(at); else { assert(map.interacts.includes(at), id + ' at ' + at); await q.interact(at); }
+      assert.deepEqual(asked, [id], `MAP${pad(n)} ${at} → ${id}`);
+      assert(story.NAMES[at] || map.npcs.includes(at), `${at} has a name`);
+    }
   }
 });
 

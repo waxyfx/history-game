@@ -156,6 +156,10 @@ export function createQuest(G) {
       case 'letter': return K.secret('letter', D.letter);
       case 'plough': if (!B.plough) { set('plough'); G.sfx('secret'); await G.say(D.plough); } return quiz('rus_aul');
       case 'keys': { const fresh = !B.keys; await K.secret('keys', D.keys); if (fresh) K.anomaly('map08'); return; }
+      // 1916 and Alash (audit №14): papers and a banner from the next century, each with its secret trial.
+      case 'ukaz': if (!f.quiz.rus_1916) G.sfx('secret'); await G.say(D.ukaz, FACTS.y1916); return quiz('rus_1916');
+      case 'torgai': if (!f.quiz.rus_torgai) G.sfx('secret'); await G.say(D.torgai, FACTS.torgai); return quiz('rus_torgai');
+      case 'gazet': if (!f.quiz.rus_alash) G.sfx('secret'); await G.say(D.gazet, FACTS.alash); return quiz('rus_alash');
     }
   }
   async function finale() {

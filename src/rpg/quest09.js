@@ -166,6 +166,11 @@ export function createQuest(G) {
       case 'deport': if (!B.deport) { set('deport'); G.sfx('secret'); await G.say(D.deport); } return quiz('sov_deport');
       case 'cards': { await K.secret('cards', D.cards); K.artifact('card'); return; }
       case 'ninestars': { const fresh = !B.ninestars; await K.secret('ninestars', D.ninestars); if (fresh) K.anomaly('map09'); return; }
+      // 1937–38 and ALZhIR (memory of 1941); the Virgin Lands and Baikonur (lines of the future opened early) — audit №14.
+      case 'banned': if (!f.quiz.sov_1937) G.sfx('secret'); await G.say(D.banned, FACTS.repress); return quiz('sov_1937');
+      case 'alzhir': if (!f.quiz.sov_alzhir) G.sfx('secret'); await G.say(D.alzhir, FACTS.alzhir); return quiz('sov_alzhir');
+      case 'tyn': if (!f.quiz.sov_tyn) G.sfx('secret'); await G.say(D.tyn, FACTS.tyn); return quiz('sov_tyn');
+      case 'baikonur': if (!f.quiz.sov_baikonur) G.sfx('heartbeat'); await G.say(D.baikonur, FACTS.baikonur); return quiz('sov_baikonur');
     }
   }
   async function finale() {

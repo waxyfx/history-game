@@ -83,6 +83,9 @@ def place():
     for x in (38, 54): o('torch', *P(x, 6))
     for x in (40, 46, 52): o('poster', *P(x, 4.6))
     o('shelves', *P(38, 18)); o('shelves', *P(54, 18)); o('scrolltable', *P(46, 6.4), 0, t('names'))
+    # the Virgin Lands poster by the platform (audit №14); the closed library shelf, the returned letters at the post office
+    # and the street loudspeaker already stand above
+    o('poster', *P(84, 67.4))
 
 def emit():
     build(); place()
@@ -99,6 +102,10 @@ def emit():
     I('deport', *P(72, 70.8), 16, tag('deport'))
     I('names', *P(46, 7.2), 22, tag('names'))
     I('lists', *P(58, 49.8), 16)
+    I('banned', *P(68, 38.8), 16)      # the library's closed shelf: books of the Alash authors (1937–38)
+    I('alzhir', *P(49, 47.4), 16)      # the post office shelf: letters returned from «26-я точка» (ALZhIR)
+    I('tyn', *P(84, 68.2), 16)         # a poster of 1954 by the platform: the Virgin Lands
+    I('baikonur', *P(46, 30.8), 18)    # the street loudspeaker speaks from 12 April 1961
     for key, x0, y0, x1, y1 in (('station', 2, 58, 88, 72), ('orchard', 64, 6, 86, 28), ('hall', 36, 4, 57, 19), ('street', 34, 26, 58, 40)):
         L.trigger(key, x0, y0, x1, y1)
     W_ = lambda *a: a

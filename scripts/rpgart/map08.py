@@ -101,6 +101,9 @@ def place():
     # the teacher's corner: a desk under an awning by the aul
     o('officedesk', *P(30, 30), 0, t('primer')); o('bench', *P(30, 32.6))
     o('reeds', *P(78, 24)); o('reeds', *P(77, 60)); o('willow', *P(76, 40)); o('birch', *P(8, 30), 1)
+    # 1916 and Alash (audit №14): the newspaper «Қазақ» by the teacher's desk (the decree lies on the archive shelf,
+    # the year 1916 is stitched on the sarbaz banner — both objects already stand above)
+    o('scrolltable', *P(26, 29.6), 0)
 
 def emit():
     build(); place()
@@ -115,6 +118,9 @@ def emit():
     I('primer', *P(30, 30.8), 18, tag('primer'))
     I('musketrack', *P(60, 50), 20)
     for k, (x, y) in enumerate(((39, 44.8), (59, 44.8), (59, 26.8))): I(f'door{k + 1}', *P(x, y), 20)
+    I('ukaz', *P(37.6, 23.4), 14)      # the archive shelf: the decree of 25 June 1916
+    I('torgai', *P(22, 10.8), 18)      # the sarbaz banner: «1916. Торғай. Амангелді»
+    I('gazet', *P(26, 30.4), 16)       # the newspaper «Қазақ», 1917
     for key, x0, y0, x1, y1 in (('fort', 35, 21, 64, 46), ('range', 64, 46, 76, 64), ('camp', 4, 4, 28, 22), ('court', 44, 30, 58, 40)):
         L.trigger(key, x0, y0, x1, y1)
     W_ = lambda *a: a

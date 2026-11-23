@@ -89,6 +89,18 @@ test('Admin panel data: only teachers and admins, built from real profiles and r
   assert.deepEqual(byId.stone_main.choices, {0: 1, 1: 1});
   assert.deepEqual(byId.stone_cave.choices, {1: 1});
   assert.deepEqual(byId.stone_workshop.choices, {}, 'an unanswered trial has no choices');
+  // Audit №14 (migration 020): the new secret trials of MAP06, MAP08 and MAP09 are rows of the Trials tab, and each has the
+  // title the panel reads from its story file; every trial of those levels has a server key.
+  for (const [lv, ids] of [[6, ['horde_karakhan', 'horde_books', 'horde_kipchak', 'horde_otrar']], [8, ['rus_1916', 'rus_torgai', 'rus_alash']],
+    [9, ['sov_1937', 'sov_alzhir', 'sov_tyn', 'sov_baikonur']]]) {
+    const rows = await rpc('admin_trial_stats', [lv]), story = await import(`../src/rpg/story0${lv}.js`);
+    const trials = Object.fromEntries(Object.values(story.HISTORICAL_QUIZZES).map(q => [q.id, q]));
+    assert.deepEqual(rows.map(r => r.quiz_id).sort(), Object.keys(trials).sort(), `MAP0${lv}: server rows = story trials`);
+    for (const id of ids) {
+      const r = rows.find(x => x.quiz_id === id);
+      assert(r.kind === 'secret' && r.points === trials[id].points && trials[id].title && !('correct' in r), `MAP0${lv} ${id}: ${JSON.stringify(r)}`);
+    }
+  }
 
   // One student's answers in one finished run (migration 019): picked option, right or not, points; no keys.
   const results = await rpc('admin_get_level_results', [1, 50, 0]);

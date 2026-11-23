@@ -97,7 +97,7 @@ export function applyWorld(G) {
   ia('bowbench', !!b.bowyerMet); ia('lancerack', true);
   for (const m of MATERIALS) ia(m, !!b.bowyerMet && !b[m] && !b.bowMade);
   ia('archivedoor', true); ia('stairsup', true); ia('origscroll', !!b.heraldDown);
-  for (const s of ['turbe', 'margin', 'balbalblock', 'scribehome', 'fivemarks']) ia(s, true);
+  for (const s of ['turbe', 'margin', 'balbalblock', 'scribehome', 'fivemarks', 'kutadgu']) ia(s, true);
   ia('thread', !!b.heraldDown);
   // Groups: 1 Qarabuqa's patrol at the bazaar, 2 his lancers on the field, 3 the necropolis patrol,
   // 4 ink shades below, 5 the herald of the forged yarlyk.
@@ -114,11 +114,11 @@ export function applyWorld(G) {
   for (const [k, on] of Object.entries(want)) if (G.armed[k] !== on) { arm(k, on); G.armed[k] = on; }
   const npcFlags = (key, talk, bubble, hidden = 0) => E.tj_npc_flags(NPC[key], talk ? 1 : 0, bubble, hidden ? 1 : 0);
   npcFlags('scribe', true, !met ? 2 : 0);
-  npcFlags('khorezm', true, met && !f.talked.includes('khorezm') ? 1 : 0);
-  npcFlags('mudarris', true, met && !f.talked.includes('mudarris') ? 1 : 0);
+  npcFlags('khorezm', true, met && (!f.talked.includes('khorezm') || !f.quiz.horde_otrar) ? 1 : 0);
+  npcFlags('mudarris', true, met && (!f.talked.includes('mudarris') || !f.quiz.horde_karakhan) ? 1 : 0);
   npcFlags('yamchi', true, ev && !f.talked.includes('yamchi') ? 2 : 0);
   npcFlags('bowyer', true, ev && b.lanceDone && !b.bowyerMet ? 2 : b.bowyerMet && !b.bowMade && MATERIALS.every(m => b[m]) ? 2 : 0);
-  npcFlags('aysha', true, 0);
+  npcFlags('aysha', true, met && !f.quiz.horde_kipchak ? 1 : 0);
   const qVisible = b.heraldDown && !b.choiceMade;
   if (G.forceNpc || G.npcState !== npcState(b)) {
     G.npcState = npcState(b);
@@ -172,11 +172,14 @@ export function createQuest(G) {
         if (!B.met) return G.cine('scribe', cutScribe);
         if (B.page) return G.say(D.scribeAfter);
         return G.say(D.scribe2);
+      // Secret trials of the IX–XII centuries (audit №14): the people of 1350 remember Otrar, the Karakhanids, the Kipchaks.
       case 'khorezm':
-        if (first) { await G.say(D.khorezm1, FACTS.saraychik); addTo('talked', 'khorezm'); return; }
+        if (first) { await G.say(D.khorezm1, FACTS.saraychik); addTo('talked', 'khorezm'); }
+        if (!f.quiz.horde_otrar) { await G.say(D.otrar, FACTS.otrar); return quiz('horde_otrar'); }
         return G.say(D.khorezm2);
       case 'mudarris':
-        if (first) { await G.say(D.mudarris1, FACTS.uzbek); addTo('talked', 'mudarris'); return; }
+        if (first) { await G.say(D.mudarris1, FACTS.uzbek); addTo('talked', 'mudarris'); }
+        if (!f.quiz.horde_karakhan) { await G.say(D.karakhan, FACTS.karakhan); return quiz('horde_karakhan'); }
         return G.say(D.mudarris2);
       case 'yamchi':
         if (first) { await G.say(D.yamchi1, FACTS.yam); addTo('talked', 'yamchi'); if (!B.lanceLesson) return lanceLesson(); return; }
@@ -192,7 +195,9 @@ export function createQuest(G) {
         return G.say(D.bowyerWait);
       case 'aysha':
         addTo('talked', 'aysha');
-        return G.say(D.aysha);
+        await G.say(D.aysha);
+        if (!f.quiz.horde_kipchak) { await G.say(D.kipchak, FACTS.kipchak); return quiz('horde_kipchak'); }
+        return;
     }
   }
   async function lanceLesson() {
@@ -245,6 +250,7 @@ export function createQuest(G) {
         if (MATERIALS.every(m => b()[m])) G.toast?.(ru() ? 'Все три материала — к Токе' : 'Үш материал да бар — Тоқаға бар', 'good');
         return;
       case 'caravangate': await G.say(D.caravangate); return quiz('horde_paiza');
+      case 'kutadgu': if (!f.quiz.horde_books) G.sfx('secret'); await G.say(D.kutadgu); return quiz('horde_books');
       case 'archivedoor':
         if (!evidenceDone(f)) return G.say(D.archiveDoorLocked);
         if (!armsDone(f)) return G.say(D.armsNeeded);
