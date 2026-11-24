@@ -21,12 +21,12 @@ export function makePersistence(schema) {
     if (!f.quiz || typeof f.quiz !== 'object' || Array.isArray(f.quiz)) invalid();
     for (const [id, r] of Object.entries(f.quiz)) {
       if (!quizIds.has(id) || !r || !Number.isSafeInteger(r.a) || r.a < 1 || r.a > 99 || !isTime(r.t)) invalid();
-      if ((r.ok != null && typeof r.ok !== 'boolean') || (r.ch != null && (!Number.isSafeInteger(r.ch) || r.ch < 0 || r.ch > 9))) invalid();
+      if ((r.ok != null && typeof r.ok !== 'boolean') || [r.ch, r.r].some(v => v != null && (!Number.isSafeInteger(v) || v < 0 || v > 99999))) invalid();
     }
     if (f.bonus != null && (!Number.isSafeInteger(f.bonus.correct) || f.bonus.correct < 0 || f.bonus.correct > 5 || !isTime(f.bonus.t))) invalid();
     if (!isTime(f.t0 ?? 0) || !isTime(f.tEnd ?? 0)) invalid();
     return {b: {...f.b}, talked: [...(f.talked || [])], tracks: [...(f.tracks || [])], petro: [...(f.petro || [])],
-      quiz: Object.fromEntries(Object.entries(f.quiz).map(([k, r]) => [k, {a: r.a, t: r.t, by: Number.isSafeInteger(r.by) ? r.by : 0, ok: r.ok === true, ch: Number.isSafeInteger(r.ch) ? r.ch : null}])),
+      quiz: Object.fromEntries(Object.entries(f.quiz).map(([k, r]) => [k, {a: r.a, t: r.t, by: Number.isSafeInteger(r.by) ? r.by : 0, ok: r.ok === true, ch: Number.isSafeInteger(r.ch) ? r.ch : null, ...(Number.isSafeInteger(r.r) ? {r: r.r} : {})}])),
       bonus: f.bonus ? {correct: f.bonus.correct, t: f.bonus.t, by: Number.isSafeInteger(f.bonus.by) ? f.bonus.by : 0} : null, t0: f.t0 || 0, tEnd: f.tEnd || 0};
   }
   function validateLocal(l) {

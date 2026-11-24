@@ -22,7 +22,8 @@ export function applyRu(S, pack) {
   for (const [k, ru] of Object.entries(pack.quests || {})) if (S.QUESTS?.[k] && !S.QUESTS[k].ru) S.QUESTS[k].ru = ru;
   for (const q of Object.values(S.HISTORICAL_QUIZZES || {})) {
     const t = pack.quizzes?.[q.id]; if (!t) continue;
-    q.ru = {title: t.title, questTitle: t.questTitle, question: t.question, options: t.options, evidence: t.evidence, explanation: t.explanation, source: t.source};
+    q.ru = {title: t.title, questTitle: t.questTitle, question: t.question, options: t.options, evidence: t.evidence, explanation: t.explanation, source: t.source,
+      items: t.items, left: t.left, right: t.right, text: t.text};   // order / match / gap trials
     walkLines(q.intro, fill); walkLines(q.branch, fill);
     const pair = (list, ru) => (list || []).forEach((l, i) => { if (ru?.[i] && (!l.ru || l.ru === l.kk)) l.ru = ru[i]; });
     pair(q.intro, t.intro); pair(q.branch?.ok, t.ok); pair(q.branch?.no, t.no);
@@ -35,7 +36,10 @@ export function localQuiz(q, lang) {
   if (lang !== 'ru' || !q?.ru) return q;
   const r = q.ru;
   return {...q, title: r.title || q.title, questTitle: r.questTitle || q.questTitle, question: r.question || q.question,
-    options: r.options?.length === q.options.length ? r.options : q.options, evidence: r.evidence || q.evidence,
-    explanation: r.explanation || q.explanation, source: r.source || q.source};
+    options: q.options && r.options?.length === q.options.length ? r.options : q.options, evidence: r.evidence || q.evidence,
+    explanation: r.explanation || q.explanation, source: r.source || q.source,
+    ...(q.items ? {items: r.items?.length === q.items.length ? r.items : q.items} : {}),
+    ...(q.left ? {left: r.left?.length === q.left.length ? r.left : q.left, right: r.right?.length === q.right.length ? r.right : q.right} : {}),
+    ...(q.text ? {text: r.text && r.text.includes('___') ? r.text : q.text} : {})};
 }
 export const TRIAL_LEVELS_RU = ['', 'Наблюдение', 'Понимание', 'Анализ', 'Реконструкция', 'Критическое мышление'];

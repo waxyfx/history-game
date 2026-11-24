@@ -76,11 +76,17 @@ test('Results: single-choice trials are scored secretly on the server and cannot
   assert.equal(run.score, undefined, 'no score during the run');
   assert.equal((await rpc('level_start_run', [1, 'solo', null])).id, run.id, 'active run is resumed');
   const ans = (quiz, choice, req = randomUUID()) => rpc('level_submit_answer', [run.id, quiz, choice, req]);
-  // Wrong choice on a mandatory trial: recorded, no verdict revealed, cannot be changed afterwards.
+  // Wrong choice on a mandatory trial: recorded; the verdict and the right option come only AFTER the one choice
+  // (migration 021: the browser has no keys), no points are shown, the choice cannot be changed afterwards.
+  await assert.rejects(rpc('trial_check', [1, 'stone_main', 0]), /ресми попыткада/, 'no key before a first choice');
   const first = await ans('stone_main', 0);
-  assert.equal(first.recorded, true); assert.equal(first.correct, undefined); assert.equal(first.awarded, undefined);
+  assert.equal(first.recorded, true); assert.equal(first.correct, false); assert.equal(first.right, 1); assert.equal(first.awarded, undefined);
   assert.deepEqual(first.run.answered, ['stone_main']);
-  assert.equal((await ans('stone_main', 1)).recorded, false, 'one choice per trial');
+  const again = await ans('stone_main', 1);
+  assert.equal(again.recorded, false, 'one choice per trial'); assert.equal(again.correct, false, 'the first choice stands'); assert.equal(again.choice, 0);
+  // Practice replay of an answered trial: a verdict, nothing recorded.
+  assert.deepEqual(await rpc('trial_check', [1, 'stone_main', 1]), {correct: true, right: 1});
+  await assert.rejects(rpc('trial_check', [1, 'stone_cave', 1]), /ресми попыткада/, 'an unanswered trial stays closed');
   const req = randomUUID(); await ans('stone_hunting', 2, req);
   assert.equal((await ans('stone_hunting', 2, req)).duplicate, true);
   await assert.rejects(ans('stone_hunting', 1, req), /басқа деректермен/);
@@ -169,3 +175,25 @@ test('Results: team mode requires membership of a started session; abandon frees
   await rpc('level_abandon_run', [run.id]);
   const fresh = await rpc('level_start_run', [1, 'solo', null]); assert.notEqual(fresh.id, run.id);
 });
+
+// Migration 023: the game's progress follows the account — own rows only, the save format checked, size limited.
+test('Cloud saves: one row per player and level, nobody else can read it', async t => {
+  const {db, as, rpc, googleUser} = await setup(); t.after(() => db.close());
+  const aru = await googleUser('Ару Сапар', 'google-3001'), beks = await googleUser('Бекс Әли', 'google-3002');
+  const snap = {v: 3, words: [1, 2, 3], flags: {b: {met: true}, quiz: {}}, local: {}, savedAt: '2026-11-24T10:00:00Z'};
+  await as(aru);
+  assert.equal(await rpc('rpg_save_get', [6]), null, 'nothing saved yet');
+  assert(await rpc('rpg_save_put', [6, JSON.stringify(snap)]));
+  assert.deepEqual((await rpc('rpg_save_get', [6])).data, snap);
+  await rpc('rpg_save_put', [6, JSON.stringify({...snap, words: [4]})]);
+  assert.deepEqual((await rpc('rpg_save_get', [6])).data.words, [4], 'the newer save replaces the older one');
+  await assert.rejects(rpc('rpg_save_put', [11, JSON.stringify(snap)]), /табылмады/);
+  await assert.rejects(rpc('rpg_save_put', [6, JSON.stringify({v: 2})]), /пішімі/);
+  await assert.rejects(rpc('rpg_save_put', [6, JSON.stringify({...snap, pad: 'x'.repeat(40000)})]), /үлкен/);
+  await assert.rejects(db.query('select * from private.rpg_saves'), /permission denied/);
+  await as(beks);
+  assert.equal(await rpc('rpg_save_get', [6]), null, "another player's save stays private");
+  await as(null, 'anon');
+  await assert.rejects(rpc('rpg_save_get', [6]), /permission denied|Кіру қажет/);
+});
+

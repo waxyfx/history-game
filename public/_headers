@@ -1,8 +1,14 @@
 # Netlify response headers (copied into dist/ by Vite; works for Git deploys and drag-and-drop deploys alike).
-# Audit №14: no page may be framed by another site (clickjacking), no MIME sniffing, no referrer leak, no device APIs.
+# Audit №14: no page may be framed by another site (clickjacking), no MIME sniffing, no referrer leak, no device APIs,
+# and a full Content-Security-Policy: scripts only from this site (+ WebAssembly), data only to this site and Supabase.
+#   script-src sha256-…: the inline script of Netlify's «Powered by Netlify» badge (an iframe srcdoc inherits this
+#     policy). If Netlify changes that script the badge stays hidden; update the hash from the badge's srcdoc.
+#   style-src 'unsafe-inline': style attributes of the UI; fonts from Google Fonts (public/licenses/ASSETS.md).
+#   connect-src: the project's Supabase (REST, RPC, Auth, Realtime websockets for co-op).
+#   img-src https:: Google profile pictures in the personal cabinet.
 /*
   X-Frame-Options: DENY
-  Content-Security-Policy: frame-ancestors 'none'; object-src 'none'; base-uri 'self'; form-action 'self'
+  Content-Security-Policy: default-src 'self'; script-src 'self' 'wasm-unsafe-eval' 'sha256-BkKP2XO6WOEc3kXOiLr2ZoY83hamalKjPY9xBcbXVuw='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: blob: https:; media-src 'self' blob: data:; connect-src 'self' https://wnxrifgbtqiqlmelvvdg.supabase.co wss://wnxrifgbtqiqlmelvvdg.supabase.co; worker-src 'self'; manifest-src 'self'; frame-src 'self'; frame-ancestors 'none'; object-src 'none'; base-uri 'self'; form-action 'self'; upgrade-insecure-requests
   X-Content-Type-Options: nosniff
   Referrer-Policy: strict-origin-when-cross-origin
   Permissions-Policy: camera=(), microphone=(), geolocation=(), payment=(), usb=(), interest-cohort=()
@@ -10,6 +16,9 @@
 
 /manifest.webmanifest
   Content-Type: application/manifest+json
+
+/sw.js
+  Cache-Control: no-cache
 
 /assets/*
   Cache-Control: public, max-age=31536000, immutable

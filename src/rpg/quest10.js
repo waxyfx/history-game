@@ -63,7 +63,7 @@ export function applyWorld(G) {
   const want = {square: !b.squareSeen, lobby: !!b.met && !b.lobbySeen, hall: !!b.sacrifice && !b.bossSeen, archive: false};
   for (const [k, on] of Object.entries(want)) if (G.armed[k] !== on) { arm_(k, on); G.armed[k] = on; }
   const npcFlags = (key, talk, bubble, hidden = 0) => E.tj_npc_flags(NPC[key], talk ? 1 : 0, bubble, hidden ? 1 : 0);
-  npcFlags('citizen', true, !b.met ? 2 : 0);
+  npcFlags('citizen', true, !b.met ? 2 : !f.quiz.ind_order ? 1 : 0);
   npcFlags('prof', true, b.met && !f.tracks.includes(PROOFS.lobby) ? 2 : 0);
   npcFlags('dana', true, 0); npcFlags('erlan', true, 0); npcFlags('guard10', true, 0);
   // The fight empties the building: everyone waits outside on the street until Zulmat falls.
@@ -108,6 +108,7 @@ export function createQuest(G) {
     switch (key) {
       case 'citizen':
         if (!B.met) { await G.say(D.citizen1); addTo('talked', 'citizen'); set('met'); return; }
+        if (!f.quiz.ind_order) return quiz('ind_order');   // a time-order trial (audit №14: more task types)
         return G.say(D.citizen2);
       case 'dana': case 'erlan':
         addTo('talked', key);
@@ -146,10 +147,10 @@ export function createQuest(G) {
         if (!B.zulmatDown) return G.say(D.gatecore.slice(0, 1));
         return finale();
       // secrets
-      case 'zheltoqsan': if (!B.zheltoqsan) { set('zheltoqsan'); G.sfx('secret'); await G.say(D.zheltoqsan); } return quiz('ind_zheltoqsan');
-      case 'constitution': if (!B.constitution) { set('constitution'); G.sfx('secret'); await G.say(D.constitution); } return quiz('ind_constitution');
-      case 'tenge': if (!B.tenge) { set('tenge'); G.sfx('secret'); await G.say(D.tenge); } return quiz('ind_tenge');
-      case 'astana': if (!B.astana) { set('astana'); G.sfx('secret'); await G.say(D.astana); } return quiz('ind_capital');
+      case 'zheltoqsan': if (!B.zheltoqsan) { set('zheltoqsan'); G.sfx('secret'); await G.say(D.zheltoqsan, FACTS.zheltoqsan); } return quiz('ind_zheltoqsan');
+      case 'constitution': if (!B.constitution) { set('constitution'); G.sfx('secret'); await G.say(D.constitution, FACTS.constitution); } return quiz('ind_constitution');
+      case 'tenge': if (!B.tenge) { set('tenge'); G.sfx('secret'); await G.say(D.tenge, FACTS.tenge); } return quiz('ind_tenge');
+      case 'astana': if (!B.astana) { set('astana'); G.sfx('secret'); await G.say(D.astana, FACTS.capital); } return quiz('ind_capital');
       case 'book': return K.secret('book', D.book);
       case 'tencharms': { const fresh = !B.tencharms; await K.secret('tencharms', D.tencharms); if (fresh) K.anomaly('map10'); return; }
     }

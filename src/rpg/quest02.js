@@ -78,7 +78,7 @@ export function applyWorld(G) {
   tag('ashwall', b.ashwall); tag('tablet', b.tablet); tag('keeperfire', b.ember);
   const village = !!b.village;
   ia('hearth', true); ia('brokenaxe', b.forgeSeen); ia('forgetrack', village); ia('bracelet', village && !b.bracelet);
-  ia('doorsymbol', village); ia('secretnote', !b.note); ia('granary', village); ia('pgaibar', true);
+  ia('doorsymbol', village); ia('secretnote', !b.note); ia('granary', village); ia('pgaibar', true); ia('pot', true);
   ia('cist', b.elderClue); ia('mausoleum', true);
   tag('chipseal', b.eggChipOpen); ia('chipcrack', !b.eggChipOpen, 90); ia('gpuplan', !!b.eggChipOpen);   // team easter egg
   ia('sheafstack', !b.sheaves, 90); ia('hiddenmould', b.sheaves);
@@ -255,6 +255,9 @@ export function createQuest(G) {
         return;
       }
       case 'tablet': if (B.smithTalk && !B.tablet) return G.cine('tablet', cutTablet); return;
+      case 'pot':   // an artifact trial (audit №14: more task types)
+        if (!f.quiz.bronze_pot) G.sfx('secret');
+        return quiz('bronze_pot');
       case 'keeperfire':
         if (B.keeper && !B.ember) { set('ember'); G.sfx('pickup'); G.spawnFx(pos('keeperfire'), 0, 20); return G.say(D.ember); }
         return;

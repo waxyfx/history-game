@@ -5,7 +5,7 @@ import RU from './ru/map01.js';
 import {applyRu} from './ru-pack.js';
 applyRu(S, RU);   // Russian for the parts written only in Kazakh
 import * as Q from './quest.js';
-import {restoreSnapshot} from './persistence.js';
+import {restoreSnapshot, validateFlags} from './persistence.js';
 import {INTERACT_LABEL} from './i18n.js';
 import {EGG_NAMES, EGG_LABELS} from './eggs.js';
 
@@ -18,7 +18,7 @@ export default {
   BONUS_META: S.BONUS_META, CHAMBER_FAIL: S.CHAMBER_FAIL, TRIAL_LEVELS: S.TRIAL_LEVELS, MAIN_QUIZ_ORDER: S.MAIN_QUIZ_ORDER,
   SECRETS: S.SECRETS, DIALOGUES: S.DIALOGUES, NAMES: EGG_NAMES, LABELS: {...INTERACT_LABEL, ...EGG_LABELS},
   applyWorld: Q.applyWorld, createQuest: Q.createQuest, questStage: Q.questStage, questTarget: Q.questTarget,
-  scoreOf: Q.scoreOf, secretsFound: Q.secretsFound, pageLines: Q.pageLines, pageTotal: 4, restoreSnapshot,
+  scoreOf: Q.scoreOf, secretsFound: Q.secretsFound, pageLines: Q.pageLines, pageTotal: 4, restoreSnapshot, validateFlags,
   begin: quest => quest.interact('page1'),
   UI: {weapon: {kk: ['Шоқпар', 'Найза', 'Садақ'], ru: ['Дубина', 'Копьё', 'Лук']}},
   next: 2, passLabel: {kk: 'Қола дәуіріне өту →', ru: 'В бронзовый век →'},

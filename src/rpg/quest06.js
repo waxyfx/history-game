@@ -113,7 +113,7 @@ export function applyWorld(G) {
     hall: !!b.under && !b.hallSeen, arena: !!b.under && !b.bossSeen};
   for (const [k, on] of Object.entries(want)) if (G.armed[k] !== on) { arm(k, on); G.armed[k] = on; }
   const npcFlags = (key, talk, bubble, hidden = 0) => E.tj_npc_flags(NPC[key], talk ? 1 : 0, bubble, hidden ? 1 : 0);
-  npcFlags('scribe', true, !met ? 2 : 0);
+  npcFlags('scribe', true, !met ? 2 : !f.quiz.horde_khans && !b.page ? 1 : 0);
   npcFlags('khorezm', true, met && (!f.talked.includes('khorezm') || !f.quiz.horde_otrar) ? 1 : 0);
   npcFlags('mudarris', true, met && (!f.talked.includes('mudarris') || !f.quiz.horde_karakhan) ? 1 : 0);
   npcFlags('yamchi', true, ev && !f.talked.includes('yamchi') ? 2 : 0);
@@ -171,6 +171,7 @@ export function createQuest(G) {
       case 'scribe':
         if (!B.met) return G.cine('scribe', cutScribe);
         if (B.page) return G.say(D.scribeAfter);
+        if (!f.quiz.horde_khans) return quiz('horde_khans');   // a time-order trial (audit №14: more task types)
         return G.say(D.scribe2);
       // Secret trials of the IX–XII centuries (audit №14): the people of 1350 remember Otrar, the Karakhanids, the Kipchaks.
       case 'khorezm':
@@ -267,7 +268,7 @@ export function createQuest(G) {
       case 'margin': if (!B.margin) { set('margin'); G.sfx('secret'); await G.say(D.margin); } return quiz('horde_urus');
       case 'balbalblock': return secret('balbalblock', D.balbalblock);
       case 'thread': { const fresh = !B.thread; await secret('thread', D.thread); if (fresh) artifact('thread'); return; }
-      case 'scribehome': return secret('scribehome', D.scribehome);
+      case 'scribehome': await secret('scribehome', D.scribehome); return quiz('horde_map');   // a map trial
       case 'fivemarks': { const fresh = !B.fivemarks; await secret('fivemarks', D.fivemarks); if (fresh) anomaly(G, 'map06'); return; }
     }
   }

@@ -278,8 +278,23 @@ export const HISTORICAL_QUIZZES = {
     explanation: 'XVII–XVIII ғасырларда Түркістан Қазақ хандығының саяси орталығы болды. Мұнда Қожа Ахмет Ясауи кесенесі тұр; оның маңында көптеген қазақ хандары мен билері жерленген.',
     source: 'Қазақстан тарихы бойынша зерттеулер.',
   },
+  // A gap trial (audit №14: more task types); key in migration 022. The khanate's founding year is not graded
+  // (src/content.js reviewNotes): the gap asks for the founder.
+  9: {
+    id: 'kaz_gap', epoch: 7, tier: 'secret', level: 1, points: 2, at: 'zhyrshy', kind: 'observation', type: 'gap',
+    title: 'Жырдағы бос орын', questTitle: 'ҚҰПИЯ СЫНАҚ · БОС ОРЫН',
+    intro: [Lk('zhyrshy', 'Жырдың бір жолын ұмытып қалдым. Кім еді ол, Жәнібекпен бірге көш бастаған?')],
+    evidence: E('Жошы әулетінен шыққан екі сұлтан', 'Шу мен Талас бойына көш', 'Қазақ хандығының бастауы'),
+    question: 'Бос орынға дұрыс есімді қой.',
+    text: 'Қазақ хандығының негізін ___ мен Жәнібек хан қалады.',
+    options: ['Керей', 'Абылай', 'Тәуке', 'Есім'],
+    correctIndex: 0,
+    branch: {ok: [Lk('zhyrshy', 'Иә, Керей! Жыр қайта жалғасты.')], no: [Lk('zhyrshy', 'Жоқ, ол кейінгі заманның ханы. Жыр басқаша басталатын.')]},
+    explanation: 'Жошы әулетінен шыққан Керей мен Жәнібек сұлтандар Әбілқайыр хандығынан бөлініп, Шу мен Талас бойына көшіп келді; Қазақ хандығы осылай құрылды. Құрылған жылы деректерде әртүрлі көрсетіледі (көбіне 1465 жыл). Есім, Тәуке және Абылай — кейінгі ғасырлардағы хандар.',
+    source: 'Мұхаммед Хайдар Дулати, «Тарих-и Рашиди»; Қазақ хандығы тарихы бойынша зерттеулер.',
+  },
 };
-export const MAIN_QUIZ_ORDER = [1, 2, 3, 4, 5, 6, 7, 8];
+export const MAIN_QUIZ_ORDER = [1, 2, 3, 4, 5, 6, 7, 8, 9];
 export const TRIAL_LEVELS = ['', 'Бақылау', 'Түсіну', 'Талдау', 'Қайта құру', 'Сыни ойлау'];
 export const BONUS_META = [];
 export const BONUS_QUIZ = {id: 'kaz_bonus', title: {kk: ''}, questions: []};

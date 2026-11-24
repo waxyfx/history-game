@@ -35,7 +35,8 @@ try {
   assert.equal(c.id, 'rus_1916'); assert(!c.ok && c.locked && c.right === String(B.KEY.rus_1916), 'verdict card: ' + JSON.stringify(c));
   assert(c.verdict.includes('ABCD'[B.KEY.rus_1916] + ')') && /1916/.test(c.expl) && /жарлық|указ/.test(c.source), 'right option, explanation, source: ' + JSON.stringify(c));
   for (const s of ['torgai', 'gazet']) await a.use(s);
-  assert(['rus_torgai', 'rus_alash'].every(id => B.seen.trials.includes(id)), 'Torgai and Alash trials');
+  await a.talk('teacher');   // the second visit: a matching trial (people and deeds)
+  assert(['rus_torgai', 'rus_alash', 'rus_match'].every(id => B.seen.trials.includes(id)), 'Torgai, Alash and matching trials');
   await a.save();
   // The night of the fire.
   await a.goTo(50, 36); await a.settle(); assert(await a.flag('night'), 'the night attack');
@@ -67,7 +68,7 @@ try {
   assert(await a.flag('page'), 'page: ' + JSON.stringify(await a.js('({stage: __tj.LV.questStage(__tj.G.flags), b: __tj.G.flags.b, focus: __tj.E.tj_state(6), panel: __tj.panelOpen, cine: __tj.cine})'))); assert.equal(await a.stage(), 'home');
   const res = await a.finish('gate8');
   assert.equal(res.score, '100 / 100'); assert(res.pass); assert.equal(res.page, 4); assert.equal(res.secrets, 6);
-  assert.deepEqual([...new Set(B.seen.trials)].sort(), Object.keys(B.KEY).sort(), 'all eleven trials');
+  assert.deepEqual([...new Set(B.seen.trials)].sort(), Object.keys(B.KEY).sort(), 'all twelve trials');
   assert.equal(await a.js('__tj.LV.next'), 9, 'next level');
   assert.deepEqual(a.errors, [], 'no runtime errors');
   console.log('MAP08 browser PASS', JSON.stringify(res));

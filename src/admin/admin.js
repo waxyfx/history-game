@@ -70,18 +70,26 @@ async function load(force = false) {
   }
 }
 
-// Trial texts of one level from its story file: title, options and the right option (the client ships them anyway;
-// the server never returns keys). MAP01's five secret questions come from BONUS_QUIZ.
+// Trial texts of one level from its story file (title, options, type) and the right options from the server: a
+// production build ships no answer keys (audit №14), so admin_trial_keys (teacher/admin only, migration 021) supplies
+// them. MAP01's five secret questions come from BONUS_QUIZ.
 const kk = v => (v && typeof v === 'object' && !Array.isArray(v) ? v.kk : v);
 async function trialTexts(n) {
   if (state.titles[n] || !STORIES[n]) return state.titles[n] || {};
-  const m = await STORIES[n]();
-  const out = Object.fromEntries(Object.values(m.HISTORICAL_QUIZZES || {}).map(q => [q.id, {title: kk(q.title), options: kk(q.options) || [], right: q.correctIndex}]));
-  (m.BONUS_META || []).forEach((b, i) => { const q = m.BONUS_QUIZ?.questions?.[i]; if (q) out[b.id] = {title: `${kk(m.BONUS_QUIZ.title)} · ${i + 1}`, options: kk(q.o) || [], right: q.a}; });
+  const [m, keys] = await Promise.all([STORIES[n](), call('admin_trial_keys', {p_level: n}).catch(() => ({}))]);
+  const out = Object.fromEntries(Object.values(m.HISTORICAL_QUIZZES || {}).map(q => [q.id, {title: kk(q.title), type: q.type || 'choice',
+    options: kk(q.options) || [], items: kk(q.items) || null, left: kk(q.left) || null, right_: kk(q.right) || null, right: keys[q.id] ?? q.correctIndex}]));
+  (m.BONUS_META || []).forEach((b, i) => { const q = m.BONUS_QUIZ?.questions?.[i]; if (q) out[b.id] = {title: `${kk(m.BONUS_QUIZ.title)} · ${i + 1}`, type: 'choice', options: kk(q.o) || [], right: keys[b.id] ?? q.a}; });
   return (state.titles[n] = out);
 }
 const LETTER = i => 'ABCDEFGHIJ'[i] || '?';
-const optText = (q, i) => { const o = q?.options?.[i] || ''; return /^[A-JА-Г]\)\s/.test(o) ? o : `${LETTER(i)}) ${o}`; };
+// An answer as the teacher reads it: an option, or for ordering/matching trials the arrangement (2031 = items 2, 0, 3, 1).
+const optText = (q, i) => {
+  if (i == null || i === '') return '';
+  if (q?.type === 'order' && q.items) return String(i).padStart(q.items.length, '0').split('').map(k => q.items[+k] ?? '?').join(' → ');
+  if (q?.type === 'match' && q.left) return String(i).padStart(q.left.length, '0').split('').map((k, j) => `${q.left[j]} — ${q.right_?.[+k] ?? '?'}`).join('; ');
+  const o = q?.options?.[i] || ''; return /^[A-JА-Г]\)\s/.test(o) ? o : `${LETTER(i)}) ${o}`;
+};
 const trialName = (n, id) => state.titles[n]?.[id]?.title || id;
 
 // CSV for Excel: UTF-8 with BOM, «;» between columns (what Excel expects in kk/ru locales), quotes doubled.
@@ -237,6 +245,9 @@ function choicesCell(t, q) {
   if (!t.choices) return '<span class="muted">019 миграциясы керек</span>';
   const total = Object.values(t.choices).reduce((sum, v) => sum + num(v), 0);
   if (!total) return '<span class="muted">—</span>';
+  if (q?.type === 'order' || q?.type === 'match')   // arrangements (codes), most chosen first; the right one highlighted
+    return `<ol class="arrangements">${Object.entries(t.choices).map(([k, v]) => [+k, num(v)]).filter(([, v]) => v > 0).sort((a, b) => b[1] - a[1]).slice(0, 4)
+      .map(([k, v]) => `<li class="${k === q.right ? 'right' : ''}"><small>${esc(optText(q, k))}</small> <b>${v}</b></li>`).join('')}</ol>`;
   const opts = Math.max((q?.options || []).length, ...Object.keys(t.choices).map(k => +k + 1));
   return `<div class="choice-bars">${Array.from({length: opts}, (_, i) => { const v = num(t.choices[i]);
     return `<span class="${i === q?.right ? 'right' : ''}" title="${esc(q?.options?.[i] || '')}"><b>${LETTER(i)}</b><i style="width:${pct(v, total)}%"></i>${v}</span>`; }).join('')}</div>`;
@@ -312,7 +323,7 @@ function attach() {
       (state.trials[n] || []).map(t => { const q = texts[t.quiz_id], w = topWrong(t, q);
         return [trialName(n, t.quiz_id), t.quiz_id, KIND[t.kind] || t.kind, num(t.points), num(t.answered_count), num(t.right_count),
           t.answered_count ? pct(num(t.right_count), num(t.answered_count)) : '', ...[0, 1, 2, 3].map(i => num(t.choices?.[i])),
-          q?.right != null ? LETTER(q.right) : '', w ? optText(q, w.i) : '']; }));
+          q?.right != null ? (q.type === 'order' || q.type === 'match' ? optText(q, q.right) : LETTER(q.right)) : '', w ? optText(q, w.i) : '']; }));
   });
   $('csv-answers')?.addEventListener('click', () => {
     const A = state.answers, n = A.result.level_id;

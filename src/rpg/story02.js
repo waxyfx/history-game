@@ -472,8 +472,22 @@ export const HISTORICAL_QUIZZES = {
     explanation: 'Қалайы — қоладың маңызды бөлігі, бірақ оның кені сирек кездеседі. Шығыс Қазақстанда (Қалба, Нарым жоталары) қола дәуірінің қалайы кеніштерінің іздері табылған; қалайы айырбас арқылы алыс өңірлерге тараған. Бұл далалық қауымдардың бір-бірімен кең байланыста болғанын көрсетеді.',
     source: 'Stöllner Th. et al. Tin from Kazakhstan — Steppe tin for the West?, 2011; Қазақстан тарихы, 1-т., 1996.',
   },
+  // An artifact trial (audit №14: more task types; the picture public/art/pot.svg). Key in migration 022.
+  8: {
+    id: 'bronze_pot', epoch: 2, tier: 'secret', level: 1, points: 2, at: 'pot', kind: 'observation', type: 'artifact',
+    image: '/art/pot.svg', imageAlt: 'Геометриялық өрнекті қыш құмыра',
+    title: 'Өрнекті құмыра', questTitle: 'ЖАСЫРЫН СЫНАҚ · АРТЕФАКТ',
+    intro: [L('aibar', 'Үйдің бұрышында — қыш құмыра. Бетінде үшбұрыштар мен ирек сызықтар.')],
+    evidence: E('Геометриялық өрнек: үшбұрыш, ирек (меандр)', 'Қолмен жасалып, отқа күйдірілген саз', 'Қола дәуірінің қонысы'),
+    question: 'Мұндай геометриялық өрнекті қыш ыдыстар Қазақстан жерінде қай мәдениеттің белгісі ретінде белгілі?',
+    options: ['A) Андрон мәдениеті — қола дәуірі', 'B) Ботай мәдениеті — энеолит', 'C) Алтын Орда қалалары — XIV ғ.', 'D) Түрік қағанаты — VI–VIII ғғ.'],
+    correctIndex: 0,
+    branch: {ok: [L('aibar', 'Андрон шеберлері. Өрнектің өзі — сол дәуірдің қолтаңбасы.')], no: [L('aibar', 'Жоқ... Айналама қара: мұнда қола құйылады.')]},
+    explanation: 'Андрон мәдениеті — Қазақстан жеріндегі қола дәуірінің (б.з.б. II мыңжылдық) негізгі мәдениеті. Оның қыш ыдыстары қолмен жасалып, үшбұрыш, ирек (меандр), шырша тәрізді геометриялық өрнектермен безендірілген. Мұндай ыдыстар қоныстардан да, қорымдардан да табылады.',
+    source: 'Қазақстан тарихы (көне заманнан бүгінге дейін), 1-т., Алматы, 1996; Кузьмина Е. Е. Откуда пришли индоарии?, 1994.',
+  },
 };
-export const MAIN_QUIZ_ORDER = [1, 2, 3, 4, 5, 6, 7];
+export const MAIN_QUIZ_ORDER = [1, 2, 3, 4, 5, 6, 7, 8];
 export const TRIAL_LEVELS = ['', 'Бақылау', 'Түсіну', 'Талдау', 'Қайта құру', 'Сыни ойлау'];
 // All MAP02 trials live in HISTORICAL_QUIZZES; no chamber-style multi-step investigation here.
 export const BONUS_META = [];
@@ -493,7 +507,7 @@ export const NAMES = {
   secretnote: 'Қозғалған тас', granary: 'Астық шұңқырлары', pgaibar: 'Жартас суреті', cist: 'Тас жәшік', mausoleum: 'Тас кесене',
   sheafstack: 'Шөп баулары', hiddenmould: 'Тас қалып', trapdoor: 'Жер қақпақ', stairsup: 'Баспалдақ', mural1: 'Қабырға суреті',
   mural2: 'Қабырға суреті', mural3: 'Қабырға суреті', mural4: 'Қабырға суреті', ashwall: 'Күл қабырға', instpillar: 'Тас бағана',
-  tinstone: 'Қара малта', tablet: 'Қола тақтайша', keeperfire: 'Сақшының оттығы', sakagate: 'Уақыт өткелі',
+  tinstone: 'Қара малта', tablet: 'Қола тақтайша', keeperfire: 'Сақшының оттығы', sakagate: 'Уақыт өткелі', pot: 'Қыш құмыра',
 };
 export const LABELS = {
   bracelet: 'take', secretnote: 'examine', sheafstack: 'hold', hiddenmould: 'take', trapdoor: 'hold', stairsup: 'enter',

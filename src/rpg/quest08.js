@@ -72,7 +72,7 @@ export function applyWorld(G) {
   npcFlags('tilmash', true, !b.met ? 2 : 0);
   for (const k of VOICES) npcFlags(k, true, b.met && !f.talked.includes(k) ? 2 : 0);
   npcFlags('sentry8', true, voicesDone(f) && !b.lesson ? 2 : 0);
-  npcFlags('teacher', true, b.met && !f.talked.includes('teacher') ? 1 : 0);
+  npcFlags('teacher', true, b.met && (!f.talked.includes('teacher') || !f.quiz.rus_match) ? 1 : 0);
   if (G.forceNpc || G.npcState !== String(b.bossSeen)) {
     G.npcState = String(b.bossSeen); npcFlags('chron', false, 0, 1);
     for (const k of ['tilmash', 'akbope', 'tatar', 'sarbaz', 'sentry8', 'teacher']) E.tj_npc_routine(NPC[k]);
@@ -124,6 +124,7 @@ export function createQuest(G) {
         return G.say(D.sentry1.slice(2));
       case 'teacher':
         if (first) { await G.say(D.teacher1); addTo('talked', 'teacher'); return; }
+        if (!f.quiz.rus_match) return quiz('rus_match');   // a matching trial (audit №14: more task types)
         return G.say(D.teacher2);
     }
   }

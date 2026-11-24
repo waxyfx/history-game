@@ -15,7 +15,7 @@ try {
   await a.goTo(44, 41); await a.settle(); assert(await a.flag('aulSeen'));
   await a.shot('map07-02-aul');
   // Act I — the memory of the aul: song, lament, pasture (wolves first).
-  await a.talk('zhyrshy'); await a.talk('apa');
+  await a.talk('zhyrshy'); await a.talk('zhyrshy'); await a.talk('apa');   // the second visit: a gap trial
   await a.talk('qyz'); assert(!(await a.js('__tj.G.flags.tracks.includes(3)')), 'pasture waits for the wolves');
   await a.groupKill(1); await a.settle(); assert(await a.flag('wolvesDone'), 'wolves gone');
   await a.talk('qyz');
@@ -64,7 +64,7 @@ try {
   assert(await a.flag('page')); assert.equal(await a.stage(), 'home');
   const res = await a.finish('gate7');
   assert.equal(res.score, '100 / 100'); assert(res.pass); assert.equal(res.page, 4); assert.equal(res.secrets, 6);
-  assert.deepEqual([...new Set(B.seen.trials)].sort(), Object.keys(B.KEY).sort(), 'all eight trials');
+  assert.deepEqual([...new Set(B.seen.trials)].sort(), Object.keys(B.KEY).sort(), 'all nine trials');
   assert.equal(B.seen.choices.length, 1, 'one choice');
   // The way on: the result's button leads to MAP08.
   assert.equal(await a.js('__tj.LV.next'), 8, 'next level');

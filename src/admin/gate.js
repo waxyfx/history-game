@@ -25,8 +25,11 @@ async function serverRole() {
 }
 async function openPanel(label, role = 'admin') {
   app.innerHTML = '';
-  // Supabase configured: the real panel (server data and roles). Otherwise the local demo panel.
-  if (db) await import('./admin.js'); else await import('./admin-demo.js');
+  // Supabase configured: the real panel (server data and roles). The local demo panel exists on the dev server only;
+  // a production build does not ship it (audit №14: dead admin-demo code in the bundle).
+  if (db) await import('./admin.js');
+  else if (import.meta.env.DEV) await import('./admin-demo.js');
+  else { app.innerHTML = '<main class="admin-gate"><p>Сервер бапталмаған: әкімші панелі тек Supabase қосылғанда жұмыс істейді.</p></main>'; return; }
   // Demo panel only: show it in the signed-in role (it otherwise starts as teacher).
   const sel = document.getElementById('role-select');
   if (sel && sel.value !== role) { sel.value = role; sel.dispatchEvent(new Event('change', {bubbles: true})); }

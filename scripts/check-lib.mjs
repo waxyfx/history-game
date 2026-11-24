@@ -55,13 +55,15 @@ function helpers(p, KEY, seen, choice, name) {
       const s = await p.js(`({c: __tj.cine, d: __tj.dialog, p: __tj.panelOpen, comic: !!document.querySelector('.tj-intro'), trial: document.querySelector('#panel-card [data-trial]')?.dataset.trial || null,
         choice: document.querySelector('#panel-card [data-choice]') ? document.querySelector('#panel-card h2').textContent : null,
         opt: !!document.querySelector('#panel-card [data-opt]:not(:disabled)'), close: !!document.querySelector('#panel-card [data-close]:not([hidden])'),
-        verdict: /✓|✗|Дұрыс!|Қате/.test(document.querySelector('#panel-card')?.textContent || '')})`);
+        verdict: /✓|✗|Дұрыс!|Қате/.test(document.querySelector('#panel-card')?.textContent || ''),
+        ty: document.querySelector('#panel-card [data-trial]')?.dataset.type || null, submit: !!document.querySelector('#panel-card [data-submit]')})`);
       if (s.comic) { if (!seen.comics++) { await delay(3500); await p.shot(`${name}-comic`); } await p.press('Escape', 'Escape'); await delay(400); continue; }
       if (s.c) await p.js('__tj.skipCutscene()');
       if (s.d) { await p.js('__tj.advanceDialog()'); await delay(25); continue; }
       if (s.p) {
         if (s.choice) { seen.choices.push(s.choice); await p.js(`document.querySelector('#panel-card [data-ch="${choice}"]').click()`); }
         else if (s.opt && s.trial) { assert(!s.verdict, 'no verdict during a trial'); seen.trials.push(s.trial); await p.js(`document.querySelector('#panel-card [data-opt="${KEY[s.trial] ?? 0}"]').click()`); }
+        else if (s.trial && s.submit && !s.verdict && (s.ty === 'order' || s.ty === 'match')) { seen.trials.push(s.trial); await p.js(`__tj.answerTrial(${KEY[s.trial] ?? 0}); document.querySelector('#panel-card [data-submit]').click()`); await delay(300); }
         else if (s.close) await p.js(`document.querySelector('#panel-card [data-close]:not([hidden])').click()`);
         await delay(90); continue;
       }

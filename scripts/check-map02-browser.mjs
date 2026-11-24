@@ -20,7 +20,7 @@ const child = spawn(exe, ['--headless=new', '--mute-audio', '--remote-debugging-
 await mkdir('test-results', {recursive: true});
 let port, ws;
 // QA answer key (matches supabase/migrations/008_bronze_age.sql).
-const KEY = {bronze_metal: 1, bronze_economy: 2, bronze_burial: 0, bronze_tablet: 1, bronze_casting: 2, bronze_mausoleum: 1, bronze_tin: 3};
+const KEY = {bronze_metal: 1, bronze_economy: 2, bronze_burial: 0, bronze_tablet: 1, bronze_casting: 2, bronze_mausoleum: 1, bronze_tin: 3, bronze_pot: 0};
 const T = 16;
 async function open(url, {w = 1600, h = 900} = {}) {
   const target = await (await fetch(`http://localhost:${port}/json/new?about:blank`, {method: 'PUT'})).json();
@@ -170,6 +170,8 @@ try {
   await use(a, 'pgaibar');
   // 5. Secrets on the surface: record under the loose stone, hidden workshop, mausoleum (wolves guard the burial ground).
   await use(a, 'secretnote');
+  await use(a, 'pot');   // the artifact trial (audit №14: more task types)
+  assert(seenTrials.includes('bronze_pot'), 'artifact trial');
   await use(a, 'sheafstack', {hold: 120, dx: -18, dy: 0, face: 2});
   await a.js(`__tj.E.tj_teleport(${63 * T}, ${55 * T}); __tj.step(6)`); await settle(a);
   await use(a, 'hiddenmould');
@@ -243,7 +245,7 @@ try {
   const res = await a.js(`({score: document.querySelector('.verdict .big')?.textContent, pass: !!document.querySelector('#go-camp'), secrets: __tj.LV.secretsFound(__tj.G.flags), page: __tj.LV.pageLines(__tj.G.flags)})`);
   assert.equal(res.score, '100 / 100'); assert(res.pass); assert.equal(res.secrets, 6); assert.equal(res.page, 4);
   await a.js(`document.querySelector('#open-journal').click()`); await delay(200); await a.shot('map02-18-journal');
-  assert.deepEqual([...new Set(seenTrials)].sort(), Object.keys(KEY).sort(), 'all seven trials were played');
+  assert.deepEqual([...new Set(seenTrials)].sort(), Object.keys(KEY).sort(), 'all eight trials were played');
   const hist = await a.js(`JSON.parse(localStorage.getItem('tarikh.rpg.results')).filter(h => h.map === 2)`);
   assert(hist.length === 1 && hist[0].passed, 'MAP02 result stored');
   assert.deepEqual(a.errors, [], 'no page errors');

@@ -49,13 +49,15 @@ const settle = async (p, {maxMs = 60000} = {}) => {
     const s = await p.js(`({c: __tj.cine, d: __tj.dialog, p: __tj.panelOpen, comic: !!document.querySelector('.tj-intro'), trial: document.querySelector('#panel-card [data-trial]')?.dataset.trial || null,
       choice: document.querySelector('#panel-card [data-choice]') ? document.querySelector('#panel-card h2').textContent : null,
       opt: !!document.querySelector('#panel-card [data-opt]:not(:disabled)'), close: !!document.querySelector('#panel-card [data-close]:not([hidden])'),
-      verdict: /✓|✗|Дұрыс!|Қате/.test(document.querySelector('#panel-card')?.textContent || '')})`);
+      verdict: /✓|✗|Дұрыс!|Қате/.test(document.querySelector('#panel-card')?.textContent || ''),
+      ty: document.querySelector('#panel-card [data-trial]')?.dataset.type || null, submit: !!document.querySelector('#panel-card [data-submit]')})`);
     if (s.comic) { if (!comicSeen++) { await delay(3500); await p.shot('map06-09-book'); } await p.press('Escape', 'Escape'); await delay(400); continue; }
     if (s.c) await p.js('__tj.skipCutscene()');
     if (s.d) { await p.js('__tj.advanceDialog()'); await delay(25); continue; }
     if (s.p) {
       if (s.choice) { seenChoices.push(s.choice); await p.js(`document.querySelector('#panel-card [data-ch="${GATE}"]').click()`); }
       else if (s.opt && s.trial) { assert(!s.verdict, 'no verdict during a trial'); seenTrials.push(s.trial); await p.js(`document.querySelector('#panel-card [data-opt="${KEY[s.trial] ?? 0}"]').click()`); }
+      else if (s.trial && s.submit && !s.verdict && (s.ty === 'order' || s.ty === 'match')) { seenTrials.push(s.trial); await p.js(`__tj.answerTrial(${KEY[s.trial] ?? 0}); document.querySelector('#panel-card [data-submit]').click()`); await delay(300); }
       else if (s.close) await p.js(`document.querySelector('#panel-card [data-close]:not([hidden])').click()`);
       await delay(90); continue;
     }
@@ -141,6 +143,8 @@ try {
   // Secrets and the remaining side trial.
   await groupKill(a, 3);
   for (const s of ['turbe', 'margin', 'balbalblock', 'scribehome', 'fivemarks', 'caravangate']) await use(a, s);
+  await talk(a, 'scribe');   // a time-order trial: the khans of the copy
+  assert(['horde_khans', 'horde_map'].every(id => seenTrials.includes(id)), 'order and map trials: ' + JSON.stringify(seenTrials));
   // The Karakhanid books answered wrongly on purpose: the same panel at once shows the verdict, the right option, the
   // explanation and the source (the secret points are spare — the level caps at 100, so the result stays 100).
   {
@@ -225,7 +229,7 @@ try {
   await a.shot('map06-10-result');
   const res = await a.js('({score: document.querySelector(".verdict .big")?.textContent, pass: !!document.querySelector("#go-camp"), secrets: __tj.LV.secretsFound(__tj.G.flags), page: __tj.LV.pageLines(__tj.G.flags), area: __tj.E.tj_state(35)})');
   assert.equal(res.score, '100 / 100'); assert(res.pass); assert.equal(res.page, 4); assert.equal(res.area, 0);
-  assert.deepEqual([...new Set(seenTrials)].sort(), Object.keys(KEY).sort(), 'all twelve trials');
+  assert.deepEqual([...new Set(seenTrials)].sort(), Object.keys(KEY).sort(), 'all fourteen trials');
   assert.equal(seenChoices.length, 1, 'one choice');
   assert.deepEqual(a.errors, [], 'no runtime errors');
   console.log('MAP06 browser PASS', JSON.stringify(res), 'choice', GATE);

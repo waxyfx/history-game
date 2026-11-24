@@ -8,15 +8,16 @@ import {persistence, SAVE_WORDS_L2} from '../src/rpg/level2.js';
 import {MAP02} from '../src/rpg/gen/map02.js';
 import {localPassed} from '../src/rpg/levels.js';
 
-const sql = await readFile(new URL('../supabase/migrations/008_bronze_age.sql', import.meta.url), 'utf8');
-const keys = Object.fromEntries([...sql.matchAll(/\(2, '(bronze_\w+)', '(main|final|secret)', (\d), (\d+)\)/g)].map(m => [m[1], {kind: m[2], correct: +m[3], points: +m[4]}]));
+const sql = await readFile(new URL('../supabase/migrations/008_bronze_age.sql', import.meta.url), 'utf8') +
+  await readFile(new URL('../supabase/migrations/022_trial_types.sql', import.meta.url), 'utf8');   // + the artifact trial
+const keys = Object.fromEntries([...sql.matchAll(/\(2, '(bronze_\w+)', '(main|final|secret)', (\d+), (\d+)\)/g)].map(m => [m[1], {kind: m[2], correct: +m[3], points: +m[4]}]));
 const KAZ = /[әғқңөұүһі]/i;
 const trials = Object.values(HISTORICAL_QUIZZES);
 const wasm = await WebAssembly.compile(await readFile(new URL('../public/engine/rpg/tarikh-rpg-2.wasm', import.meta.url)));
 const start = () => { const e = new WebAssembly.Instance(wasm, {}).exports; e._initialize?.(); e.tj_init(); return e; };
 
 test('MAP02 trials: answers and weights match the private server keys (008); texts are Kazakh', () => {
-  assert.equal(trials.length, 7);
+  assert.equal(trials.length, 8);
   for (const q of trials) {
     const k = keys[q.id];
     assert(k, 'server key for ' + q.id);
@@ -33,7 +34,7 @@ test('MAP02 trials: answers and weights match the private server keys (008); tex
   const by = t => trials.filter(q => q.tier === t);
   assert.equal(by('main').length, 3); assert.equal(by('final').length, 1); assert(by('secret').length >= 3);
   const sum = l => l.reduce((s, q) => s + q.points, 0);
-  assert.equal(sum(trials), MAX_SCORE); assert.equal(sum([...by('main'), ...by('final')]), 90); assert.equal(PASS_SCORE, 60);
+  assert(sum(trials) >= MAX_SCORE, 'secrets fill the 100 cap'); assert.equal(sum([...by('main'), ...by('final')]), 90); assert.equal(PASS_SCORE, 60);
   assert.match(sql, /required_quiz = 'bronze_tablet' where level_id = 2/);
 });
 

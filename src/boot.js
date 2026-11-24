@@ -1,3 +1,5 @@
+import {registerServiceWorker} from './sw-register.js';
+registerServiceWorker();
 const root=document.querySelector('#app');
 async function boot(){
  try{

@@ -256,7 +256,8 @@ body.has-parry .acts .t-parry, body.has-reload .acts .t-reload { display: block;
   .ammo { font-size: 13px; padding: 2px 8px 2px 2px; }
   .ammo .icon { transform: scale(.9); margin: -4px -2px; }
   .hb { height: 36px; min-width: 36px; }
-  #fs-btn, .hb kbd { display: none; }   /* no fullscreen on iPhone; no keyboard hints on a touch screen */
+  .hb kbd { display: none; }   /* no keyboard hints on a touch screen */
+  html:not(.can-fs) #fs-btn { display: none; }   /* the ⛶ button only where the browser can do fullscreen (not iPhone) */
   /* One compact row between the joystick and the buttons (audit №14: two rows covered the middle of the view).
      fitHotbar() scales it to fit; only when that would shrink the slots too much it wraps into two rows (.two-rows). */
   .hotbar { flex-wrap: nowrap; justify-content: center; }
@@ -304,3 +305,29 @@ body.has-parry .acts .t-parry, body.has-reload .acts .t-reload { display: block;
 .acc-panel .actions, .acc-panel .tabs { display: flex; flex-wrap: wrap; gap: .5em; }
 .acc-panel .muted, .acc-panel #acc-error { color: #c9b9a0; font-size: .85em; min-height: 1em; }
 .acc-panel #acc-error:not(:empty) { color: #f6a08d; }
+/* Trial types beyond the four-option choice (audit №14): artifact picture, map markers, gap sentence, order, match. */
+.artifact-trial { margin: .4em 0; text-align: center; }
+.artifact-trial img { max-width: min(260px, 70%); max-height: 180px; border-radius: .4em; background: #e5e1cc; padding: .4em; }
+.map-trial { position: relative; margin: .5em 0; border-radius: .5em; overflow: hidden; }
+.map-trial img { display: block; width: 100%; height: auto; }
+.map-trial button { position: absolute; transform: translate(-50%, -50%); margin: 0; padding: .3em .6em; min-height: 44px; font-size: .9em;
+  background: #101e22e6; color: #f3ead4; border: 1px solid var(--gold, #b48a4d); border-radius: 999px; white-space: nowrap; }
+.map-trial button span { color: var(--gold, #e2b45a); }
+.map-trial button.right { border-color: #6fcf7f; background: #2f6b3ae6; }
+.map-trial button.wrong { border-color: #e06a3f; background: #8a2c1fe6; }
+.map-trial button.picked { box-shadow: 0 0 0 2px var(--gold, #e2b45a); }
+.gap-text { font-size: 1.05em; line-height: 1.6; }
+.gap-text .gap { display: inline-block; min-width: 5em; padding: 0 .4em; border-bottom: 2px solid var(--gold, #e2b45a); text-align: center; font-weight: 700; }
+.opts.chips { grid-template-columns: repeat(auto-fit, minmax(7em, 1fr)); }
+.opts.chips button { text-align: center; }
+.order-box { list-style: none; margin: .5em 0; padding: 0; display: grid; gap: .35em; }
+.order-box li { display: grid; grid-template-columns: 2em 1fr 44px 44px; align-items: center; gap: .35em; padding: .25em .4em; border: 1px solid #ffffff2b; border-radius: .4em; background: #ffffff0d; }
+.order-box li .n { text-align: center; font-weight: 700; color: var(--gold, #e2b45a); }
+.order-box li button { margin: 0; min-height: 44px; padding: 0; }
+.order-box li.right, .match-box label.right { border-color: #6fcf7f; background: #2f6b3a44; }
+.order-box li.wrong, .match-box label.wrong { border-color: #e06a3f; background: #8a2c1f44; }
+.match-box { display: grid; gap: .4em; margin: .5em 0; }
+.match-box label { display: grid; grid-template-columns: 1fr 1fr; align-items: center; gap: .5em; padding: .3em .45em; border: 1px solid #ffffff2b; border-radius: .4em; }
+.match-box select { min-height: 44px; font: inherit; color: inherit; background: #101e22; border: 1px solid #ffffff40; border-radius: .35em; padding: 0 .4em; }
+@media (max-width: 600px) { .match-box label { grid-template-columns: 1fr; } }
+.journal-list .replay { margin-top: .3em; font-size: .85em; }

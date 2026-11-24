@@ -164,7 +164,7 @@ export function createQuest(G) {
       case 'heroines': if (!B.heroines) { set('heroines'); G.sfx('secret'); await G.say(D.heroines); } return quiz('sov_heroes');
       case 'famine': if (!B.famine) { set('famine'); G.sfx('secret'); await G.say(D.famine); } return quiz('sov_famine');
       case 'deport': if (!B.deport) { set('deport'); G.sfx('secret'); await G.say(D.deport); } return quiz('sov_deport');
-      case 'cards': { await K.secret('cards', D.cards); K.artifact('card'); return; }
+      case 'cards': { await K.secret('cards', D.cards); K.artifact('card'); return quiz('sov_order'); }   // a time-order trial
       case 'ninestars': { const fresh = !B.ninestars; await K.secret('ninestars', D.ninestars); if (fresh) K.anomaly('map09'); return; }
       // 1937–38 and ALZhIR (memory of 1941); the Virgin Lands and Baikonur (lines of the future opened early) — audit №14.
       case 'banned': if (!f.quiz.sov_1937) G.sfx('secret'); await G.say(D.banned, FACTS.repress); return quiz('sov_1937');

@@ -9,6 +9,8 @@ test('trial options have similar lengths and the correct one is not the giveaway
     const S = await import('../src/rpg/' + f);
     for (const q of Object.values(S.HISTORICAL_QUIZZES)) {
       n++;
+      // Order, match, gap and map trials have no lettered sentence options to compare (audit №14 trial types).
+      if (!['choice', 'artifact'].includes(q.type || 'choice')) continue;
       const L = q.options.map(o => o.length), c = q.correctIndex, sorted = [...L].sort((a, b) => b - a);
       assert(Math.max(...L) / Math.min(...L) <= 1.4, `${q.id}: lengths ${L.join('/')}`);
       assert(!(L[c] === sorted[0] && L[c] > 1.1 * sorted[1]), `${q.id}: the correct option is clearly the longest`);

@@ -62,7 +62,7 @@ test('MAP04 official SQL: locked progression, private answers, one-shot scoring 
   await assert.rejects(rpc('level_submit_answer',[run.id,'saka_final',3,randomUUID()]),/табылмады/);
   await assert.rejects(rpc('level_finish_run',[run.id,randomUUID()]),/соңғы сынағы/);
   const request=randomUUID();const args=[run.id,'hun_script',1,request];
-  const result=await rpc('level_submit_answer',args);assert.equal(result.correct,undefined);assert.equal(result.awarded,undefined);
+  const result=await rpc('level_submit_answer',args);assert.equal(result.correct,trials.find(q=>q.id==='hun_script').correctIndex===1);assert.equal(result.right,trials.find(q=>q.id==='hun_script').correctIndex);assert.equal(result.awarded,undefined);
   assert.equal((await rpc('level_submit_answer',args)).duplicate,true);
   await assert.rejects(rpc('level_submit_answer',[run.id,'hun_script',0,request]),/басқа деректермен/);
   await as(other);await assert.rejects(rpc('level_submit_answer',args),/табылмады/);await as(user);

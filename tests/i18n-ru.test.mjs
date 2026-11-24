@@ -21,8 +21,10 @@ for (let n = 1; n <= 10; n++) {
     assert(!L.ZONE_NAMES.ru.some(kazakh), 'zones: ' + L.ZONE_NAMES.ru.join(', '));
     for (const q of Object.values(L.HISTORICAL_QUIZZES)) {
       const r = localQuiz(q, 'ru');
-      for (const s of [r.title, r.questTitle, r.question, r.explanation, ...r.options, ...(r.evidence || [])]) assert(s && !kazakh(s), `${q.id}: ${s}`);
-      assert.deepEqual(r.options.map(o => o.slice(0, 2)), q.options.map(o => o.slice(0, 2)), q.id + ' option letters keep their order');
+      for (const s of [r.title, r.questTitle, r.question, r.explanation, ...(r.options || []), ...(r.evidence || []), ...(r.items || []), ...(r.left || []), ...(r.right || []), ...(r.text ? [r.text] : [])]) assert(s && !kazakh(s), `${q.id}: ${s}`);
+      if (/^[A-D]\) /.test(q.options?.[0] || '')) assert.deepEqual(r.options.map(o => o.slice(0, 2)), q.options.map(o => o.slice(0, 2)), q.id + ' option letters keep their order');
+      for (const k of ['options', 'items', 'left', 'right']) if (q[k]) assert(r[k] !== q[k] || !q[k].some(cyrKk.test.bind(cyrKk)), `${q.id}: ${k} translated`);
+      if (q.text) assert(r.text !== q.text && r.text.includes('___'), q.id + ': gap text translated');
       assert.equal(localQuiz(q, 'kk'), q, 'Kazakh stays the source');
     }
   });

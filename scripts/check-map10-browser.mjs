@@ -14,6 +14,7 @@ try {
   const kit = await a.js('[1, 2, 3].map(i => __tj.E.tj_item_count(i))');
   assert.deepEqual(kit, [1, 1, 1], 'sword, spear and bow at the start');
   await a.talk('citizen'); assert(await a.flag('met'));
+  await a.talk('citizen'); assert(await a.js('!!__tj.G.flags.quiz.ind_order'), 'a time-order trial');
   await a.groupKill(1);
   await a.use('monument'); assert(await a.js('__tj.G.flags.tracks.includes(1)'), 'the square');
   await a.talk('prof'); assert(await a.js('__tj.G.flags.tracks.includes(2)'), 'the lobby');
@@ -54,7 +55,7 @@ try {
   await a.use('gatecore'); assert(await a.flag('page')); assert.equal(await a.stage(), 'done');
   const res = await a.finish('gate10');
   assert.equal(res.score, '100 / 100'); assert(res.pass); assert.equal(res.page, 4); assert.equal(res.secrets, 6);
-  assert.deepEqual([...new Set(B.seen.trials)].sort(), Object.keys(B.KEY).sort(), 'all eight trials');
+  assert.deepEqual([...new Set(B.seen.trials)].sort(), Object.keys(B.KEY).sort(), 'all nine trials');
   assert.equal(await a.js('__tj.LV.next ?? null'), null, 'the last level');
   assert.deepEqual(a.errors, [], 'no runtime errors');
   console.log('MAP10 browser PASS', JSON.stringify(res));

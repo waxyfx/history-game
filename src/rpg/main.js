@@ -13,6 +13,8 @@ import {sfx, music, ambience, toggleAudioMute, isAudioMuted, unlockAudio, playSo
 import {createParty, makeCode, MAX_PARTY} from './net.js';
 import {db, rpc as rpcNamed} from '../api.js';
 import {requireAccount} from '../account.js';
+import {registerServiceWorker} from '../sw-register.js';
+registerServiceWorker();
 // Official-run RPCs are written with positional arguments (as in the SQL tests); Supabase needs named ones.
 const RPC_PARAMS = {level_start_run: ['p_level', 'p_mode', 'p_session'], level_submit_answer: ['p_run', 'p_quiz', 'p_choice', 'p_request'],
   level_finish_run: ['p_run', 'p_request'], level_abandon_run: ['p_run']};
@@ -312,57 +314,134 @@ const evidenceHTML = list => list && list.length ? `<div class="evidence"><small
 // first (one choice per trial, migration 007), so showing the answer afterwards cannot change the score.
 const LETTER = i => 'ABCDEFGHIJ'[i] || '?';
 const lettered = (o, i) => /^[A-JА-Г]\)\s/.test(o || '') ? o : `${LETTER(i)}) ${o || ''}`;
-function verdictHTML(def, idx) {
-  const ok = idx === def.correctIndex;
-  const why = !ok && Array.isArray(def.why) && (lang === 'kk' || def.whyRu) ? (def.whyRu || def.why)[idx] : '';
+// Trial types (audit №14: one MCQ type was not enough): 'choice' (default), 'artifact' (an object's picture and options),
+// 'map' (a place on the schematic map), 'gap' (a word into the blank of a sentence), 'order' (put events in time order)
+// and 'match' (pair each item with its partner). Every answer is one integer for the server: an option index, or for
+// order/match the arrangement as digits (2031 = items 2, 0, 3, 1).
+const typeOf = def => def.type || 'choice';
+const digits = (code, n) => String(code).padStart(n, '0').split('').map(Number);
+function answerText(def, code) {
+  if (!Number.isInteger(code)) return '';
+  const ty = typeOf(def);
+  if (ty === 'order') return digits(code, def.items.length).map((k, i) => `${i + 1}. ${def.items[k] ?? '?'}`).join(' → ');
+  if (ty === 'match') return digits(code, def.left.length).map((k, i) => `${def.left[i]} — ${def.right[k] ?? '?'}`).join('; ');
+  if (ty === 'gap') return (def.text || '').replace('___', `«${def.options[code] ?? '?'}»`);
+  if (ty === 'map') return def.options[code] ?? '?';
+  return lettered(def.options[code], code);
+}
+// right: the right answer's code, from the server (or the dev build's key); unknown for a very old save → no line.
+function verdictHTML(def, code, right, ok = code === right) {
+  const why = !ok && Array.isArray(def.why) && (lang === 'kk' || def.whyRu) ? (def.whyRu || def.why)[code] : '';
   return `<div class="trial-verdict ${ok ? 'ok' : 'no'}" role="status"><b>${ok ? '✓' : '✗'} ${esc(t(ok ? 'verdictOk' : 'verdictNo'))}</b>
-      ${ok ? '' : `<p>${esc(t('rightAnswer'))}: <b>${esc(lettered(def.options[def.correctIndex], def.correctIndex))}</b></p>`}${why ? `<p>${esc(why)}</p>` : ''}</div>
+      ${ok || !Number.isInteger(right) ? '' : `<p>${esc(t('rightAnswer'))}: <b>${esc(answerText(def, right))}</b></p>`}${why ? `<p>${esc(why)}</p>` : ''}</div>
     ${def.explanation ? `<p class="expl">${esc(def.explanation)}</p>` : ''}${def.source ? `<p class="source"><small>${esc(t('sourceLabel'))}:</small> ${esc(def.source)}</p>` : ''}`;
 }
-async function trial(def) {
-  const done = G.flags.quiz[def.id];
+// The verdict comes from the server (audit №14: no answer keys in the browser). In an official run the one choice is
+// recorded first and the answer carries the verdict and the right option (migration 021); outside it trial_check answers
+// for a teacher, after the level is finished, or for a trial already answered. A dev build without a server has the keys.
+async function verdictOf(def, code, retried = false, practice = false) {
+  if (!practice && official?.active) {
+    try {
+      const r = await official.answer(def.id, code);
+      if (Number.isInteger(r?.right)) return {ok: !!r.correct, right: r.right};
+    } catch (e) { if (!/Сұрақ табылмады/.test(e?.message || '')) throw e; }
+  }
+  if (Number.isInteger(def.correctIndex)) return {ok: code === def.correctIndex, right: def.correctIndex};
+  if (!db) throw new Error('no key');
+  if (!practice && !official && !retried) {   // the run may have failed to start earlier (network): try once more
+    await startOfficial(false);
+    if (official?.active) return verdictOf(def, code, true);
+  }
+  const r = await rpc('trial_check', [LV.id, def.id, code]);
+  return {ok: !!r.correct, right: r.right};
+}
+// The interactive part of each type; read() returns the answer code, or null while it is incomplete.
+function trialBody(def) {
+  const ty = typeOf(def), id = esc(def.id);
+  if (ty === 'gap') {
+    const [before, after = ''] = (def.text || '').split('___');
+    return {html: `<p class="gap-text">${esc(before)}<span class="gap" id="gap-slot">＿＿＿</span>${esc(after)}</p><div class="opts chips" data-trial="${id}" data-type="gap">${def.options.map((o, i) => `<button data-opt="${i}">${esc(o)}</button>`).join('')}</div>`, read: null};
+  }
+  if (ty === 'order') {
+    let order = def.items.map((_, i) => i);
+    const draw = () => { const box = $('order-box'); if (!box) return; box.innerHTML = order.map((k, pos) => `<li data-item="${k}"><span class="n">${pos + 1}</span><span class="txt">${esc(def.items[k])}</span>
+      <button type="button" data-up="${pos}" aria-label="${esc(lang === 'ru' ? 'Выше' : 'Жоғары')}" ${pos ? '' : 'disabled'}>↑</button><button type="button" data-down="${pos}" aria-label="${esc(lang === 'ru' ? 'Ниже' : 'Төмен')}" ${pos < order.length - 1 ? '' : 'disabled'}>↓</button></li>`).join('');
+      box.querySelectorAll('[data-up]').forEach(b => b.onclick = () => { const p = +b.dataset.up; [order[p - 1], order[p]] = [order[p], order[p - 1]]; draw(); box.querySelector(`[data-up="${p - 1}"]`)?.focus(); });
+      box.querySelectorAll('[data-down]').forEach(b => b.onclick = () => { const p = +b.dataset.down; [order[p + 1], order[p]] = [order[p], order[p + 1]]; draw(); box.querySelector(`[data-down="${p + 1}"]`)?.focus(); }); };
+    return {html: `<p class="note">${esc(lang === 'ru' ? 'Расставь по времени: сверху — самое раннее.' : 'Уақыт бойынша ретте: жоғарыда — ең ертесі.')}</p><ol class="order-box" id="order-box" data-trial="${id}" data-type="order"></ol>`,
+      init: draw, read: () => +order.join(''), set: code => { order = digits(code, def.items.length); draw(); }};
+  }
+  if (ty === 'match') {
+    const pick = lang === 'ru' ? 'Выбери пару' : 'Жұбын таңда';
+    return {html: `<div class="match-box" data-trial="${id}" data-type="match">${def.left.map((l, i) => `<label><span>${esc(l)}</span><select data-match="${i}"><option value="">${esc(pick)}</option>${def.right.map((r, k) => `<option value="${k}">${esc(r)}</option>`).join('')}</select></label>`).join('')}</div>`,
+      read: () => { const v = [...$('panel-card').querySelectorAll('[data-match]')].map(s => s.value); return v.some(x => x === '') || new Set(v).size !== v.length ? null : +v.join(''); },
+      set: code => { digits(code, def.left.length).forEach((k, i) => { const s = $('panel-card').querySelector(`[data-match="${i}"]`); if (s) s.value = String(k); }); }};
+  }
+  if (ty === 'map') {   // the schematic map of Kazakhstan (public/art/map.svg, viewBox 720×420) with one marker per option
+    return {html: `<figure class="map-trial" data-trial="${id}" data-type="map"><img src="/art/map.svg" alt="${esc(lang === 'ru' ? 'Условная учебная карта Казахстана' : 'Қазақстанның шартты оқу картасы')}">${def.options.map((o, i) => {
+      const [x, y] = def.map?.[i] || [60 + i * 150, 210];
+      return `<button data-opt="${i}" style="left:${(x / 720 * 100).toFixed(2)}%;top:${(y / 420 * 100).toFixed(2)}%"><span aria-hidden="true">●</span> ${esc(o)}</button>`; }).join('')}</figure>`, read: null};
+  }
+  const img = ty === 'artifact' && def.image ? `<figure class="artifact-trial"><img src="${esc(def.image)}" alt="${esc(def.imageAlt || def.title)}"></figure>` : '';
+  return {html: `${img}<div class="opts" data-trial="${id}" data-type="${ty === 'artifact' ? 'artifact' : 'choice'}">${def.options.map((o, i) => `<button data-opt="${i}">${esc(lettered(o, i))}</button>`).join('')}</div>`, read: null};
+}
+let pendingTrial = null;   // dev/QA: the open trial's setter (scripts answer order/match trials through the real panel)
+// practice: a replay from the chronicle journal — a fresh try with the feedback card, no points, nothing recorded.
+async function trial(def, {practice = false} = {}) {
+  const done = practice ? null : G.flags.quiz[def.id];
   const head = `<p class="eyebrow">${esc(def.questTitle)} · ${esc(t('trial'))}${def.level ? ' · ' + esc((lang === 'ru' ? TRIAL_LEVELS_RU : TRIAL_LEVELS)[def.level]) : ''}</p><h2>${esc(def.title)}</h2>`;
   if (done) {
-    const known = Number.isInteger(done.ch) && def.options?.[done.ch] != null;
-    openPanel(`${head}${known ? `<p class="q">${esc(def.question)}</p><p>${esc(lettered(def.options[done.ch], done.ch))}</p>${verdictHTML(def, done.ch)}` : `<p>${esc(t('decided'))}</p>`}<button class="primary" data-close>${esc(t('next'))} →</button>`, 'quiz');
+    const known = Number.isInteger(done.ch) && (typeOf(def) !== 'choice' || def.options?.[done.ch] != null);
+    const right = Number.isInteger(done.r) ? done.r : def.correctIndex;
+    openPanel(`${head}${known ? `<p class="q">${esc(def.question)}</p><p>${esc(answerText(def, done.ch))}</p>${verdictHTML(def, done.ch, right, !!done.ok)}` : `<p>${esc(t('decided'))}</p>`}<button class="primary" data-close>${esc(t('next'))} →</button>`, 'quiz');
     await panelDone();
     return {ok: !!done.ok, fresh: false};
   }
-  if (def.intro) await say(def.intro);
-  let picked = null;
-  openPanel(`${head}${evidenceHTML(def.evidence)}<p class="q">${esc(def.question)}</p><div class="opts" data-trial="${esc(def.id)}">${def.options.map((o, i) => `<button data-opt="${i}">${esc(lettered(o, i))}</button>`).join('')}</div><p class="note">${esc(t('oneChoice'))}</p>`, 'quiz');
+  if (def.intro && !practice) await say(def.intro);
+  const body = trialBody(def), multi = !!body.read;
+  let picked = null, busy = false;
+  openPanel(`${head}${evidenceHTML(def.evidence)}<p class="q">${esc(def.question)}</p>${body.html}${multi ? `<button class="primary" data-submit disabled>${esc(lang === 'ru' ? 'Принять решение' : 'Шешім қабылдау')}</button>` : ''}<p class="note">${esc(practice ? (lang === 'ru' ? 'Повтор для практики: очки не меняются.' : 'Жаттығу үшін қайталау: ұпай өзгермейді.') : t('oneChoice'))}</p>`, 'quiz');
+  body.init?.();
   await new Promise(resolve => {
-    $('panel-card').querySelectorAll('[data-opt]').forEach(btn => btn.onclick = async () => {
-      if (picked !== null || btn.dataset.busy) return;
-      const idx = +btn.dataset.opt;
-      if (official?.active) {
-        btn.dataset.busy = 1;
-        try { await official.answer(def.id, idx); } catch (e) {
-          // A secret trial the server has no key for yet (its migration not applied) must not trap the player in the
-          // panel: it is decided locally and simply adds nothing to the official score. Other failures: retry.
-          if (!(def.tier === 'secret' && /Сұрақ табылмады/.test(e?.message || ''))) { delete btn.dataset.busy; netFail(); return; }
-          toast(lang === 'ru' ? 'Это тайное испытание пока не учитывается на сервере.' : 'Бұл құпия сынақ серверде әзірге есептелмейді.', 'warn');
-        }
-      }
-      picked = idx;
-      $('panel-card').querySelectorAll('[data-opt]').forEach(b => { b.disabled = true; });
-      btn.classList.add('picked');
+    const card = $('panel-card'), submitBtn = card.querySelector('[data-submit]');
+    const refresh = () => { if (submitBtn) submitBtn.disabled = picked !== null || body.read() === null; };
+    async function decide(code, btn) {
+      if (picked !== null || busy) return;
+      busy = true; if (btn) btn.dataset.busy = 1;
+      let v;
+      try { v = await verdictOf(def, code, false, practice); } catch (e) { console.warn(e); busy = false; if (btn) delete btn.dataset.busy; netFail(); return; }
+      picked = code; pendingTrial = null;
+      card.querySelectorAll('[data-opt],[data-up],[data-down],[data-match],[data-submit]').forEach(b => { b.disabled = true; });
+      btn?.classList.add('picked');
       sfx('dialog');
-      G.local.attempts[def.id] = 1;
-      G.flags.quiz[def.id] = {a: 1, t: Date.now(), by: party.slot, ok: idx === def.correctIndex, ch: idx};
-      changed(); applyWorld(G); autosave();
+      if (!practice) {
+        G.local.attempts[def.id] = 1;
+        G.flags.quiz[def.id] = {a: 1, t: Date.now(), by: party.slot, ok: v.ok, ch: code, r: v.right};
+        changed(); applyWorld(G); autosave();
+      } else picked = {practiceOk: v.ok};
       setTimeout(() => {
         // The same panel turns into the feedback card; the story continues when the player has read it.
-        const card = $('panel-card');
         card.querySelector('.note')?.remove();
-        card.querySelectorAll('[data-opt]').forEach(b => { const i = +b.dataset.opt; b.classList.toggle('right', i === def.correctIndex); b.classList.toggle('wrong', i === idx && idx !== def.correctIndex); });
-        card.insertAdjacentHTML('beforeend', `${verdictHTML(def, idx)}<button class="primary" data-close data-verdict>${esc(t('understood'))} →</button>`);
+        card.querySelectorAll('[data-opt]').forEach(b => { const i = +b.dataset.opt; b.classList.toggle('right', i === v.right); b.classList.toggle('wrong', i === code && code !== v.right); });
+        if (typeOf(def) === 'order') { const want = digits(v.right, def.items.length); card.querySelectorAll('#order-box li').forEach((li, pos) => li.classList.add(+li.dataset.item === want[pos] ? 'right' : 'wrong')); }
+        if (typeOf(def) === 'match') { const want = digits(v.right, def.left.length); card.querySelectorAll('[data-match]').forEach(s => s.closest('label').classList.add(+s.value === want[+s.dataset.match] ? 'right' : 'wrong')); }
+        if (typeOf(def) === 'gap') $('gap-slot').textContent = def.options[code] ?? '';
+        card.insertAdjacentHTML('beforeend', `${verdictHTML(def, code, v.right, v.ok)}<button class="primary" data-close data-verdict>${esc(t('understood'))} →</button>`);
         card.querySelector('.trial-verdict')?.scrollIntoView({block: 'nearest'});
         card.focus({preventScroll: true});
         panelDone().then(resolve);
       }, 450);
-    });
+    }
+    card.querySelectorAll('[data-opt]').forEach(btn => btn.onclick = () => decide(+btn.dataset.opt, btn));
+    if (multi) {
+      card.addEventListener('click', e => { if (e.target.closest('[data-up],[data-down]')) setTimeout(refresh, 0); });
+      card.querySelectorAll('[data-match]').forEach(s => s.onchange = refresh);
+      submitBtn.onclick = () => { const code = body.read(); if (code !== null) decide(code, submitBtn); };
+      pendingTrial = {id: def.id, set: code => { body.set(code); refresh(); }};
+      refresh();
+    }
   });
+  if (practice) return {ok: !!picked?.practiceOk, fresh: false, practice: true};
   const ok = G.flags.quiz[def.id].ok;
   const lines = ok ? def.branch?.ok : def.branch?.no;
   if (lines?.length) await say(lines);
@@ -463,12 +542,18 @@ function journalHTML() {
     const state = !r ? '·' : r.ok ? '✓' : '✗';
     const pts = q.points ?? BONUS_META.find(m => m.id === q.id)?.points;
     return `<article class="${!r ? 'unplayed' : r.ok ? 'ok' : 'no'}"><b>${state} ${esc(q.title)}</b> <small>${esc(q.tier === 'secret' ? t('secretTrial') : q.tier === 'final' ? t('finalTrial') : t('mainTrial'))} · ${pts}</small>
-      ${r && !r.ok ? `<p class="why">${esc(t('rightWas'))}: ${esc(q.options[q.correctIndex])}</p>` : ''}<p>${esc(q.explanation)}</p></article>`;
+      ${r && !r.ok && Number.isInteger(r.r ?? q.correctIndex) ? `<p class="why">${esc(t('rightWas'))}: ${esc(answerText(q, r.r ?? q.correctIndex))}</p>` : ''}<p>${esc(q.explanation)}</p>${r ? `<button class="replay" data-replay="${esc(q.id)}">${esc(lang === 'ru' ? 'Решить ещё раз (практика)' : 'Қайта шешу (жаттығу)')}</button>` : ''}</article>`;
   }).join('')}</div>`;
 }
 function journal(back) {
   openPanel(`<p class="eyebrow">${esc(t('chronicle'))}</p><h2>${esc(t('chronicle'))}</h2>${journalHTML()}${back ? `<button class="primary" id="journal-back">← ${esc(t('back'))}</button>` : `<button class="primary" data-close>${esc(t('close'))}</button>`}`, 'wide');
   if (back) $('journal-back').onclick = back;
+  $('panel-card').querySelectorAll('[data-replay]').forEach(btn => btn.onclick = async () => {
+    const id = btn.dataset.replay, n = Object.keys(HISTORICAL_QUIZZES).find(k => HISTORICAL_QUIZZES[k].id === id), b = BONUS_META.findIndex(m => m.id === id);
+    const def = n ? localQuiz(HISTORICAL_QUIZZES[n], lang) : b >= 0 ? bonusDef(b) : null;
+    if (!def) return;
+    closePanel(); await trial(def, {practice: true}); journal(back);
+  });
 }
 async function complete() {
   try { // Local history of completed journeys.
@@ -606,17 +691,34 @@ function leaveParty() {
 }
 function peerByMemberSlot(slot) { for (const p of party.peers.values()) if (p.slot === slot) return p; return null; }
 function memberSlotOfEngine(eslot) { for (const p of party.peers.values()) if (p.eslot === eslot) return p.slot; return -1; }
+// Co-op messages come from other browsers (audit №14: «P2P trust»): only members of this room are heard, enemy state only
+// from the host, numbers are clamped, and shared quest flags pass the same schema check as a saved game before merging.
+const int = (v, lo, hi) => Number.isFinite(+v) ? Math.max(lo, Math.min(hi, Math.trunc(+v))) : lo;
 function onNet(m) {
-  const peer = party.peers.get(m.from);
+  const peer = m && party.peers.get(m.from);
+  if (!peer) return;
+  const fromHost = peer.slot === 0, enemies = MAP?.enemies?.length || 0;
   switch (m.type) {
-    case 'st': if (peer) { Object.assign(peer, {last: performance.now(), x: m.x, y: m.y, hp: m.hp, down: !!(m.fl & 1)}); E.tj_peer(peer.eslot, m.x, m.y, m.f, m.a, m.fr, m.hp, m.fl, SH[HEROES[peer.slot]] ?? 0); } break;
-    case 'en': if (!party.host && Array.isArray(m.e)) m.e.forEach((e, i) => Array.isArray(e) && E.tj_enemy_set(i, ...e)); break;
-    case 'hit': if (party.host && peer) E.tj_enemy_damage(m.i | 0, Math.min(60, m.d | 0), peer.eslot); break;
-    case 'dmg': if (m.to === party.slot) E.tj_damage(Math.min(60, m.d | 0)); break;
+    case 'st': {
+      const x = int(m.x, 0, 1e5), y = int(m.y, 0, 1e5), hp = int(m.hp, 0, 100), fl = int(m.fl, 0, 7);
+      Object.assign(peer, {last: performance.now(), x, y, hp, down: !!(fl & 1)});
+      E.tj_peer(peer.eslot, x, y, int(m.f, 0, 7), int(m.a, 0, 255), int(m.fr, 0, 255), hp, fl, SH[HEROES[peer.slot]] ?? 0);
+      break;
+    }
+    case 'en': if (!party.host && fromHost && Array.isArray(m.e) && m.e.length <= enemies) m.e.forEach((e, i) => Array.isArray(e) && e.length <= 8 && e.every(Number.isFinite) && E.tj_enemy_set(i, ...e)); break;
+    case 'hit': if (party.host && Number.isInteger(m.i) && m.i >= 0 && m.i < enemies) E.tj_enemy_damage(m.i, int(m.d, 0, 60), peer.eslot); break;
+    case 'dmg': if (m.to === party.slot) E.tj_damage(int(m.d, 0, 60)); break;
     case 'rev': if (m.to === party.slot) E.tj_revive(40); break;
-    case 'give': if (m.to === party.slot && m.item === IT.arrows) { E.tj_item_add(IT.arrows, Math.min(10, m.n | 0)); toast(t('received')); sfx('pickup'); } break;
-    case 'fl': if (m.flags) { const before = JSON.stringify(G.flags); try { G.flags = mergeFlags(G.flags, m.flags); } catch {} if (JSON.stringify(G.flags) !== before) { applyWorld(G); updateHud(true); } } break;
-    case 'cut': quest.mirror(m.id); break;
+    case 'give': if (m.to === party.slot && m.item === IT.arrows) { E.tj_item_add(IT.arrows, int(m.n, 0, 10)); toast(t('received')); sfx('pickup'); } break;
+    case 'fl': {
+      let flags; try { flags = LV.validateFlags ? LV.validateFlags(m.flags) : null; } catch { return; }
+      if (!flags) return;
+      const before = JSON.stringify(G.flags);
+      try { G.flags = mergeFlags(G.flags, flags); } catch {}
+      if (JSON.stringify(G.flags) !== before) { applyWorld(G); updateHud(true); }
+      break;
+    }
+    case 'cut': if (typeof m.id === 'string' && m.id.length <= 24) quest.mirror(m.id); break;
   }
 }
 function netTick(now) {
@@ -652,13 +754,35 @@ function save(silent) {
   if (bytes <= 0) { if (!silent) toast(t('saveBlocked'), 'warn'); return false; }
   const words = Array.from(new Uint32Array(E.memory.buffer, E.tj_save_buffer(), bytes / 4));
   try {
-    localStorage.setItem(SAVE_KEY, JSON.stringify({v: 3, words, flags: G.flags, local: G.local, savedAt: new Date().toISOString()}));
+    const snap = {v: 3, words, flags: G.flags, local: G.local, savedAt: new Date().toISOString()};
+    localStorage.setItem(SAVE_KEY, JSON.stringify(snap));
     lastSave = performance.now();
+    cloudPush(snap);
     if (!silent) toast(t('saved'));
     return true;
   } catch { if (!silent) toast(t('storageFail'), 'warn'); return false; }
 }
 function autosave() { if (!cine) save(true); }
+// The progress follows the account (audit №14: «progress only in one browser»; migration 023). The same snapshot goes to
+// the player's own server row a few seconds after the last save; on start a newer copy from another device wins.
+let cloudTimer = 0, cloudSnap = null;
+function cloudPush(snap) {
+  if (!db || SAVE_KEY !== LV?.saveKey) return;   // not for the film demo save
+  cloudSnap = snap; clearTimeout(cloudTimer);
+  cloudTimer = setTimeout(() => { const s = cloudSnap; cloudSnap = null; if (s) rpc('rpg_save_put', [LV.id, s]).catch(e => console.warn('cloud save', e)); }, 8000);
+}
+addEventListener('pagehide', () => { if (cloudSnap) { clearTimeout(cloudTimer); const s = cloudSnap; cloudSnap = null; rpc('rpg_save_put', [LV.id, s]).catch(() => {}); } });
+async function cloudPull() {
+  if (!db) return;
+  try {
+    if (!(await currentUser(db))) return;
+    const r = await rpc('rpg_save_get', [LV.id]);
+    if (!r?.data) return;
+    let local = null; try { local = JSON.parse(localStorage.getItem(SAVE_KEY) || 'null'); } catch {}
+    const cloudAt = Date.parse(r.data.savedAt || r.saved_at || 0) || 0, localAt = Date.parse(local?.savedAt || 0) || 0;
+    if (cloudAt > localAt + 1000) { localStorage.setItem(SAVE_KEY, JSON.stringify(r.data)); toast(lang === 'ru' ? 'Прогресс загружен из аккаунта.' : 'Прогресс аккаунттан жүктелді.'); }
+  } catch (e) { console.warn('cloud load', e); }
+}
 function load(silent) {
   let raw = null;
   try { raw = localStorage.getItem(SAVE_KEY); } catch {}
@@ -1144,16 +1268,25 @@ for (const n of ['pointerup', 'pointercancel', 'lostpointercapture']) stickEl.ad
   if (ev.pointerId !== stick.id) return;
   stick.id = null; stickEl.classList.remove('on'); placeStick(); touch.delete('stick'); input();
 });
-// Browsers allow real fullscreen only after a user gesture. On a touch phone the first tap enters it (the browser bars
-// eat a third of the screen there); on a computer it is never forced: the ⛶ button (#fs-btn) asks for it.
-let autoFs = matchMedia('(pointer: coarse)').matches;
+// Browsers allow real fullscreen only after a user gesture. It is never forced (audit №14: «мәжбүрлі Fullscreen»): the
+// ⛶ button (#fs-btn) asks for it, and on a touch phone — where the browser bars eat a third of the screen — the first
+// tap only shows a hint about that button.
+let autoFs = false, fsHinted = false;
+const canFs = !!(document.documentElement.requestFullscreen || document.documentElement.webkitRequestFullscreen);
+document.documentElement.classList.toggle('can-fs', canFs);
 function enterFullscreen() {
   const el = document.documentElement;
   // Only the game turns sideways (resize(): CSS rotation) — the phone itself is never asked to rotate.
   if (!document.fullscreenElement && el.requestFullscreen) el.requestFullscreen({navigationUI: 'hide'}).catch(() => {});
   else if (!document.fullscreenElement && el.webkitRequestFullscreen) el.webkitRequestFullscreen();
 }
-function firstGesture() { if (autoFs) { autoFs = false; enterFullscreen(); } }
+function firstGesture() {
+  if (autoFs) { autoFs = false; enterFullscreen(); }
+  if (!fsHinted && canFs && matchMedia('(pointer: coarse)').matches && !document.fullscreenElement) {
+    fsHinted = true;
+    setTimeout(() => toast(lang === 'ru' ? '⛶ — полный экран: кнопка в правом верхнем углу.' : '⛶ — толық экран: оң жақ жоғарғы бұрыштағы батырма.'), 1200);
+  }
+}
 window.addEventListener('pointerdown', firstGesture, {capture: true});
 window.addEventListener('keydown', e => { if (e.code !== 'Escape') firstGesture(); }, {capture: true});
 $('fs-btn').onclick = () => { autoFs = false; if (document.fullscreenElement) document.exitFullscreen?.(); else enterFullscreen(); };
@@ -1216,6 +1349,7 @@ async function boot() {
     $('hotbar').addEventListener('pointerdown', e => e.stopPropagation());
     const params = new URLSearchParams(location.search);
     coopFirst = params.has('coop');
+    if (!params.has('new') && !params.has('egg') && !params.has('final') && !params.has('ingame')) await cloudPull();
     if (params.has('film') && LV.comic) { // Watch the level's cinematic on its own, then the level opens as usual.
       if (!load(true)) { newGame(); startOfficial(true); } else $('fade').style.opacity = 0;
       setTimeout(() => G.comic(), 300);
@@ -1241,7 +1375,7 @@ async function boot() {
     musicForZone(true);
     // Debug/QA handle (used by scripts/check-rpg-browser.mjs).
     const step = n => { for (let i = 0; i < n; i++) { E.tj_tick(); handleEvents(); } E.tj_render(); ctx.putImageData(frame, 0, 0); quest?.frame?.(ctx); updateHud(); updatePrompt(); drawMinimap(performance.now()); };
-    if (import.meta.env.DEV) window.__tj = {recordedBanks, useItem, quickHeal, renderBuffs, LV, E, G, party, quest, retryEpoch, results, get official() { return official; }, save, load, newGame, skipCutscene, closePanel, advanceDialog, travel, step, inventory, coopPanel, startParty, leaveParty,
+    if (import.meta.env.DEV) window.__tj = {answerTrial: code => pendingTrial?.set(code), recordedBanks, useItem, quickHeal, renderBuffs, LV, E, G, party, quest, retryEpoch, results, get official() { return official; }, save, load, newGame, skipCutscene, closePanel, advanceDialog, travel, step, inventory, coopPanel, startParty, leaveParty,
       get panelOpen() { return panelOpen; }, get cine() { return cine?.id || null; }, get dialog() { return !$('dlg').hidden; }, get dialogBusy() { return dialogBusy; }};
   } catch (err) {
     console.error(err);

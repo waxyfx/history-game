@@ -62,7 +62,7 @@ try {
   await a.use('names'); assert(await a.flag('page')); assert(await a.flag('nameslist'));
   const res = await a.finish('gate9');
   assert.equal(res.score, '100 / 100'); assert(res.pass); assert.equal(res.page, 4); assert.equal(res.secrets, 6);
-  assert.deepEqual([...new Set(B.seen.trials)].sort(), Object.keys(B.KEY).sort(), 'all twelve trials');
+  assert.deepEqual([...new Set(B.seen.trials)].sort(), Object.keys(B.KEY).sort(), 'all thirteen trials');
   assert.equal(B.seen.choices.length, 1, 'one choice');
   assert.equal(await a.js('__tj.LV.next'), 10, 'next level');
   assert.deepEqual(a.errors, [], 'no runtime errors');

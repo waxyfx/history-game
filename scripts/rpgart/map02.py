@@ -251,6 +251,7 @@ def emit():
     L.obj('gpuplan', *P(8, 93.4)); L.obj('jacket', *P(11.4, 92.6)); L.obj('anvil', *P(5.4, 96.6))
     L.interact('chipcrack', *P(17.4, 94.5), 18, L.tag('chipseal'))
     L.interact('gpuplan', *P(8, 94.4), 20)
+    L.interact('pot', *P(36, 30.8), 16)   # the ornamented pot in a dwelling: an artifact trial (audit №14)
     L.area('world', 0, 0, 100, 68)
     L.area('under', 0, 70, 56, 108, dark=(46, 34, 40), outdoor=False)
     L.zone_area = [0, 0, 0, 0, 0, 0, 0, 0, 1]

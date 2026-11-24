@@ -16,7 +16,8 @@ for (const n of [6, 7, 8, 9, 10]) {
   LV[n] = {story: await import(`../src/rpg/story${pad(n)}.js`), quest: await import(`../src/rpg/quest${pad(n)}.js`), level: await loadLevel(n),
     mod: await import(`../src/rpg/level${n}.js`), map: (await import(`../src/rpg/gen/map${pad(n)}.js`))[`MAP${pad(n)}`],
     sql: await readFile(new URL(`../supabase/migrations/${MIGRATION[n]}.sql`, import.meta.url), 'utf8') +
-      await readFile(new URL('../supabase/migrations/020_content_gaps.sql', import.meta.url), 'utf8'),   // audit №14 secret trials
+      await readFile(new URL('../supabase/migrations/020_content_gaps.sql', import.meta.url), 'utf8') +   // audit №14 secret trials
+      await readFile(new URL('../supabase/migrations/022_trial_types.sql', import.meta.url), 'utf8'),   // and new trial types
     wasm: await WebAssembly.compile(await readFile(new URL(`../public/engine/rpg/tarikh-rpg-${n}.wasm`, import.meta.url)))};
 }
 function engine(n) { const e = new WebAssembly.Instance(LV[n].wasm, {}).exports; e._initialize?.(); e.tj_init(); return e; }
@@ -40,16 +41,22 @@ test('the campaign has ten playable epochs in order, each with its own engine bu
 for (const n of [6, 7, 8, 9, 10]) {
   // Audit №14 added secret trials to MAP06 (IX–XII centuries), MAP08 (1916, Alash) and MAP09 (1937–38, ALZhIR, the Virgin
   // Lands, Baikonur): the mandatory trials still give 90, secrets add 2–3 each, and the level score is capped at 100.
-  const TRIALS = {6: 12, 7: 8, 8: 11, 9: 12, 10: 8};
+  const TRIALS = {6: 14, 7: 9, 8: 12, 9: 13, 10: 9};
   test(`MAP${pad(n)}: ${TRIALS[n]} trials match the private keys and the 90 + secrets (capped at 100) scoring contract`, () => {
     const {story, sql} = LV[n], trials = Object.values(story.HISTORICAL_QUIZZES);
-    const keys = Object.fromEntries([...sql.matchAll(new RegExp(`\\(${n}, '(\\w+)', '(main|final|secret)', (\\d), (\\d+)\\)`, 'g'))].map(m => [m[1], {kind: m[2], correct: +m[3], points: +m[4]}]));
+    const keys = Object.fromEntries([...sql.matchAll(new RegExp(`\\(${n}, '(\\w+)', '(main|final|secret)', (\\d+), (\\d+)\\)`, 'g'))].map(m => [m[1], {kind: m[2], correct: +m[3], points: +m[4]}]));
     assert.equal(trials.length, TRIALS[n]); assert.equal(Object.keys(keys).length, TRIALS[n]);
     assert.equal(new Set(trials.map(q => q.id)).size, trials.length, 'unique trial ids');
     for (const q of trials) {
       assert.deepEqual(keys[q.id], {kind: q.tier, correct: q.correctIndex, points: q.points}, q.id);
-      assert.equal(q.epoch, n); assert.equal(q.options.length, 4); assert.match(q.question, /[әғқңөұүһі]/i);
-      assert(q.options.every((o, i) => o.startsWith('ABCD'[i] + ') ')), q.id + ': options in the «A) …» format');
+      assert.equal(q.epoch, n); assert.match(q.question, /[әғқңөұүһі]/i);
+      const ty = q.type || 'choice', perm = k => String(q.correctIndex).padStart(k, '0').split('').map(Number).sort();
+      if (ty === 'choice' || ty === 'artifact') { assert.equal(q.options.length, 4); assert(q.options.every((o, i) => o.startsWith('ABCD'[i] + ') ')), q.id + ': options in the «A) …» format'); }
+      else if (ty === 'order') assert.deepEqual(perm(q.items.length), q.items.map((_, i) => i), q.id + ': a permutation of the items');
+      else if (ty === 'match') { assert.equal(q.right.length, q.left.length); assert.deepEqual(perm(q.left.length), q.left.map((_, i) => i), q.id + ': one partner each'); }
+      else if (ty === 'gap') assert(q.text.includes('___') && q.options[q.correctIndex], q.id);
+      else if (ty === 'map') assert(q.map.length === q.options.length && q.options[q.correctIndex], q.id);
+      else assert.fail(q.id + ': unknown type ' + ty);
       assert(q.source && q.explanation && q.evidence.length && q.branch.ok.length && q.branch.no.length, q.id);
       if (q.tier === 'secret') assert(q.points >= 2 && q.points <= 3, q.id + ': a secret gives 2–3 points');
     }
@@ -124,8 +131,8 @@ test('scoring: 100 for all trials, the pass mark 60, the page needs the four mai
 
 // Audit №14: each new secret trial is reached in play — the quest hands it to G.quiz from its NPC or object.
 test('the IX–XII century, 1916/Alash and 1937–Baikonur secret trials are reachable from their NPCs and objects', async () => {
-  const NEW = {6: ['horde_karakhan', 'horde_books', 'horde_kipchak', 'horde_otrar'], 8: ['rus_1916', 'rus_torgai', 'rus_alash'],
-    9: ['sov_1937', 'sov_alzhir', 'sov_tyn', 'sov_baikonur']};
+  const NEW = {6: ['horde_karakhan', 'horde_books', 'horde_kipchak', 'horde_otrar', 'horde_khans', 'horde_map'], 7: ['kaz_gap'],
+    8: ['rus_1916', 'rus_torgai', 'rus_alash', 'rus_match'], 9: ['sov_1937', 'sov_alzhir', 'sov_tyn', 'sov_baikonur', 'sov_order'], 10: ['ind_order']};
   for (const [n, ids] of Object.entries(NEW)) {
     const {quest, story, map} = LV[n], e = engine(+n), asked = [];
     const byNum = Object.fromEntries(Object.entries(story.HISTORICAL_QUIZZES).map(([k, q]) => [+k, q.id]));
@@ -136,8 +143,11 @@ test('the IX–XII century, 1916/Alash and 1937–Baikonur secret trials are rea
     for (const id of ids) {
       const at = Object.values(story.HISTORICAL_QUIZZES).find(t => t.id === id).at;
       asked.length = 0;
-      if (map.npcs.includes(at)) await q.talk(at); else { assert(map.interacts.includes(at), id + ' at ' + at); await q.interact(at); }
-      assert.deepEqual(asked, [id], `MAP${pad(n)} ${at} → ${id}`);
+      // A person may first tell their story (or ask their main trial); the secret trial comes by the third visit at most.
+      for (let k = 0; k < 3 && !asked.includes(id); k++) {
+        if (map.npcs.includes(at)) await q.talk(at); else { assert(map.interacts.includes(at), id + ' at ' + at); await q.interact(at); }
+      }
+      assert(asked.includes(id), `MAP${pad(n)} ${at} → ${id}: ${asked}`);
       assert(story.NAMES[at] || map.npcs.includes(at), `${at} has a name`);
     }
   }

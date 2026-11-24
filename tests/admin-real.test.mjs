@@ -50,7 +50,7 @@ test('Admin panel data: only teachers and admins, built from real profiles and r
 
   // Students and anonymous callers are rejected.
   await as(aru);
-  for (const [name, args] of [['admin_overview', []], ['admin_list_users', [null, 50, 0]], ['admin_trial_stats', [1]]])
+  for (const [name, args] of [['admin_overview', []], ['admin_list_users', [null, 50, 0]], ['admin_trial_stats', [1]], ['admin_trial_keys', [1]]])
     await assert.rejects(rpc(name, args), /Мұғалім немесе Әкімші/, name + ' is teacher/admin only');
   await as(null, 'anon');
   await assert.rejects(rpc('admin_overview'), /permission denied|Кіру қажет/);
@@ -85,6 +85,10 @@ test('Admin panel data: only teachers and admins, built from real profiles and r
   assert.deepEqual([byId.stone_main.answered_count, byId.stone_main.right_count], [2, 1]);
   assert.deepEqual([byId.stone_cave.answered_count, byId.stone_cave.right_count], [1, 1]);
   assert(stats.every(s => !('correct' in s) && !('choice' in s)), 'no answer key or chosen option is exposed');
+  // The right options for the Trials tab come from the server (migration 021): teachers and admins only.
+  const keys = await rpc('admin_trial_keys', [1]);
+  assert.equal(keys.stone_main, 1); assert.equal(Object.keys(keys).length, stats.length);
+  assert.deepEqual(await rpc('trial_check', [1, 'stone_cave', 0]), {correct: false, right: 1}, 'a teacher may check any trial');
   // Which option the class picked (migration 019): stone_main — Aru chose B (1), Beks chose A (0).
   assert.deepEqual(byId.stone_main.choices, {0: 1, 1: 1});
   assert.deepEqual(byId.stone_cave.choices, {1: 1});

@@ -95,6 +95,7 @@ export function createQuest(G) {
         if (!B.met) return G.say(D.zhyrshy2);
         if (first) { await G.say(D.zhyrshy1); addTo('talked', 'zhyrshy'); }
         if (!f.quiz.kaz_zheti) { await quiz('kaz_zheti'); return proof(PROOFS.song); }
+        if (!f.quiz.kaz_gap) return quiz('kaz_gap');   // a gap trial (audit №14: more task types)
         return G.say(D.zhyrshy2);
       case 'apa':
         if (!B.met) return G.say(D.apa2);

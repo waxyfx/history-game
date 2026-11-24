@@ -41,7 +41,7 @@ export function levelDescriptor({id, title, MAP, S, Q, enemies, comic, back, UI,
       BONUS_META: S.BONUS_META, CHAMBER_FAIL: S.CHAMBER_FAIL, TRIAL_LEVELS: S.TRIAL_LEVELS, MAIN_QUIZ_ORDER: S.MAIN_QUIZ_ORDER,
       SECRETS: S.SECRETS, DIALOGUES: S.DIALOGUES, NAMES: S.NAMES, LABELS: S.LABELS,
       applyWorld: Q.applyWorld, createQuest: Q.createQuest, questStage: Q.questStage, questTarget: Q.questTarget,
-      scoreOf: Q.scoreOf, secretsFound: Q.secretsFound, pageLines: Q.pageLines, pageTotal: Q.PAGE_TOTAL, restoreSnapshot: persistence.restoreSnapshot,
+      scoreOf: Q.scoreOf, secretsFound: Q.secretsFound, pageLines: Q.pageLines, pageTotal: Q.PAGE_TOTAL, restoreSnapshot: persistence.restoreSnapshot, validateFlags: persistence.validateFlags,
       begin: quest => quest.start(), comic, back, UI, music, ambience, items, sfx, ...extra,   // e.g. swapRanged (MAP09)
       ...(next ? {next: next.id, passLabel: next.label} : {passLabel: {kk: 'Дәуірлер картасы', ru: 'Карта эпох'}}),
     },
