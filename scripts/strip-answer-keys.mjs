@@ -4,10 +4,14 @@
 //   correctIndex (the right option), accepted (MAP01's old accepted answer), why (per-option notes whose empty slot
 //   marks the right one); in MAP01's bonus questions: a (the right option) and w (the same notes).
 // The server checks each choice instead (migration 021: level_submit_answer, trial_check).
+// Explanations too (audit №14 follow-up: «Аң стилі…» named the right option of saka_gold): explanation in the story
+// modules and in the Russian packs (src/rpg/ru/mapNN.js, JSON-style "explanation": keys), e in MAP01's bonus questions.
+// The server gives each one out after the choice (migration 024: trial_explain).
 
 // Removes `name: <value>,` for object properties, scanning the value with bracket and string awareness.
+// The key may be quoted (`"explanation": …` in the JSON-style Russian packs).
 export function removeProp(code, name, {from = 0} = {}) {
-  const re = new RegExp(`(^|[\\s{,])${name}:\\s*`, 'g');
+  const re = new RegExp(`(^|[\\s{,])(["']?)${name}\\2:\\s*`, 'g');
   let out = '', last = 0, m;
   re.lastIndex = from;
   while ((m = re.exec(code))) {
@@ -28,24 +32,31 @@ export function removeProp(code, name, {from = 0} = {}) {
 }
 
 export function stripKeys(code) {
-  for (const name of ['correctIndex', 'accepted', 'why']) code = removeProp(code, name);
+  for (const name of ['correctIndex', 'accepted', 'why', 'explanation']) code = removeProp(code, name);
   const bonus = code.indexOf('export const BONUS_QUIZ');
   if (bonus >= 0) {
     let tail = code.slice(bonus);
-    for (const name of ['a', 'w']) tail = removeProp(tail, name);
+    for (const name of ['a', 'w', 'e']) tail = removeProp(tail, name);
     code = code.slice(0, bonus) + tail;
   }
   return code;
 }
 
-export const STORY_FILE = /[\\/]src[\\/]rpg[\\/]story(\d\d)?\.js$/;
+export const STORY_FILE = /[\\/]src[\\/]rpg[\\/](story(\d\d)?|ru[\\/]map\d\d)\.js$/;
+// src/content.js: the old 3D prototype's ten practice questions. The home page needs only the eras (title, period,
+// symbol, colour, source); the questions and explanations are dead weight there, so a build drops them. The server's
+// copy (migration 002) is written from the source file by scripts/content-build.mjs, which this plugin never touches.
+export const CONTENT_FILE = /[\\/]src[\\/]content\.js$/;
+export const stripLegacyQuestions = code => ['question', 'explanation'].reduce((c, name) => removeProp(c, name), code);
 export function stripAnswerKeys() {
   return {
     name: 'strip-answer-keys',
     enforce: 'pre',
     transform(code, id) {
-      if (!STORY_FILE.test(id.split('?')[0])) return null;
-      return {code: stripKeys(code), map: null};
+      const file = id.split('?')[0];
+      if (STORY_FILE.test(file)) return {code: stripKeys(code), map: null};
+      if (CONTENT_FILE.test(file)) return {code: stripLegacyQuestions(code), map: null};
+      return null;
     },
   };
 }

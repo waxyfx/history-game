@@ -49,7 +49,8 @@ npm run check:admin -- http://127.0.0.1:5173
 
 ## Топтық ойын және Google арқылы кіру
 
-1. Supabase жобасының SQL Editor бөлімінде supabase/migrations ішіндегі 001–006 файлдарын осы ретпен орындаңыз (006 — Google профилі, рөлдер және ресми нәтижелер, docs/server-api.md).
+1. Supabase жобасының SQL Editor бөлімінде supabase/migrations ішіндегі барлық файлдарды (001–025) осы ретпен орындаңыз (006 — Google профилі, рөлдер және ресми нәтижелер, docs/server-api.md; 021 — жауап кілттері серверде; 024 — сынақ түсіндірмелері серверде, жауаптан кейін ғана беріледі; 025 — мұғалім панеліндегі сабақ сессиялары). Жаңа клиентті жарияламас бұрын 024 және 025 орындалған болуы керек, әйтпесе түсіндірмелер мен сессиялар ашылмайды. Түсіндірме мәтінін өзгерткен соң: `node scripts/explanations-sql.mjs`.
+   Authentication → Sign In / Providers → Email: «Confirm email» қосулы болсын (аудит №14: поштаны растаусыз тіркелу — `mailer_autoconfirm`). Ойынның тіркелу терезесі бұл режимді қолдайды: «Поштаңды тексер» хабарын көрсетеді.
 2. Google Cloud-та Web application OAuth клиентін жасаңыз. Authorized redirect URI ретінде Supabase Google провайдері көрсеткен callback URL мекенжайын енгізіңіз.
 3. Supabase Authentication → Providers → Google бөлімінде Client ID және Client secret сақтаңыз. URL Configuration ішінде сайттың HTTPS мекенжайын және әзірлеу кезінде қолданылатын жергілікті redirect URL мекенжайын рұқсат етілген тізімге қосыңыз.
 4. .env.example файлын .env.local атауымен көшіріңіз. VITE_SUPABASE_URL және VITE_SUPABASE_PUBLISHABLE_KEY мәндерін толтырыңыз. Серверді қайта іске қосыңыз. Құпия кілттерді клиентке немесе чатқа енгізбеңіз.

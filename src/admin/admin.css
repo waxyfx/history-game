@@ -213,3 +213,13 @@ table.admin-table tr.row-bad td:nth-child(5) { color: #f3a39a; }
 /* The Netlify free-plan badge sat on top of the signed-in bar (e-mail and «Шығу») and the tables. */
 #nl-badge-frame, iframe[title="Netlify badge"] { display: none !important; }
 @media (max-width: 650px) { .gate-session { left: 12px; right: 12px; justify-content: space-between; } table.admin-table th, table.admin-table td { padding: 10px 12px; } }
+/* Class sessions (migration 025): the form, the code and QR the class reads from the board. */
+.session-form input{background:var(--bg-sidebar);border:1px solid var(--border);color:#e9e3cf;padding:6px 10px;border-radius:4px;min-width:220px}
+.session-form .btn{margin-left:0}
+td.actions{white-space:nowrap}td.actions .btn{margin:2px}
+.session-view{margin-top:28px;border-top:1px solid var(--border);padding-top:20px}
+.session-head{display:flex;gap:24px;justify-content:space-between;align-items:flex-start;margin-bottom:18px}
+.session-head h2{margin:0 0 4px;font-size:20px}
+.session-code{font-size:15px;margin:8px 0 4px}.session-code b{font-family:ui-monospace,monospace;font-size:26px;letter-spacing:3px;color:var(--gold-primary)}
+.session-qr{background:#fff;border-radius:6px;padding:4px;flex:none}
+@media (max-width: 650px){.session-head{flex-direction:column}.session-form{flex-wrap:wrap}.session-form input{min-width:0;width:100%}}

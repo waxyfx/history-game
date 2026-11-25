@@ -16,8 +16,11 @@ import {requireAccount} from '../account.js';
 import {registerServiceWorker} from '../sw-register.js';
 registerServiceWorker();
 // Official-run RPCs are written with positional arguments (as in the SQL tests); Supabase needs named ones.
+// Every call below with an argument array needs its entry here, or Supabase gets {} and answers PGRST202 (tests/rpc-params.test.mjs).
 const RPC_PARAMS = {level_start_run: ['p_level', 'p_mode', 'p_session'], level_submit_answer: ['p_run', 'p_quiz', 'p_choice', 'p_request'],
-  level_finish_run: ['p_run', 'p_request'], level_abandon_run: ['p_run']};
+  level_finish_run: ['p_run', 'p_request'], level_abandon_run: ['p_run'], trial_check: ['p_level', 'p_quiz', 'p_choice'],
+  trial_explain: ['p_level', 'p_quizzes'], rpg_save_get: ['p_level'], rpg_save_put: ['p_level', 'p_data'],
+  class_session_join: ['p_code', 'p_team']};
 const rpc = (name, args) => rpcNamed(name, Array.isArray(args) ? Object.fromEntries((RPC_PARAMS[name] || []).map((k, i) => [k, args[i] ?? null])) : args || {});
 import {currentUser, createOfficialRun} from '../members.js';
 import {SH, TS, IT, newFlags, mergeFlags, MAX_SCORE, PASS_SCORE} from './quest.js';
@@ -334,7 +337,20 @@ function verdictHTML(def, code, right, ok = code === right) {
   const why = !ok && Array.isArray(def.why) && (lang === 'kk' || def.whyRu) ? (def.whyRu || def.why)[code] : '';
   return `<div class="trial-verdict ${ok ? 'ok' : 'no'}" role="status"><b>${ok ? '✓' : '✗'} ${esc(t(ok ? 'verdictOk' : 'verdictNo'))}</b>
       ${ok || !Number.isInteger(right) ? '' : `<p>${esc(t('rightAnswer'))}: <b>${esc(answerText(def, right))}</b></p>`}${why ? `<p>${esc(why)}</p>` : ''}</div>
-    ${def.explanation ? `<p class="expl">${esc(def.explanation)}</p>` : ''}${def.source ? `<p class="source"><small>${esc(t('sourceLabel'))}:</small> ${esc(def.source)}</p>` : ''}`;
+    ${explOf(def) ? `<p class="expl">${esc(explOf(def))}</p>` : ''}${def.source ? `<p class="source"><small>${esc(t('sourceLabel'))}:</small> ${esc(def.source)}</p>` : ''}`;
+}
+// Explanations: a production build has none (they named the right option); the server gives each one out after the
+// player's choice, for a finished level, or to a teacher (migration 024: trial_explain). The dev build keeps them.
+const EXPL = {};
+async function explainTrials(defs) {
+  const need = defs.filter(d => d && !d.explanation && !(d.id in EXPL)).map(d => d.id);
+  if (!need.length || !db) return;
+  try { Object.assign(EXPL, await rpc('trial_explain', [LV.id, need]) || {}); } catch (e) { console.warn(e); }
+}
+function explOf(def) {
+  if (def.explanation) return def.explanation;
+  const x = EXPL[def.id];
+  return x ? (lang === 'ru' && x.ru) || x.kk || '' : '';
 }
 // The verdict comes from the server (audit №14: no answer keys in the browser). In an official run the one choice is
 // recorded first and the answer carries the verdict and the right option (migration 021); outside it trial_check answers
@@ -391,7 +407,8 @@ async function trial(def, {practice = false} = {}) {
   const done = practice ? null : G.flags.quiz[def.id];
   const head = `<p class="eyebrow">${esc(def.questTitle)} · ${esc(t('trial'))}${def.level ? ' · ' + esc((lang === 'ru' ? TRIAL_LEVELS_RU : TRIAL_LEVELS)[def.level]) : ''}</p><h2>${esc(def.title)}</h2>`;
   if (done) {
-    const known = Number.isInteger(done.ch) && (typeOf(def) !== 'choice' || def.options?.[done.ch] != null);
+    await explainTrials([def]);
+    const known =Number.isInteger(done.ch) && (typeOf(def) !== 'choice' || def.options?.[done.ch] != null);
     const right = Number.isInteger(done.r) ? done.r : def.correctIndex;
     openPanel(`${head}${known ? `<p class="q">${esc(def.question)}</p><p>${esc(answerText(def, done.ch))}</p>${verdictHTML(def, done.ch, right, !!done.ok)}` : `<p>${esc(t('decided'))}</p>`}<button class="primary" data-close>${esc(t('next'))} →</button>`, 'quiz');
     await panelDone();
@@ -419,7 +436,8 @@ async function trial(def, {practice = false} = {}) {
         G.flags.quiz[def.id] = {a: 1, t: Date.now(), by: party.slot, ok: v.ok, ch: code, r: v.right};
         changed(); applyWorld(G); autosave();
       } else picked = {practiceOk: v.ok};
-      setTimeout(() => {
+      // The choice is recorded: now the server gives the explanation (in parallel with the short pause).
+      Promise.all([explainTrials([def]), new Promise(r => setTimeout(r, 450))]).then(() => {
         // The same panel turns into the feedback card; the story continues when the player has read it.
         card.querySelector('.note')?.remove();
         card.querySelectorAll('[data-opt]').forEach(b => { const i = +b.dataset.opt; b.classList.toggle('right', i === v.right); b.classList.toggle('wrong', i === code && code !== v.right); });
@@ -430,7 +448,7 @@ async function trial(def, {practice = false} = {}) {
         card.querySelector('.trial-verdict')?.scrollIntoView({block: 'nearest'});
         card.focus({preventScroll: true});
         panelDone().then(resolve);
-      }, 450);
+      });
     }
     card.querySelectorAll('[data-opt]').forEach(btn => btn.onclick = () => decide(+btn.dataset.opt, btn));
     if (multi) {
@@ -513,7 +531,7 @@ function pauseMenu() {
   $('pm-help').onclick = help;
 }
 function roadmap() {
-  openPanel(`<p class="eyebrow">TARIKH JOLY</p><h2>${lang === 'ru' ? 'Карта эпох' : 'Дәуірлер картасы'}</h2><div class="epochs">${ALL_EPOCHS.map(e => { const open = e.id === 1 || TEMP_UNLOCK_ALL || localPassed(e.id - 1) || levelPassedOf(e.id - 1); const playable = open && LEVEL_IDS.includes(e.id);
+  openPanel(`<p class="eyebrow">TARIKH JOLY</p><h2>${lang === 'ru' ? 'Карта эпох' : 'Дәуірлер картасы'}</h2><div class="epochs">${ALL_EPOCHS.map(e => { const open = e.id === 1 || TEMP_UNLOCK_ALL || (!db && localPassed(e.id - 1)) || levelPassedOf(e.id - 1); const playable = open && LEVEL_IDS.includes(e.id);
     return `<article class="${e.id === LV.id ? 'on' : ''}"><small>MAP ${String(e.id).padStart(2, '0')} · ${esc(e.badge)}</small><b>${esc(e.title)}</b><span>${esc(e.period)}</span>${playable && e.id !== LV.id ? `<a class="go" href="/rpg.html${e.id > 1 ? '?level=' + e.id : ''}">${lang === 'ru' ? 'Играть' : 'Ойнау'} →</a>` : !playable ? `<em>${esc(t('mapLocked'))}</em>` : ''}</article>`; }).join('')}</div><button class="primary" data-close>${esc(t('close'))}</button>`, 'wide');
 }
 // ---------------------------------------------------------------- level result (100 / pass 60)
@@ -535,17 +553,19 @@ function resultsHTML() {
   </div>`;
 }
 // Chronicle journal: after the level every trial shows the verdict and the historical logic.
+const journalRows = () => [...MAIN_QUIZ_ORDER.map(n => localQuiz(HISTORICAL_QUIZZES[n], lang)), ...BONUS_META.map((m, i) => ({...bonusDef(i), tier: 'secret'}))];
 function journalHTML() {
-  const rows = [...MAIN_QUIZ_ORDER.map(n => localQuiz(HISTORICAL_QUIZZES[n], lang)), ...BONUS_META.map((m, i) => ({...bonusDef(i), explanation: L(BONUS_QUIZ.questions[i].e), tier: 'secret'}))];
+  const rows = journalRows();
   return `<div class="journal-list">${rows.map(q => {
     const r = G.flags.quiz[q.id];
     const state = !r ? '·' : r.ok ? '✓' : '✗';
     const pts = q.points ?? BONUS_META.find(m => m.id === q.id)?.points;
     return `<article class="${!r ? 'unplayed' : r.ok ? 'ok' : 'no'}"><b>${state} ${esc(q.title)}</b> <small>${esc(q.tier === 'secret' ? t('secretTrial') : q.tier === 'final' ? t('finalTrial') : t('mainTrial'))} · ${pts}</small>
-      ${r && !r.ok && Number.isInteger(r.r ?? q.correctIndex) ? `<p class="why">${esc(t('rightWas'))}: ${esc(answerText(q, r.r ?? q.correctIndex))}</p>` : ''}<p>${esc(q.explanation)}</p>${r ? `<button class="replay" data-replay="${esc(q.id)}">${esc(lang === 'ru' ? 'Решить ещё раз (практика)' : 'Қайта шешу (жаттығу)')}</button>` : ''}</article>`;
+      ${r && !r.ok && Number.isInteger(r.r ?? q.correctIndex) ? `<p class="why">${esc(t('rightWas'))}: ${esc(answerText(q, r.r ?? q.correctIndex))}</p>` : ''}${explOf(q) ? `<p>${esc(explOf(q))}</p>` : ''}${r ? `<button class="replay" data-replay="${esc(q.id)}">${esc(lang === 'ru' ? 'Решить ещё раз (практика)' : 'Қайта шешу (жаттығу)')}</button>` : ''}</article>`;
   }).join('')}</div>`;
 }
-function journal(back) {
+async function journal(back) {
+  await explainTrials(journalRows());   // a finished level opens them all; otherwise the answered ones
   openPanel(`<p class="eyebrow">${esc(t('chronicle'))}</p><h2>${esc(t('chronicle'))}</h2>${journalHTML()}${back ? `<button class="primary" id="journal-back">← ${esc(t('back'))}</button>` : `<button class="primary" data-close>${esc(t('close'))}</button>`}`, 'wide');
   if (back) $('journal-back').onclick = back;
   $('panel-card').querySelectorAll('[data-replay]').forEach(btn => btn.onclick = async () => {
@@ -611,22 +631,46 @@ function timerText() {
   }
   return `⏱ ${fmt(Math.max(0, ((G.flags.tEnd || Date.now()) - G.flags.t0) / 1000))}`;
 }
-// MAP02+ opens only after the previous epoch is passed: a local journey (practice) or the server's unlock (official).
+// MAP02+ opens only after the previous epoch is passed. With the server the server decides (its unlocked_levels, or
+// a teacher/admin role): the browser's own records (localStorage) could be edited by hand to open any map. Only when
+// the server cannot be reached, or there is none (a named local profile), the local records of passed levels count.
 const levelPassedOf = id => { try { return JSON.parse(localStorage.getItem('tarikh.official.unlocked') || '[]').includes(id + 1); } catch { return false; } };
 async function levelUnlocked(id) {
   if (TEMP_UNLOCK_ALL) return true;
-  if (localPassed(id - 1) || levelPassedOf(id - 1)) return true;
+  const local = () => localPassed(id - 1) || levelPassedOf(id - 1);
+  if (!db) return local();
   try {
-    if (db && (await currentUser(db))) {
-      const role = await rpc('get_my_role').catch(() => null);   // teachers and admins may open any epoch
-      if (role === 'teacher' || role === 'admin') return true;
-      const p = await rpc('get_my_profile');
-      const list = p?.unlocked_levels || [];
-      try { localStorage.setItem('tarikh.official.unlocked', JSON.stringify(list)); } catch {}
-      return list.includes(id);
+    if (!(await currentUser(db))) return false;
+    const role = await rpc('get_my_role');   // teachers and admins may open any epoch
+    if (role === 'teacher' || role === 'admin') return true;
+    const p = await rpc('get_my_profile');
+    const list = p?.unlocked_levels || [];
+    try { localStorage.setItem('tarikh.official.unlocked', JSON.stringify(list)); } catch {}
+    return list.includes(id);
+  } catch (e) { console.warn(e); return local(); }   // offline: practice on what this browser has passed
+}
+// A class session (migration 025): the teacher's link or QR opens /rpg.html?class=CODE. The student picks team A or B,
+// waits for the teacher's «Бастау» and goes into the session's epoch in team mode (?level=N&session=…).
+async function joinClass(code) {
+  resize();
+  const ru = lang === 'ru', T = (kk, r) => (ru ? r : kk);
+  if (!db) return openPanel(`<h2>${esc(T('Сабақ сессиясы', 'Урок'))}</h2><p>${esc(T('Сабақ сессиясы үшін сервер қажет.', 'Для урока нужен сервер.'))}</p><a class="primary button" href="/">←</a>`, 'quiz', false);
+  let team = null, timer = null;
+  const join = async () => {
+    try {
+      const s = await rpc('class_session_join', [code, team]);
+      if (s.status === 'started') { clearTimeout(timer); location.replace(`/rpg.html?level=${s.level_id}&session=${encodeURIComponent(s.id)}`); return; }
+      openPanel(`<p class="eyebrow">${esc(T('САБАҚ', 'УРОК'))} · ${esc(s.title)}</p><h2>${esc(T('Мұғалім бастауын күт', 'Ждём, когда учитель начнёт'))}</h2>
+        <p>${esc(T(`Сен ${s.team ? 'Б' : 'А'} тобындасың. Мұғалім «Бастау» басқанда ойын өзі ашылады.`, `Ты в команде ${s.team ? 'Б' : 'А'}. Игра откроется сама, когда учитель нажмёт «Начать».`))}</p>
+        <p class="note" role="status">${esc(T('Тексерілуде…', 'Проверяем…'))}</p>`, 'quiz', false);
+      timer = setTimeout(join, 5000);
+    } catch (e) {
+      openPanel(`<h2>${esc(T('Сессияға кіру мүмкін болмады', 'Не удалось войти в урок'))}</h2><p>${esc(e?.message || String(e))}</p><div class="row"><a class="primary button" href="/">← ${esc(T('Басты бет', 'Главная'))}</a></div>`, 'quiz', false);
     }
-  } catch (e) { console.warn(e); }
-  return false;
+  };
+  openPanel(`<p class="eyebrow">${esc(T('САБАҚ СЕССИЯСЫ', 'УРОК'))} · ${esc(code.toUpperCase())}</p><h2>${esc(T('Тобыңды таңда', 'Выбери команду'))}</h2>
+    <div class="opts"><button data-team="0">${esc(T('А тобы', 'Команда А'))}</button><button data-team="1">${esc(T('Б тобы', 'Команда Б'))}</button></div>`, 'quiz', false);
+  $('panel-card').querySelectorAll('[data-team]').forEach(b => b.onclick = () => { team = +b.dataset.team; join(); });
 }
 function lockedScreen() {
   resize();
@@ -1303,6 +1347,8 @@ async function boot() {
     // co-op links used to skip the home page's account window (audit №14); now the game asks for the account itself.
     resize();
     if (!(await requireAccount(db, accountUi))) { location.href = '/'; return; }
+    const classCode = new URLSearchParams(location.search).get('class');
+    if (classCode) { $('loading')?.remove(); return joinClass(classCode.trim()); }
     bindLevel(await loadLevel(levelFromURL()));
     document.title = `Tarikh Joly · ${LV.title}`;
     if (LV.requires && !(await levelUnlocked(LV.id))) { $('loading').remove(); return lockedScreen(); }

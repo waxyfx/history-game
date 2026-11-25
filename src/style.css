@@ -27,5 +27,5 @@
 .lead{color:#545e55}
 .hero h1 em,h1 em,.brand-mark{color:#8a6224}
 .intro-replay{min-height:44px}
-@media (pointer:coarse){footer a,footer button,.intro-replay{min-height:44px;display:inline-flex;align-items:center}}
+footer a,footer button{min-height:44px;display:inline-flex;align-items:center}
 .source-list{padding-left:20px;margin:8px 0 14px}.source-list li{margin:10px 0;line-height:1.45}.source-list li span{color:var(--muted);font-size:13px}.source-list .source{margin:4px 0 0;font-size:12px}

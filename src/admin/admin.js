@@ -1,7 +1,8 @@
 // Admin panel on real data: Google-signed-in participants, official runs and results of the 2D campaign.
 // Server functions (all teacher/admin-only on the server): admin_overview, admin_list_users,
 // admin_trial_stats (migration 018; option counts in 019), admin_result_answers (019: one student's answers),
-// admin_get_level_results and admin_set_user_role (006), get_my_role. Tables export to CSV (Excel opens them).
+// admin_get_level_results and admin_set_user_role (006), get_my_role, class_session_* (025: class sessions with two
+// teams). Tables export to CSV (Excel opens them).
 // Without Supabase the gate loads the demo panel (admin-demo.js) instead.
 import {escapeHtml as esc} from './escape.js';
 import './admin.css';
@@ -24,13 +25,17 @@ const TABS = {
   users: ['👥 Қатысушылар', 'Қатысушылар мен рөлдер'],
   results: ['🏆 Нәтижелер', 'Ресми нәтижелер'],
   levels: ['🗺 Деңгейлер', '10 дәуір: деңгейлер статистикасы'],
-  trials: ['📝 Сынақтар', 'Сынақтар статистикасы']
+  trials: ['📝 Сынақтар', 'Сынақтар статистикасы'],
+  sessions: ['🎓 Сабақ сессиялары', 'Сабақ сессиялары: сынып пен екі топ']
 };
+const TEAM = ['А тобы', 'Б тобы'];
+const STATUS = {lobby: 'Күтуде', started: 'Жүріп жатыр', closed: 'Жабылды'};
 
 const state = {
   tab: 'dashboard', role: null, me: null, error: '', notice: '', loading: false,
   overview: null, users: null, search: '', results: {}, resultsLevel: 0, trials: {}, trialsLevel: 1, titles: {},
-  answers: null   // {result, rows, error}: one student's answers, shown under the results table
+  answers: null,   // {result, rows, error}: one student's answers, shown under the results table
+  sessions: null, sessionId: null, sessionView: null, newTitle: '', newLevel: 1   // class sessions (migration 025)
 };
 const root = document.querySelector('#admin-app');
 const $ = id => document.getElementById(id);
@@ -62,6 +67,9 @@ async function load(force = false) {
       const n = state.trialsLevel;
       if (force || !state.trials[n]) state.trials[n] = await call('admin_trial_stats', {p_level: n});
       await trialTexts(n);
+    } else if (state.tab === 'sessions') {
+      if (force || !state.sessions) state.sessions = await call('class_session_list');
+      state.sessionView = state.sessionId ? await call('class_session_results', {p_session: state.sessionId}) : null;
     }
   } catch (e) {
     state.error = e.message || String(e);
@@ -270,6 +278,43 @@ function renderTrials() {
     </tr>`; }).join('')}</tbody></table></div>` : '<p class="empty-note">Бұл деңгейдің сынақтары серверде әлі тіркелмеген.</p>'}`;
 }
 
+// Class sessions: the teacher creates one for an epoch, shows the code / link / QR, starts it when the class has joined,
+// watches the table (refreshed every 15 s while it runs) and closes it at the end of the lesson.
+const joinLink = code => `${location.origin}/rpg.html?class=${encodeURIComponent(code)}`;
+function renderSessions() {
+  const list = state.sessions || [], v = state.sessionView;
+  const form = `<div class="filter-row session-form"><label for="sess-title">Атауы:</label>
+      <input id="sess-title" maxlength="80" placeholder="Мысалы: 8А · Қола дәуірі" value="${esc(state.newTitle)}">
+      <label for="sess-level">Дәуір:</label><select id="sess-level">${levelOptions(state.newLevel, false)}</select>
+      <button class="btn" id="sess-create">＋ Сессия құру</button></div>
+    <p class="hint">Оқушылар кодты (немесе сілтеме / QR) енгізіп, А не Б тобын таңдайды. «Бастау» басылған соң бәрі осы дәуірді ресми режимде ойнайды — алдыңғы дәуірді өтпесе де. Нәтижелер кестесі 15 секунд сайын жаңарады.</p>`;
+  const table = list.length ? `<div class="table-container"><table class="admin-table"><thead><tr><th>Сессия</th><th>Дәуір</th><th>Код</th><th>Күйі</th><th>Оқушылар</th><th>Құрылды</th><th></th></tr></thead><tbody>${list.map(x => `<tr class="${x.id === state.sessionId ? 'selected' : ''}">
+      <td><strong>${esc(x.title)}</strong></td><td>${esc(levelName(x.level_id))}</td><td><code>${esc(x.code)}</code></td>
+      <td>${esc(STATUS[x.status] || x.status)}</td><td>${num(x.members)}</td><td><small>${when(x.created_at)}</small></td>
+      <td class="actions"><button class="btn btn-secondary" data-sess-open="${esc(x.id)}">Ашу</button>
+        ${x.status === 'lobby' ? `<button class="btn" data-sess-start="${esc(x.id)}">▶ Бастау</button>` : ''}
+        ${x.status !== 'closed' ? `<button class="btn btn-danger" data-sess-close="${esc(x.id)}">Жабу</button>` : ''}</td></tr>`).join('')}</tbody></table></div>`
+    : '<p class="empty-note">Әзірге сессия жоқ. Жоғарыда атауы мен дәуірін жазып, «Сессия құру» басыңыз.</p>';
+  return form + table + (v ? sessionView(v) : '');
+}
+function sessionView(v) {
+  const s = v.session, rows = v.members || [];
+  const teams = [0, 1].map(t => (v.teams || []).find(g => g.team === t) || {team: t, members: 0, finished: 0, passed: 0, average: 0});
+  const lead = num(teams[0].average) === num(teams[1].average) ? -1 : num(teams[0].average) > num(teams[1].average) ? 0 : 1;
+  return `<section class="session-view"><div class="session-head">
+      <div><h2>${esc(s.title)}</h2><p class="hint">${esc(levelName(s.level_id))} · ${esc(STATUS[s.status] || s.status)}</p>
+        <p class="session-code">Код: <b>${esc(s.code)}</b></p><p class="hint">Сілтеме: <a href="${esc(joinLink(s.code))}" target="_blank" rel="noopener">${esc(joinLink(s.code))}</a></p></div>
+      <img id="session-qr" class="session-qr" alt="Сессияға кіру QR-коды" width="160" height="160"></div>
+    <div class="kpi-grid">${teams.map(g => kpi(TEAM[g.team] + (lead === g.team ? ' 🏆' : ''), `${num(g.average)}`, `орташа ұпай · ${num(g.members)} оқушы · аяқтағаны ${num(g.finished)} · өткені ${num(g.passed)}`)).join('')}</div>
+    <div class="filter-row"><span>Оқушылар: ${rows.length}</span>${rows.length ? csvButton('csv-session') : ''}</div>
+    ${rows.length ? `<div class="table-container"><table class="admin-table"><thead><tr><th>#</th><th>Оқушы</th><th>Топ</th><th>Ұпай</th><th>%</th><th>Нәтиже</th><th>Уақыт</th><th>Талпыныс</th><th>Қазір</th></tr></thead><tbody>${rows.map((m, i) => `<tr>
+      <td>${i + 1}</td><td><strong>${esc(m.name)}</strong></td><td>${esc(TEAM[m.team])}</td>
+      <td>${m.score == null ? '—' : `${num(m.score)} / ${num(m.max_score)}`}</td><td>${m.percentage == null ? '—' : Math.round(num(m.percentage)) + '%'}</td>
+      <td>${m.passed == null ? '<span class="muted">әлі жоқ</span>' : resultBadge(m.passed)}</td><td>${mmss(m.seconds)}</td><td>${num(m.attempts)}</td>
+      <td>${m.playing ? '🎮 ойнауда' : ''}</td></tr>`).join('')}</tbody></table></div>` : '<p class="empty-note">Әзірге ешкім кірмеді: оқушыларға кодты немесе QR-ды көрсетіңіз.</p>'}
+  </section>`;
+}
+
 function renderSection() {
   if (state.loading && !hasData()) return '<p class="empty-note">Жүктелуде…</p>';
   switch (state.tab) {
@@ -277,11 +322,12 @@ function renderSection() {
     case 'results': return renderResults();
     case 'levels': return renderLevels();
     case 'trials': return renderTrials();
+    case 'sessions': return renderSessions();
     default: return renderDashboard();
   }
 }
 function hasData() {
-  return {dashboard: state.overview, levels: state.overview, users: state.users, results: state.results[state.resultsLevel], trials: state.trials[state.trialsLevel]}[state.tab];
+  return {dashboard: state.overview, levels: state.overview, users: state.users, results: state.results[state.resultsLevel], trials: state.trials[state.trialsLevel], sessions: state.sessions}[state.tab];
 }
 
 function render() {
@@ -335,6 +381,7 @@ function attach() {
   $('csv-users')?.addEventListener('click', () => downloadCSV(`qatysushylar-${stamp}.csv`, ['Аты', 'Email', 'Рөл', 'Талпыныстар', 'Өткен деңгейлер', 'Үздік ұпайлар', 'Соңғы белсенділік'],
     (state.users || []).map(u => [u.name || '', u.email || '', ROLE[u.role] || u.role, num(u.attempts), num(u.levels_passed), num(u.best_total), u.last_active || ''])));
   $('trials-level')?.addEventListener('change', e => { state.trialsLevel = Number(e.target.value); load(); });
+  attachSessions(stamp);
   $('user-search')?.addEventListener('input', e => {
     state.search = e.target.value;
     clearTimeout(searchTimer);
@@ -355,6 +402,36 @@ function attach() {
       }
     };
   });
+}
+
+async function sessionAction(fn, id, notice) {
+  try { await call(fn, {p_session: id}); state.notice = notice; state.sessionId = id; await load(true); }
+  catch (e) { state.error = e.message || String(e); render(); }
+}
+let sessionTimer;
+function attachSessions(stamp) {
+  clearInterval(sessionTimer);
+  if (state.tab !== 'sessions') return;
+  $('sess-title')?.addEventListener('input', e => { state.newTitle = e.target.value; });
+  $('sess-level')?.addEventListener('change', e => { state.newLevel = Number(e.target.value); });
+  $('sess-create')?.addEventListener('click', async () => {
+    const title = state.newTitle.trim();
+    if (!title) { state.error = 'Сессия атауын жазыңыз.'; return render(); }
+    try {
+      const s = await call('class_session_create', {p_title: title, p_level: state.newLevel});
+      state.newTitle = ''; state.sessionId = s.id; state.notice = `Сессия құрылды. Код: ${s.code}`; await load(true);
+    } catch (e) { state.error = e.message || String(e); render(); }
+  });
+  root.querySelectorAll('[data-sess-open]').forEach(b => { b.onclick = () => { state.sessionId = b.dataset.sessOpen; load(); }; });
+  root.querySelectorAll('[data-sess-start]').forEach(b => { b.onclick = () => sessionAction('class_session_start', b.dataset.sessStart, 'Сессия басталды: оқушылар енді ойнай алады.'); });
+  root.querySelectorAll('[data-sess-close]').forEach(b => { b.onclick = () => { if (confirm('Сессияны жабу керек пе? Жаңа оқушылар кіре алмайды.')) sessionAction('class_session_close', b.dataset.sessClose, 'Сессия жабылды.'); }; });
+  const v = state.sessionView;
+  if ($('session-qr') && v) import('qrcode').then(({default: QR}) => QR.toDataURL(joinLink(v.session.code), {margin: 1, width: 160})).then(url => { if ($('session-qr')) $('session-qr').src = url; }).catch(() => {});
+  $('csv-session')?.addEventListener('click', () => downloadCSV(`sessiya-${(v.session.title || '').replace(/[^\p{L}\p{N}]+/gu, '_')}-${stamp}.csv`,
+    ['#', 'Оқушы', 'Топ', 'Ұпай', 'Максимум', '%', 'Нәтиже', 'Уақыт (сек)', 'Талпыныс'],
+    v.members.map((m, i) => [i + 1, m.name, TEAM[m.team], m.score ?? '', m.max_score ?? '', m.percentage == null ? '' : Math.round(num(m.percentage)),
+      m.passed == null ? 'Әлі жоқ' : m.passed ? 'Өтті' : 'Өтпеді', m.seconds ?? '', num(m.attempts)])));
+  if (v?.session.status === 'started') sessionTimer = setInterval(() => { if (!document.hidden && !state.loading) load(true); }, 15000);
 }
 
 // ------------------------------------------------------------------ start
