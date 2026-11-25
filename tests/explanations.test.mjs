@@ -11,7 +11,8 @@ test('migration 024 is up to date with the story modules and the Russian packs',
   const rows = await explanationRows();
   assert.equal(rows.length, 99, 'every trial of the ten maps has an explanation');
   for (const [n, id, kk, ru] of rows) assert(kk && ru, `MAP${n} ${id}: kk and ru`);
-  assert.equal(await readFile(MIGRATION, 'utf8'), explanationsSQL(rows), 'run: node scripts/explanations-sql.mjs');
+  const lf = s => s.replace(/\r\n/g, '\n');   // a Windows checkout may have CRLF line ends
+  assert.equal(lf(await readFile(MIGRATION, 'utf8')), lf(explanationsSQL(rows)), 'run: node scripts/explanations-sql.mjs');
 });
 
 async function setup() {
